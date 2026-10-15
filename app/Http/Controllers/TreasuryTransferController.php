@@ -33,9 +33,11 @@ class TreasuryTransferController extends Controller
             'from_provider_id' => ['required', 'integer', $ownProvider],
             'to_provider_id' => ['required', 'integer', 'different:from_provider_id', $ownProvider],
             'currency' => 'required|string|size:3|alpha',
+            'to_currency' => 'nullable|string|size:3|alpha',
             'amount' => ['required', 'numeric', 'gt:0', $this->fitsCurrency($request)],
             'fee' => ['nullable', 'numeric', 'min:0', $this->fitsCurrency($request)],
             'note' => 'nullable|string|max:500',
+            'fx_quote_id' => 'nullable|string',
         ]);
 
         return $this->attempt(fn () => $this->transfers->request(
@@ -46,6 +48,9 @@ class TreasuryTransferController extends Controller
             FeeCalculator::money((string) $validated['amount']),
             FeeCalculator::money((string) ($validated['fee'] ?? 0)),
             $validated['note'] ?? null,
+            origin: 'operator',
+            toCurrency: $validated['to_currency'] ?? null,
+            fxQuoteId: $validated['fx_quote_id'] ?? null,
         ), __('Transfer requested. Approve it to continue.'));
     }
 
@@ -73,8 +78,9 @@ class TreasuryTransferController extends Controller
     public function settle(Request $request, TreasuryTransfer $transfer): RedirectResponse
     {
         $this->authorizeOwner($request, $transfer);
+        $destCurrency = $transfer->destinationCurrency();
         $validated = $request->validate([
-            'received' => ['nullable', 'numeric', 'gt:0', $this->fitsCurrency($request, $transfer->currency)],
+            'received' => ['nullable', 'numeric', 'gt:0', $this->fitsCurrency($request, $destCurrency)],
             'external_reference' => 'nullable|string|max:255',
         ]);
 

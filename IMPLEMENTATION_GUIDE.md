@@ -141,7 +141,8 @@ quoted → awaiting_approval → funded → paying_out → delivered
 
 **Services**
 
-- **`FxQuote`**: rates come from a configurable source. A static table in `config/moneyunify_paypal.php` for the sandbox, with an optional live API. The quote locks for 10 minutes and sets `is_fx` and `fx_rate` on both transactions.
+- **`FxQuote`** 🟡: rates come from a configurable source. A static table in `config/moneyunify_paypal.php` for the sandbox, with an optional live API. The quote locks for 10 minutes and sets `is_fx` and `fx_rate` on both transactions.
+  _Built (2026-10-15):_ `App\Support\Fx\FxQuoter` and `FxQuote`, the static rate provider, quotes owned by the account that created them, and `GET /api/v1/fx/rates`, `POST /api/v1/fx/quote`, `GET /api/v1/fx/quote/{id}` (documented in `prezet/content/api/fx.md`). Not yet wired into transfers, so nothing sets `is_fx`/`fx_rate` yet. See TREASURY_MODULE.md §6.
 - **`TransferQuoter`**: combines the FX rate with the PayPal fee and the cheapest payout provider's fee (`ProviderFees`) to give an all-in quote. It returns "recipient gets X" and "you pay Y".
 - **`DisbursePaypalTransfer`** job: calls the `PayoutRouter`. If every provider fails, it refunds the PayPal capture (`POST /v2/payments/captures/{id}/refund`) and marks the transfer `refunded`. It notifies both parties.
 

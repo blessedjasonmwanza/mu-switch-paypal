@@ -15,8 +15,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class TreasuryTransfer extends Model
 {
     protected $fillable = [
-        'reference', 'user_id', 'from_provider_id', 'to_provider_id', 'currency', 'amount_minor', 'fee_minor',
-        'received_minor', 'status', 'method', 'origin', 'external_reference', 'note', 'reasoning', 'failure_reason',
+        'reference', 'user_id', 'from_provider_id', 'to_provider_id', 'currency', 'to_currency',
+        'amount_minor', 'fee_minor', 'received_minor', 'target_amount_minor', 'fx_rate', 'fx_quote_id',
+        'status', 'method', 'origin', 'external_reference', 'note', 'reasoning', 'failure_reason',
         'approved_at', 'sent_at', 'settled_at',
     ];
 
@@ -40,6 +41,32 @@ class TreasuryTransfer extends Model
         return Currency::fromMinorUnits($this->amount_minor, $this->currency);
     }
 
+    public function isFx(): bool
+    {
+        return $this->to_currency !== null && $this->to_currency !== $this->currency;
+    }
+
+    public function destinationCurrency(): string
+    {
+        return $this->to_currency ?: $this->currency;
+    }
+
+    public function targetAmount(): BigDecimal
+    {
+        $currency = $this->destinationCurrency();
+
+        return Currency::fromMinorUnits($this->target_amount_minor ?? $this->amount_minor, $currency);
+    }
+
+    public function receivedAmount(): ?BigDecimal
+    {
+        if ($this->received_minor === null) {
+            return null;
+        }
+
+        return Currency::fromMinorUnits($this->received_minor, $this->destinationCurrency());
+    }
+
     protected function casts(): array
     {
         return [
@@ -47,6 +74,8 @@ class TreasuryTransfer extends Model
             'amount_minor' => 'integer',
             'fee_minor' => 'integer',
             'received_minor' => 'integer',
+            'target_amount_minor' => 'integer',
+            'fx_rate' => 'decimal:8',
             'approved_at' => 'datetime',
             'sent_at' => 'datetime',
             'settled_at' => 'datetime',

@@ -88,7 +88,7 @@ class LedgerRecorder
      * Upsert the planned entries for a source, remove any that no longer
      * apply, then re-check the affected accounts' float rules.
      *
-     * @param  list<array{0: LedgerEntryType, 1: LedgerAccount, 2: int, 3: BigDecimal, 4: bool}>  $planned  type, account, provider id, amount, estimated
+     * @param  list<array{0: LedgerEntryType, 1: LedgerAccount, 2: int, 3: BigDecimal, 4: bool, 5?: string}>  $planned  type, account, provider id, amount, estimated, currency
      * @param  list<?PaymentProvider>  $affected
      */
     private function write(Model $source, int $userId, string $currency, array $planned, array $affected): void
@@ -96,7 +96,10 @@ class LedgerRecorder
         DB::transaction(function () use ($source, $userId, $currency, $planned): void {
             $kept = [];
 
-            foreach ($planned as [$type, $account, $providerId, $amount, $estimated]) {
+            foreach ($planned as $item) {
+                [$type, $account, $providerId, $amount, $estimated] = $item;
+                $entryCurrency = $item[5] ?? $currency;
+
                 $entry = LedgerEntry::firstOrNew([
                     'source_type' => $source->getMorphClass(),
                     'source_id' => $source->getKey(),
@@ -107,8 +110,8 @@ class LedgerRecorder
                 $entry->fill([
                     'user_id' => $userId,
                     'payment_provider_id' => $providerId,
-                    'currency' => $currency,
-                    'amount_minor' => Currency::toMinorUnits($amount, $currency),
+                    'currency' => $entryCurrency,
+                    'amount_minor' => Currency::toMinorUnits($amount, $entryCurrency),
                     'estimated' => $estimated,
                 ]);
                 // When the money moved, kept from the first time it was recorded.
@@ -127,6 +130,10 @@ class LedgerRecorder
 
         foreach (array_filter($affected) as $provider) {
             $this->floats->checkAccount($provider, $currency);
+
+            if ($source instanceof TreasuryTransfer && $source->isFx()) {
+                $this->floats->checkAccount($provider, $source->destinationCurrency());
+            }
         }
     }
 
@@ -162,7 +169,7 @@ class LedgerRecorder
     /**
      * The balanced entries for a transfer in its current state.
      *
-     * @return list<array{0: LedgerEntryType, 1: LedgerAccount, 2: int, 3: BigDecimal, 4: bool}>
+     * @return list<array{0: LedgerEntryType, 1: LedgerAccount, 2: int, 3: BigDecimal, 4: bool, 5?: string}>
      */
     private function transferEntries(TreasuryTransfer $transfer): array
     {
@@ -170,36 +177,37 @@ class LedgerRecorder
             return [];
         }
 
-        $currency = $transfer->currency;
-        $amount = Currency::fromMinorUnits($transfer->amount_minor, $currency);
-        $fee = Currency::fromMinorUnits($transfer->fee_minor, $currency);
+        $sourceCurrency = $transfer->currency;
+        $targetCurrency = $transfer->destinationCurrency();
+        $amount = Currency::fromMinorUnits($transfer->amount_minor, $sourceCurrency);
+        $fee = Currency::fromMinorUnits($transfer->fee_minor, $sourceCurrency);
 
         // Sent: out of the source account and into transit (the counterparty).
         $entries = [
-            [LedgerEntryType::TRANSFER_OUT, LedgerAccount::PROVIDER, $transfer->from_provider_id, $amount->negated(), false],
-            [LedgerEntryType::TRANSFER_OUT, LedgerAccount::COUNTERPARTY, $transfer->from_provider_id, $amount, false],
+            [LedgerEntryType::TRANSFER_OUT, LedgerAccount::PROVIDER, $transfer->from_provider_id, $amount->negated(), false, $sourceCurrency],
+            [LedgerEntryType::TRANSFER_OUT, LedgerAccount::COUNTERPARTY, $transfer->from_provider_id, $amount, false, $sourceCurrency],
         ];
 
         if ($fee->isPositive()) {
-            $entries[] = [LedgerEntryType::FEE, LedgerAccount::PROVIDER, $transfer->from_provider_id, $fee->negated(), false];
-            $entries[] = [LedgerEntryType::FEE, LedgerAccount::FEES, $transfer->from_provider_id, $fee, false];
+            $entries[] = [LedgerEntryType::FEE, LedgerAccount::PROVIDER, $transfer->from_provider_id, $fee->negated(), false, $sourceCurrency];
+            $entries[] = [LedgerEntryType::FEE, LedgerAccount::FEES, $transfer->from_provider_id, $fee, false, $sourceCurrency];
         }
 
         if ($transfer->status !== TransferStatus::SETTLED) {
             return $entries;
         }
 
-        // Received: out of transit and into the destination account. Any
-        // shortfall (e.g. a fee taken on the way) is reconciled as a fee.
-        $received = Currency::fromMinorUnits($transfer->received_minor ?? $transfer->amount_minor, $currency);
-        $shortfall = $amount->minus($received);
+        // Received: out of transit and into the destination account.
+        $expectedTarget = Currency::fromMinorUnits($transfer->target_amount_minor ?? $transfer->amount_minor, $targetCurrency);
+        $received = Currency::fromMinorUnits($transfer->received_minor ?? ($transfer->target_amount_minor ?? $transfer->amount_minor), $targetCurrency);
+        $shortfall = $expectedTarget->minus($received);
 
-        $entries[] = [LedgerEntryType::TRANSFER_IN, LedgerAccount::PROVIDER, $transfer->to_provider_id, $received, false];
-        $entries[] = [LedgerEntryType::TRANSFER_IN, LedgerAccount::COUNTERPARTY, $transfer->to_provider_id, $received->negated(), false];
+        $entries[] = [LedgerEntryType::TRANSFER_IN, LedgerAccount::PROVIDER, $transfer->to_provider_id, $received, false, $targetCurrency];
+        $entries[] = [LedgerEntryType::TRANSFER_IN, LedgerAccount::COUNTERPARTY, $transfer->to_provider_id, $received->negated(), false, $targetCurrency];
 
         if ($shortfall->isPositive()) {
-            $entries[] = [LedgerEntryType::ADJUSTMENT, LedgerAccount::COUNTERPARTY, $transfer->to_provider_id, $shortfall->negated(), false];
-            $entries[] = [LedgerEntryType::ADJUSTMENT, LedgerAccount::FEES, $transfer->to_provider_id, $shortfall, false];
+            $entries[] = [LedgerEntryType::ADJUSTMENT, LedgerAccount::COUNTERPARTY, $transfer->to_provider_id, $shortfall->negated(), false, $targetCurrency];
+            $entries[] = [LedgerEntryType::ADJUSTMENT, LedgerAccount::FEES, $transfer->to_provider_id, $shortfall, false, $targetCurrency];
         }
 
         return $entries;

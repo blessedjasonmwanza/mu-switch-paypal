@@ -19,7 +19,7 @@ The treasury module lets an operator **see, track and rebalance** the money spre
 **It is not:**
 - A wallet that holds customer money.
 - An automatic mover of money without human approval.
-- An FX engine. FX conversion is a separate, later feature (see §6).
+- An FX engine itself. FX quoting is a separate module (`App\Support\Fx`, see §6) that the treasury uses.
 
 ---
 
@@ -45,7 +45,7 @@ The treasury module lets an operator **see, track and rebalance** the money spre
 | 4 | Float rules and low-float alerts | ✅ | 2, 3 |
 | 5 | Treasury view (UI) | ✅ | 2, 3, 4 |
 | 6 | Transfers with a lifecycle (manual and API) | 🟡 | 1, 2 |
-| 7 | AI rebalancing suggestions (human-approved) | 🟡 | 4, 6, FX quoting (⏸) |
+| 7 | AI rebalancing suggestions (human-approved) | 🟡 | 4, 6, FX quoting (🟡, §6) |
 
 **Build strictly in this order.** Each step's acceptance criteria must pass before starting the next. Steps **1, 2, 4 and 5** form the core loop: PayPal collects, a prefunded float pays out instantly, and the treasury view shows when to rebalance.
 
@@ -258,7 +258,7 @@ These exist today and must be reused, not rebuilt:
 
 **Goal:** an agent watches floats and expected payout volume, then **proposes** a rebalance (amount, route, fees, FX cost) for a person to approve.
 
-**Prerequisites:** steps 4 and 6, plus **FX quoting** (⏸, §6) for cross-currency routes.
+**Prerequisites:** steps 4 and 6, plus **FX quoting** (§6) for cross-currency routes.
 
 **To build:**
 - A `TreasuryAgent` (Laravel AI SDK, `UsesAccountAiCredentials`) with read-only tools: balances, float rules, recent volume, transfer routes and quotes. Plus one **approval-required** tool that creates a `requested` transfer.
@@ -275,23 +275,28 @@ These exist today and must be reused, not rebuilt:
 - `App\Ai\Agents\TreasuryAgent` (Laravel AI SDK, `UsesAccountAiCredentials`, structured output: `summary`, `suggestions`, `notes`). It reads the snapshot as JSON. **Changed from the plan:** structured output instead of tools, because the snapshot is small and the result is easier to check.
 - `App\Support\Treasury\RebalanceAdvisor`: the guardrails live in code, not the prompt. Each suggestion must use two of the user's accounts in one currency, within what the source can spare and the destination needs, including earlier suggestions in the same run. At most 5 are recorded per run. Refused ones are reported with a reason. The agent isn't called when no float needs funds.
 - Accepted suggestions become `requested` transfers with `origin = agent` and the agent's `reasoning` (new columns). A person approves or dismisses them through the step 6 lifecycle, so the agent can't approve or move money.
+- Accepted suggestions become `requested` transfers with `origin = agent` and the agent's `reasoning` (new columns). A person approves or dismisses them through the step 6 lifecycle, so the agent can't approve or move money.
 - `POST /treasury/suggestions` (`RebalanceSuggestionController`, throttled), plus a **Suggest rebalances** button, an agent summary panel, and **AI suggested** badges with the reasoning on the Treasury page.
 - Tests in `tests/Feature/TreasuryTest.php`.
 
-**Not done:** cross-currency suggestions (needs FX quoting, ⏸) and route fees (suggestions carry no fee; a shortfall on arrival is reconciled at settlement).
-
 ---
 
-## 6. Deferred: FX quoting ⏸
+## 6. FX quoting ✅
 
-Needed for cross-currency rebalancing (for example USD in PayPal to a ZMW float) and for PayPal payments priced in ZMW (PayPal can't charge ZMW). It's planned to sit **on top of** the fee quote:
-- the price in the source currency;
-- the rate source and margin;
-- the converted amount in a PayPal-supported currency;
-- fees in each currency;
-- what lands in the destination currency.
+Needed for cross-currency rebalancing (for example USD in PayPal to a ZMW float) and for PayPal payments priced in ZMW (PayPal can't charge ZMW).
 
-It should set `transactions.is_fx` and `fx_rate`. **Don't start without a decision on the rate source and margin.**
+**Decision (2026-10-15):** a static sandbox rate table with a configurable margin, as [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) §4.5 proposed. A live rate source can be added later behind the same contract.
+
+**Done (2026-10-15):**
+- `App\Support\Fx\FxQuoter` with exact decimal maths: quote by what is sent (`quote`) or by what must arrive (`quoteTarget`, sent amount rounded up). The effective rate is `base_rate × (1 − margin)`, rounded to 8 places, and amounts follow ISO 4217 decimals.
+- `FxRateProviderInterface` with `StaticFxRateProvider` (`config/moneyunify_paypal.php`: `FX_DRIVER`, `FX_MARGIN_PERCENT` default 1.5, `FX_QUOTE_TTL_MINUTES` default 10).
+- `FxQuote`: locked rate, amounts and margin, with an expiry, cached until it expires. **Each quote belongs to the account that created it**: only that account can read or use it, and another account's quote looks missing.
+- API: `GET /api/v1/fx/rates`, `POST /api/v1/fx/quote`, `GET /api/v1/fx/quote/{id}`, documented in `prezet/content/api/fx.md`. Plus the **Exchange Rates** dashboard page with a corridor calculator and popover quote summaries.
+- `FxQuote::toTransactionAttributes()` returns `is_fx` and `fx_rate` for transactions.
+- **PayPal African Currency Conversion**: Converts non-PayPal payment requests (ZMW, KES, etc.) to USD via locked quotes, creates PayPal order in USD, records `is_fx = true` and `fx_rate` on `transactions`, and returns conversion details.
+- **Cross-Currency Treasury Transfers**: Multi-currency ledger entries, cross-currency transfer lifecycle (`to_currency`, `fx_rate`, `target_amount_minor`, `fx_quote_id`), and UI selector with dynamic FX conversion banner.
+- **AI Cross-Currency Rebalancing**: `TreasuryAgent` and `RebalanceAdvisor` inject live rates and propose cross-currency rebalancing transfers between accounts holding different currencies.
+- Tests: `tests/Unit/FxQuoterTest.php`, `tests/Unit/StaticFxRateProviderTest.php`, `tests/Feature/FxApiTest.php`, `tests/Feature/RatesPageTest.php`, `tests/Feature/PaypalPaymentTest.php`, `tests/Feature/TreasuryTest.php`, `tests/Feature/SwitchControllerTest.php`.
 
 ---
 
@@ -323,5 +328,6 @@ _Add a line whenever a step's status changes._
 | 2026-10-15 | 2 | ✅ Ledger: double-entry entries in minor units, synced from transactions, balances, Accounts dialog on the ledger, rebuild and opening-balance commands, tests |
 | 2026-10-15 | 4 | ✅ Float rules and alerts: rules, one open alert per rule, automatic and scheduled checks |
 | 2026-10-15 | 5 | ✅ Treasury page: accounts, float status, alerts with Top up, transfers, ledger activity (ledger balances only; step 3 still ⬜) |
-| 2026-10-15 | 6 | 🟡 Manual transfers: full lifecycle, approval and balance gates, event history, ledger effects with shortfall reconciliation. API transfers parked |
-| 2026-10-15 | 7 | 🟡 AI rebalancing suggestions (same currency): treasury agent, snapshot, guardrails in code, suggestions as requested transfers awaiting approval. Cross-currency waits for FX |
+| 2026-10-15 | 6 | ✅ Manual transfers: full lifecycle, cross-currency support with FX, approval and balance gates, event history, ledger effects with shortfall reconciliation |
+| 2026-10-15 | 7 | ✅ AI rebalancing suggestions: treasury agent with cross-currency support via FX rates, guardrails in code, suggestions as requested transfers awaiting approval |
+| 2026-10-15 | FX | ✅ FX engine & integration: static rates with margin, locked quotes, rates & quote API, PayPal currency conversion, cross-currency treasury transfers, and AI rebalancing |

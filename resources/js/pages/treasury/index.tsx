@@ -81,6 +81,10 @@ interface Transfer {
     from: string | null;
     to: string | null;
     currency: string;
+    toCurrency?: string;
+    isFx?: boolean;
+    fxRate?: string | null;
+    targetAmount?: string | null;
     amount: string;
     fee: string;
     received: string | null;
@@ -419,6 +423,7 @@ export default function Treasury({
         from_provider_id: '',
         to_provider_id: '',
         currency: '',
+        to_currency: '',
         amount: '',
         fee: '',
         note: '',
@@ -438,6 +443,9 @@ export default function Treasury({
     const fromProvider = providers.find(
         (p) => String(p.id) === transferForm.data.from_provider_id,
     );
+    const toProvider = providers.find(
+        (p) => String(p.id) === transferForm.data.to_provider_id,
+    );
 
     const openTransfer = (toProviderId?: number, currency?: string) => {
         transferForm.reset();
@@ -448,6 +456,7 @@ export default function Treasury({
                 ...data,
                 to_provider_id: String(toProviderId),
                 currency: currency ?? '',
+                to_currency: currency ?? '',
             }));
         }
 
@@ -1014,8 +1023,16 @@ export default function Treasury({
                                                     <span>{transfer.from}</span>
                                                 </span>
                                                 <ArrowRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-                                                <span className="truncate">
-                                                    {transfer.to}
+                                                <span className="flex items-center gap-1.5 truncate">
+                                                    {transfer.isFx && (
+                                                        <span className="text-sm">
+                                                            {flagEmoji(
+                                                                transfer.toCurrency ||
+                                                                    transfer.currency,
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                    <span>{transfer.to}</span>
                                                 </span>
                                                 <span
                                                     className={cn(
@@ -1031,6 +1048,15 @@ export default function Treasury({
                                                         ]
                                                     }
                                                 </span>
+                                                {transfer.isFx && (
+                                                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                                        <ArrowLeftRight className="h-3 w-3" />
+                                                        FX
+                                                        {transfer.fxRate
+                                                            ? ` @ ${Number(transfer.fxRate).toFixed(4)}`
+                                                            : ''}
+                                                    </span>
+                                                )}
                                                 {transfer.origin ===
                                                     'agent' && (
                                                     <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
@@ -1045,13 +1071,22 @@ export default function Treasury({
                                                         transfer.amount,
                                                         transfer.currency,
                                                     )}
+                                                    {transfer.isFx &&
+                                                        transfer.targetAmount && (
+                                                            <>
+                                                                {' → '}
+                                                                {formatMoney(
+                                                                    transfer.targetAmount,
+                                                                    transfer.toCurrency ||
+                                                                        transfer.currency,
+                                                                )}
+                                                            </>
+                                                        )}
                                                 </span>
                                                 {Number(transfer.fee) > 0 &&
                                                     ` + ${formatMoney(transfer.fee, transfer.currency)} fee`}
                                                 {transfer.received &&
-                                                    transfer.received !==
-                                                        transfer.amount &&
-                                                    ` · ${formatMoney(transfer.received, transfer.currency)} received`}
+                                                    ` · ${formatMoney(transfer.received, transfer.toCurrency || transfer.currency)} received`}
                                                 {transfer.externalReference &&
                                                     ` · ref ${transfer.externalReference}`}
                                                 {transfer.createdAt &&
@@ -1356,20 +1391,22 @@ export default function Treasury({
                             </div>
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-1">
                                 <Label htmlFor="transfer-currency">
-                                    Currency
+                                    From Currency
                                 </Label>
                                 <select
                                     id="transfer-currency"
                                     value={transferForm.data.currency}
-                                    onChange={(e) =>
-                                        transferForm.setData(
-                                            'currency',
-                                            e.target.value,
-                                        )
-                                    }
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        transferForm.setData((data) => ({
+                                            ...data,
+                                            currency: val,
+                                            to_currency: data.to_currency || val,
+                                        }));
+                                    }}
                                     className={selectClassName}
                                     required
                                 >
@@ -1380,12 +1417,48 @@ export default function Treasury({
                                                 key={currency}
                                                 value={currency}
                                             >
-                                                {currency}
+                                                {flagEmoji(currency)} {currency}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                                <InputError
+                                    message={transferForm.errors.currency}
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <Label htmlFor="transfer-to-currency">
+                                    To Currency
+                                </Label>
+                                <select
+                                    id="transfer-to-currency"
+                                    value={
+                                        transferForm.data.to_currency ||
+                                        transferForm.data.currency
+                                    }
+                                    onChange={(e) =>
+                                        transferForm.setData(
+                                            'to_currency',
+                                            e.target.value,
+                                        )
+                                    }
+                                    className={selectClassName}
+                                    required
+                                >
+                                    <option value="">Currency</option>
+                                    {(toProvider?.currencies ?? []).map(
+                                        (currency) => (
+                                            <option
+                                                key={currency}
+                                                value={currency}
+                                            >
+                                                {flagEmoji(currency)} {currency}
                                             </option>
                                         ),
                                     )}
                                     {transferForm.data.currency &&
-                                        !fromProvider?.currencies.includes(
+                                        !toProvider?.currencies.includes(
                                             transferForm.data.currency,
                                         ) && (
                                             <option
@@ -1393,16 +1466,27 @@ export default function Treasury({
                                                     transferForm.data.currency
                                                 }
                                             >
+                                                {flagEmoji(
+                                                    transferForm.data.currency,
+                                                )}{' '}
                                                 {transferForm.data.currency}
                                             </option>
                                         )}
                                 </select>
                                 <InputError
-                                    message={transferForm.errors.currency}
+                                    message={transferForm.errors.to_currency}
                                 />
                             </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-1">
-                                <Label htmlFor="transfer-amount">Amount</Label>
+                                <Label htmlFor="transfer-amount">
+                                    Amount{' '}
+                                    {transferForm.data.currency
+                                        ? `(${transferForm.data.currency})`
+                                        : ''}
+                                </Label>
                                 <Input
                                     id="transfer-amount"
                                     inputMode="decimal"
@@ -1413,6 +1497,7 @@ export default function Treasury({
                                             e.target.value,
                                         )
                                     }
+                                    placeholder="0.00"
                                     required
                                 />
                                 <InputError
@@ -1439,6 +1524,27 @@ export default function Treasury({
                             </div>
                         </div>
 
+                        {transferForm.data.currency &&
+                            transferForm.data.to_currency &&
+                            transferForm.data.currency !==
+                                transferForm.data.to_currency && (
+                                <div className="flex items-start gap-2.5 rounded-lg border border-blue-200/80 bg-blue-50/60 p-3 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                                    <ArrowLeftRight className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                                    <div>
+                                        <p className="font-semibold text-blue-900 dark:text-blue-100">
+                                            Cross-Currency FX Transfer
+                                        </p>
+                                        <p className="mt-0.5 text-blue-700 dark:text-blue-300">
+                                            Converting{' '}
+                                            {transferForm.data.currency} →{' '}
+                                            {transferForm.data.to_currency}. The
+                                            platform rate is locked upon
+                                            transfer request.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                         <div className="space-y-1">
                             <Label htmlFor="transfer-note">
                                 Note (optional)
@@ -1455,9 +1561,12 @@ export default function Treasury({
                         </div>
 
                         <p className="text-xs text-neutral-500">
-                            Both accounts must use the same currency.
-                            Cross-currency transfers need FX, which isn&apos;t
-                            available yet.
+                            {transferForm.data.currency &&
+                            transferForm.data.to_currency &&
+                            transferForm.data.currency !==
+                                transferForm.data.to_currency
+                                ? 'Cross-currency transfers execute via the switch FX engine upon approval.'
+                                : 'Transfers move money between your provider accounts upon approval.'}
                         </p>
 
                         <DialogFooter>

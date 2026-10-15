@@ -576,3 +576,79 @@ test('the agent sees recent payout volume and one run records at most five trans
     TreasuryAgent::assertPrompted(fn ($prompt) => str_contains($prompt->prompt, '"payouts_last_7_days": "140.00"')
         && str_contains($prompt->prompt, '"days_of_payouts_covered": 17.9'));
 });
+
+test('a cross-currency transfer converts between currencies with fx rate and target amount', function () {
+    $user = User::factory()->create();
+    $usdAccount = treasuryAccount($user, 'PayPal USD');
+    $zmwAccount = treasuryAccount($user, 'Payout float', SandboxPayoutController::class);
+    fund($usdAccount, '1000', 'USD');
+    fund($zmwAccount, '100', 'ZMW');
+
+    $this->actingAs($user)->post(route('treasury.transfers.store'), [
+        'from_provider_id' => $usdAccount->id,
+        'to_provider_id' => $zmwAccount->id,
+        'currency' => 'USD',
+        'to_currency' => 'ZMW',
+        'amount' => '100',
+        'fee' => '2',
+        'note' => 'Cross currency funding',
+    ])->assertRedirect(route('treasury.index'));
+
+    $transfer = TreasuryTransfer::sole();
+    expect($transfer->isFx())->toBeTrue()
+        ->and($transfer->currency)->toBe('USD')
+        ->and($transfer->destinationCurrency())->toBe('ZMW')
+        ->and($transfer->amount_minor)->toBe(10000)
+        ->and($transfer->fee_minor)->toBe(200)
+        ->and($transfer->target_amount_minor)->toBe(270875)
+        ->and((float) $transfer->fx_rate)->toBe(27.0875);
+
+    // Approve
+    $this->actingAs($user)->post(route('treasury.transfers.approve', $transfer));
+    expect($transfer->fresh()->status)->toBe(TransferStatus::APPROVED);
+
+    // Send: debits USD account (100 + 2 fee)
+    $this->actingAs($user)->post(route('treasury.transfers.send', $transfer), ['external_reference' => 'FX-WIRE-1']);
+    expect((string) LedgerBalance::of($usdAccount, 'USD'))->toBe('898.00')
+        ->and((string) LedgerBalance::of($zmwAccount, 'ZMW'))->toBe('100.00');
+
+    // Settle: credits ZMW account with target amount (2,708.75 ZMW)
+    $this->actingAs($user)->post(route('treasury.transfers.settle', $transfer));
+    expect((string) LedgerBalance::of($zmwAccount, 'ZMW'))->toBe('2808.75')
+        ->and($transfer->refresh()->status)->toBe(TransferStatus::SETTLED)
+        ->and($transfer->received_minor)->toBe(270875);
+});
+
+test('the treasury agent proposes cross-currency rebalancing transfers with fx conversion', function () {
+    [$user, $collections, $float] = rebalanceSetup();
+    $paypal = treasuryAccount($user, 'PayPal USD');
+    fund($paypal, '1000', 'USD');
+
+    TreasuryAgent::fake([[
+        'summary' => 'Cross-currency rebalancing suggested.',
+        'suggestions' => [[
+            'from_provider_id' => $paypal->id,
+            'to_provider_id' => $float->id,
+            'currency' => 'USD',
+            'to_currency' => 'ZMW',
+            'amount' => '50',
+            'reasoning' => 'Fund ZMW float from PayPal USD via FX.',
+        ]],
+        'notes' => ['Leveraging PayPal USD balances.'],
+    ]]);
+
+    $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertRedirect()
+        ->assertInertiaFlash('toast.type', 'success')
+        ->assertInertiaFlash('rebalance.summary', 'Cross-currency rebalancing suggested.');
+
+    $transfer = TreasuryTransfer::sole();
+    expect($transfer->status)->toBe(TransferStatus::REQUESTED)
+        ->and($transfer->origin)->toBe('agent')
+        ->and($transfer->isFx())->toBeTrue()
+        ->and($transfer->currency)->toBe('USD')
+        ->and($transfer->destinationCurrency())->toBe('ZMW')
+        ->and($transfer->amount_minor)->toBe(5000)
+        ->and($transfer->target_amount_minor)->toBe(135438)
+        ->and($transfer->reasoning)->toBe('Fund ZMW float from PayPal USD via FX.');
+});

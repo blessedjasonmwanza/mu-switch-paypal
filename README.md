@@ -152,7 +152,8 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] Payouts in the switch, with fallback, plus a double-entry ledger
 - [x] Treasury: balances, float-low alerts, and tracked transfers between accounts
 - [x] Treasury agent: AI rebalancing suggestions, checked by guardrails and approved by a person
-- [ ] PayPal transfers: quotes, FX, refund on failure
+- [x] FX quotes: exchange rates and conversions locked for 10 minutes, per account
+- [ ] PayPal transfers: all-in quotes, delivery, refund on failure
 - [ ] AI agent with guardrails, and the transfer UI
 - [ ] MCP server
 - [ ] Hosted demo on Render

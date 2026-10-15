@@ -8,6 +8,7 @@ use App\Models\PaymentProvider;
 use App\Models\TreasuryTransfer;
 use App\Models\User;
 use App\Support\Currency;
+use App\Support\Fx\FxQuoter;
 use App\Support\Ledger\LedgerBalance;
 use App\Support\Ledger\LedgerRecorder;
 use Brick\Math\BigDecimal;
@@ -29,9 +30,23 @@ class TransferService
      *
      * @throws TransferException
      */
-    public function request(User $by, PaymentProvider $from, PaymentProvider $to, string $currency, BigDecimal $amount, BigDecimal $fee, ?string $note = null, string $origin = 'operator', ?string $reasoning = null): TreasuryTransfer
-    {
+    public function request(
+        User $by,
+        PaymentProvider $from,
+        PaymentProvider $to,
+        string $currency,
+        BigDecimal $amount,
+        BigDecimal $fee,
+        ?string $note = null,
+        string $origin = 'operator',
+        ?string $reasoning = null,
+        ?string $toCurrency = null,
+        ?BigDecimal $targetAmount = null,
+        ?string $fxRate = null,
+        ?string $fxQuoteId = null,
+    ): TreasuryTransfer {
         $currency = strtoupper($currency);
+        $toCurrency = $toCurrency ? strtoupper($toCurrency) : null;
 
         if ($from->is($to)) {
             throw new TransferException('Choose two different provider accounts.');
@@ -41,15 +56,39 @@ class TransferService
             throw new TransferException('The amount must be positive and the fee zero or more.');
         }
 
-        return DB::transaction(function () use ($by, $from, $to, $currency, $amount, $fee, $note, $origin, $reasoning): TreasuryTransfer {
+        $targetAmountMinor = null;
+        if ($toCurrency && $toCurrency !== $currency) {
+            if ($targetAmount === null) {
+                try {
+                    $quoter = app(FxQuoter::class);
+                    $quote = $fxQuoteId ? $quoter->getValidQuote($fxQuoteId) : $quoter->quote($currency, $toCurrency, $amount);
+                    $targetAmount = $quote->targetAmount;
+                    $fxRate = (string) $quote->effectiveRate;
+                    $fxQuoteId = $quote->id;
+                } catch (\Throwable $e) {
+                    throw new TransferException('FX quote failed: '.$e->getMessage());
+                }
+            }
+
+            $targetAmountMinor = Currency::toMinorUnits($targetAmount, $toCurrency);
+        }
+
+        return DB::transaction(function () use (
+            $by, $from, $to, $currency, $toCurrency, $amount, $fee,
+            $targetAmountMinor, $fxRate, $fxQuoteId, $note, $origin, $reasoning
+        ): TreasuryTransfer {
             $transfer = TreasuryTransfer::create([
                 'reference' => (string) Str::uuid(),
                 'user_id' => $by->id,
                 'from_provider_id' => $from->id,
                 'to_provider_id' => $to->id,
                 'currency' => $currency,
+                'to_currency' => $toCurrency,
                 'amount_minor' => Currency::toMinorUnits($amount, $currency),
                 'fee_minor' => Currency::toMinorUnits($fee, $currency),
+                'target_amount_minor' => $targetAmountMinor,
+                'fx_rate' => $fxRate,
+                'fx_quote_id' => $fxQuoteId,
                 'status' => TransferStatus::REQUESTED,
                 'method' => 'manual',
                 'origin' => $origin,
@@ -97,15 +136,17 @@ class TransferService
      */
     public function settle(TreasuryTransfer $transfer, User $by, ?BigDecimal $received = null, ?string $externalReference = null): TreasuryTransfer
     {
-        $receivedMinor = $received === null ? $transfer->amount_minor : Currency::toMinorUnits($received, $transfer->currency);
+        $targetCurrency = $transfer->destinationCurrency();
+        $expectedMinor = $transfer->target_amount_minor ?? $transfer->amount_minor;
+        $receivedMinor = $received === null ? $expectedMinor : Currency::toMinorUnits($received, $targetCurrency);
 
-        if ($receivedMinor <= 0 || $receivedMinor > $transfer->amount_minor) {
+        if ($receivedMinor <= 0 || $receivedMinor > $expectedMinor) {
             throw new TransferException('The amount received must be more than zero and no more than the amount sent.');
         }
 
-        $shortfall = $transfer->amount_minor - $receivedMinor;
+        $shortfall = $expectedMinor - $receivedMinor;
         $note = $shortfall > 0
-            ? 'Received '.Currency::fromMinorUnits($receivedMinor, $transfer->currency).' of '.$transfer->amount().' '.$transfer->currency
+            ? 'Received '.Currency::fromMinorUnits($receivedMinor, $targetCurrency).' of '.Currency::fromMinorUnits($expectedMinor, $targetCurrency).' '.$targetCurrency
             : null;
 
         return $this->transition($transfer, TransferStatus::SETTLED, $by, $note, array_filter([
