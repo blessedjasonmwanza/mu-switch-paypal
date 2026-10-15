@@ -15,6 +15,7 @@ MoneyUnify Switch removes single-gateway dependency: you integrate once against 
 - [Request a Payment](https://moneyunify.one/docs/api/request-payment): the single collection endpoint, its parameters, and examples.
 - [Quote a Payment](https://moneyunify.one/docs/api/quote-payment): fees from both sides (merchant pays or payer pays) for every provider that would route a payment, before charging.
 - [Send a Payout](https://moneyunify.one/docs/api/payouts): send money to a mobile wallet, with fallback that never pays twice and idempotency keys.
+- [Exchange Rates & FX Quotes](https://moneyunify.one/docs/api/fx): exchange rates, and conversions locked for 10 minutes, quoted from what you send or what must arrive.
 - [Verify a Payment](https://moneyunify.one/docs/api/verify-payment): confirm the final settled (`success`/`failed`) outcome of a transaction.
 - [Responses & Errors](https://moneyunify.one/docs/api/responses): the consistent response envelope and the full list of status codes.
 - [Coverage](https://moneyunify.one/docs/api/coverage): supported countries, currencies, mobile networks, and the providers that reach each.

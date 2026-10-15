@@ -185,3 +185,16 @@ test('provider accounts flag totals that include estimated fees', function () {
             ->where('providers.0.accounts.0.outflow', 3.98)
             ->where('providers.0.accounts.0.estimated', true));
 });
+
+test('paypal can be quoted with allow_fx for zmw payments', function () {
+    $user = User::factory()->create(['api_token' => 'quote-fx']);
+    paypalProvider($user);
+
+    $this->withToken('quote-fx')
+        ->postJson('/api/v1/payment/quote', ['amount' => 500, 'country' => 'ZM', 'currency' => 'ZMW', 'allow_fx' => true])
+        ->assertOk()
+        ->assertJsonPath('data.currency', 'ZMW')
+        ->assertJsonPath('data.quotes.0.provider', 'PayPal '.$user->id)
+        ->assertJsonPath('data.quotes.0.is_fx', true)
+        ->assertJsonPath('data.quotes.0.fx.target_currency', 'USD');
+});

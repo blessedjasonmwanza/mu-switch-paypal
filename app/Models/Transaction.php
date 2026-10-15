@@ -55,6 +55,8 @@ class Transaction extends Model
     {
         return [
             'status' => TransactionStatus::class,
+            'is_fx' => 'boolean',
+            'fx_rate' => 'decimal:8',
             'provider_response' => 'array',
             'collection_fee' => 'decimal:4',
             'settlement_fee' => 'decimal:4',

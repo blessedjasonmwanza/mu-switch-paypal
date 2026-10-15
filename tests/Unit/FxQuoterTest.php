@@ -71,15 +71,25 @@ test('same currency quote has rate 1 and zero margin', function () {
 });
 
 test('it stores and retrieves quotes from cache', function () {
-    $quote = $this->quoter->quote('USD', 'ZMW', '100.00');
+    $quote = $this->quoter->quote('USD', 'ZMW', '100.00', ownerId: 7);
 
-    $retrieved = $this->quoter->findQuote($quote->id);
+    $retrieved = $this->quoter->findQuote($quote->id, 7);
     expect($retrieved)->not->toBeNull();
     expect($retrieved->id)->toBe($quote->id);
     expect((string) $retrieved->targetAmount)->toBe((string) $quote->targetAmount);
 
-    $valid = $this->quoter->getValidQuote($quote->id);
-    expect($valid->id)->toBe($quote->id);
+    $valid = $this->quoter->getValidQuote($quote->id, 7);
+    expect($valid->id)->toBe($quote->id)
+        ->and($valid->ownerId)->toBe(7);
+});
+
+test('a quote is only found by the account that created it', function () {
+    $quote = $this->quoter->quoteTarget('USD', 'ZMW', '2500', ownerId: 7);
+
+    expect($this->quoter->findQuote($quote->id, 8))->toBeNull()
+        ->and($this->quoter->findQuote($quote->id, null))->toBeNull()
+        ->and(fn () => $this->quoter->getValidQuote($quote->id, 8))->toThrow(FxQuoteNotFoundException::class)
+        ->and($quote->toArray())->not->toHaveKey('owner_id');
 });
 
 test('it detects expired quotes', function () {
@@ -97,7 +107,7 @@ test('it detects expired quotes', function () {
 });
 
 test('it throws on unknown quote id', function () {
-    expect(fn () => $this->quoter->getValidQuote('00000000-0000-0000-0000-000000000000'))
+    expect(fn () => $this->quoter->getValidQuote('00000000-0000-0000-0000-000000000000', 7))
         ->toThrow(FxQuoteNotFoundException::class);
 });
 

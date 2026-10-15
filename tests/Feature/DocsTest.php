@@ -130,3 +130,11 @@ test('the treasury guide is documented', function () {
         ->assertSee('Confirm received', false)
         ->assertSee('Rebalancing suggestions (AI)', false);
 });
+
+test('the fx api is documented', function () {
+    $this->get('/docs/api/fx')
+        ->assertOk()
+        ->assertSee('Exchange Rates &amp; FX Quotes', false)
+        ->assertSee('/api/v1/fx/quote', false)
+        ->assertSee('account that created it', false);
+});

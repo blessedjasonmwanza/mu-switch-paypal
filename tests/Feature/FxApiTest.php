@@ -96,3 +96,18 @@ test('api returns 404 for nonexistent quote id', function () {
         ->getJson('/api/v1/fx/quote/non-existent-uuid')
         ->assertNotFound();
 });
+
+test('another account cannot read a quote by its id', function () {
+    $quoteId = $this->withToken('test-api-token-fx')
+        ->postJson('/api/v1/fx/quote', ['from_currency' => 'USD', 'to_currency' => 'ZMW', 'amount' => 100])
+        ->assertOk()
+        ->assertJsonMissingPath('data.owner_id')
+        ->json('data.id');
+
+    User::factory()->create(['api_token' => 'other-api-token-fx']);
+
+    $this->withToken('other-api-token-fx')
+        ->getJson("/api/v1/fx/quote/{$quoteId}")
+        ->assertNotFound()
+        ->assertJsonPath('status', 'error');
+});

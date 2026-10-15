@@ -28,8 +28,8 @@ class FxController extends Controller
 
         try {
             $quote = $mode === 'target'
-                ? $quoter->quoteTarget($from, $to, (string) $validated['amount'])
-                : $quoter->quote($from, $to, (string) $validated['amount']);
+                ? $quoter->quoteTarget($from, $to, (string) $validated['amount'], ownerId: $request->user()->id)
+                : $quoter->quote($from, $to, (string) $validated['amount'], ownerId: $request->user()->id);
         } catch (UnsupportedCurrencyPairException $e) {
             return ApiResponse::error($e->getMessage(), 400);
         }
@@ -56,11 +56,11 @@ class FxController extends Controller
     }
 
     /**
-     * Look up an existing quote by ID to check its status or remaining time.
+     * Look up one of the account's quotes by ID to check its status or remaining time.
      */
-    public function show(string $id, FxQuoter $quoter): JsonResponse
+    public function show(Request $request, string $id, FxQuoter $quoter): JsonResponse
     {
-        $quote = $quoter->findQuote($id);
+        $quote = $quoter->findQuote($id, $request->user()->id);
 
         if ($quote === null) {
             return ApiResponse::error('FX quote not found or expired', 404);

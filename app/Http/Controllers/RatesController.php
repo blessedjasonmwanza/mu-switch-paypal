@@ -22,7 +22,7 @@ class RatesController extends Controller
 
         $activeQuote = null;
         if ($quoteId = $request->session()->get('active_fx_quote_id')) {
-            $quote = $quoter->findQuote($quoteId);
+            $quote = $quoter->findQuote($quoteId, $request->user()->id);
             if ($quote && ! $quote->isExpired()) {
                 $activeQuote = $quote->toArray();
             } else {
@@ -58,8 +58,8 @@ class RatesController extends Controller
 
         try {
             $quote = $mode === 'target'
-                ? $quoter->quoteTarget($from, $to, (string) $validated['amount'])
-                : $quoter->quote($from, $to, (string) $validated['amount']);
+                ? $quoter->quoteTarget($from, $to, (string) $validated['amount'], ownerId: $request->user()->id)
+                : $quoter->quote($from, $to, (string) $validated['amount'], ownerId: $request->user()->id);
         } catch (UnsupportedCurrencyPairException $e) {
             return ApiResponse::error($e->getMessage(), 422);
         }

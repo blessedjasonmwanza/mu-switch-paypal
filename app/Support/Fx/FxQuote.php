@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
  *
  * Locks the effective exchange rate, converted amounts, and margin for 10 minutes
  * (configurable) to protect both the customer and switch against market volatility.
+ * A quote belongs to the account that requested it; only that account can use it.
  */
 final class FxQuote
 {
@@ -27,7 +28,16 @@ final class FxQuote
         public readonly BigDecimal $marginAmount,
         public readonly CarbonInterface $quotedAt,
         public readonly CarbonInterface $expiresAt,
+        public readonly ?int $ownerId = null,
     ) {}
+
+    /**
+     * Whether this quote may be used by the given account.
+     */
+    public function belongsTo(?int $ownerId): bool
+    {
+        return $this->ownerId === $ownerId;
+    }
 
     /**
      * Whether this quote has exceeded its locked time window.
@@ -42,7 +52,7 @@ final class FxQuote
      */
     public function expiresInSeconds(): int
     {
-        return max(0, now()->diffInSeconds($this->expiresAt, false));
+        return max(0, (int) floor(now()->diffInSeconds($this->expiresAt, false)));
     }
 
     /**
@@ -102,6 +112,17 @@ final class FxQuote
     }
 
     /**
+     * The public fields plus the owner, for storage. The owner is never
+     * returned to API clients.
+     *
+     * @return array<string, mixed>
+     */
+    public function toStorage(): array
+    {
+        return [...$this->toArray(), 'owner_id' => $this->ownerId];
+    }
+
+    /**
      * Reconstruct an FxQuote instance from cached or serialized array data.
      *
      * @param  array<string, mixed>  $data
@@ -120,6 +141,7 @@ final class FxQuote
             marginAmount: FeeCalculator::money((string) $data['margin_amount']),
             quotedAt: Carbon::parse((string) $data['quoted_at']),
             expiresAt: Carbon::parse((string) $data['expires_at']),
+            ownerId: isset($data['owner_id']) ? (int) $data['owner_id'] : null,
         );
     }
 }

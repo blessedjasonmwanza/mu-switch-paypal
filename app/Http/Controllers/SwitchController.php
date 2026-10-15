@@ -34,12 +34,16 @@ class SwitchController extends Controller
             'currency' => 'nullable|string|size:3|alpha',
             // Optional: where hosted checkouts (e.g. PayPal) send the payer back to.
             'return_url' => 'nullable|url',
+            // Optional: allow routing to providers that convert currency via FX (e.g. PayPal for African currencies).
+            'allow_fx' => 'nullable|boolean',
+            'fx_quote_id' => 'nullable|string',
         ]);
         $country = strtoupper($request['country']);
         $currency = Currency::resolve($request->input('currency'), $country);
+        $allowFx = (bool) $request->boolean('allow_fx') || $request->filled('fx_quote_id');
 
         try {
-            $filteredProviders = ProviderRouter::route($request->user(), $country, $currency, (float) $request['amount']);
+            $filteredProviders = ProviderRouter::route($request->user(), $country, $currency, (float) $request['amount'], allowFx: $allowFx);
         } catch (NoEligibleProviderException $e) {
             return ApiResponse::error($e->getMessage(), 400);
         }
@@ -123,19 +127,22 @@ class SwitchController extends Controller
             'amount' => 'required|numeric|min:0.01',
             'country' => ['required', 'string', 'size:2', Rule::in(Market::codes())],
             'currency' => 'nullable|string|size:3|alpha',
+            'allow_fx' => 'nullable|boolean',
+            'fx_quote_id' => 'nullable|string',
         ]);
 
         $country = strtoupper($request['country']);
         $currency = Currency::resolve($request->input('currency'), $country);
         $amount = FeeCalculator::money((string) $request->input('amount'));
         $decimals = Currency::decimals($currency);
+        $allowFx = (bool) $request->boolean('allow_fx') || $request->filled('fx_quote_id');
 
         if ($amount->strippedOfTrailingZeros()->getScale() > $decimals) {
             return ApiResponse::error("{$currency} amounts can have at most {$decimals} decimal places", 422);
         }
 
         try {
-            $quotes = $quoter->quote($request->user(), $amount, $country, $currency);
+            $quotes = $quoter->quote($request->user(), $amount, $country, $currency, allowFx: $allowFx);
         } catch (NoEligibleProviderException $e) {
             return ApiResponse::error($e->getMessage(), 400);
         }

@@ -11,6 +11,7 @@ use App\Models\CustomerAccount;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Support\Currency;
+use App\Support\Fx\FxQuoter;
 use App\Support\Paypal\PaypalClient;
 use App\Support\Paypal\PaypalException;
 use Illuminate\Http\JsonResponse;
@@ -132,13 +133,40 @@ class PaypalController extends Controller implements PaymentProviderInterface
         $country = strtoupper($request['country']);
         $currency = Currency::resolve($request->input('currency'), $country);
 
-        if (! in_array($currency, self::SUPPORTED_CURRENCIES, true)) {
-            return ApiResponse::error("PayPal does not support {$currency} payments", 422);
-        }
+        $fxQuote = null;
+        $chargeCurrency = $currency;
+        $chargeAmount = null;
 
-        $amount = $this->formatAmount((float) $request['amount'], $currency);
-        if ($amount === null) {
-            return ApiResponse::error("{$currency} amounts must be whole numbers on PayPal", 422);
+        if (! in_array($currency, self::SUPPORTED_CURRENCIES, true) || $request->filled('fx_quote_id')) {
+            $targetCurrency = strtoupper((string) ($request->input('target_currency') ?: config('moneyunify_paypal.fx.base_currency', 'USD')));
+
+            if (! in_array($targetCurrency, self::SUPPORTED_CURRENCIES, true)) {
+                return ApiResponse::error("PayPal does not support target currency {$targetCurrency}", 422);
+            }
+
+            try {
+                $quoter = app(FxQuoter::class);
+                if ($request->filled('fx_quote_id')) {
+                    $fxQuote = $quoter->getValidQuote((string) $request->input('fx_quote_id'));
+                } else {
+                    $fxQuote = $quoter->quote($currency, $targetCurrency, (float) $request['amount']);
+                }
+            } catch (\Throwable $e) {
+                return ApiResponse::error("PayPal currency conversion failed: {$e->getMessage()}", 422);
+            }
+
+            $chargeCurrency = $fxQuote->targetCurrency;
+            $formatted = $this->formatAmount((float) $fxQuote->targetAmount->toFloat(), $chargeCurrency);
+            if ($formatted === null) {
+                return ApiResponse::error("{$chargeCurrency} amounts must be whole numbers on PayPal", 422);
+            }
+            $chargeAmount = $formatted;
+        } else {
+            $formatted = $this->formatAmount((float) $request['amount'], $currency);
+            if ($formatted === null) {
+                return ApiResponse::error("{$currency} amounts must be whole numbers on PayPal", 422);
+            }
+            $chargeAmount = $formatted;
         }
 
         $payerEmail = $this->payerEmail($request);
@@ -147,11 +175,13 @@ class PaypalController extends Controller implements PaymentProviderInterface
         $transaction = new Transaction([
             'transaction_id' => (string) Str::uuid(),
             'customer_id' => $customer->id,
-            'amount' => $request['amount'],
-            'currency' => $currency,
+            'amount' => $chargeAmount,
+            'currency' => $chargeCurrency,
             'country' => $country,
             'status' => TransactionStatus::PENDING,
             'direction' => 'credit',
+            'is_fx' => $fxQuote !== null && $fxQuote->isFx(),
+            'fx_rate' => ($fxQuote && $fxQuote->isFx()) ? (string) $fxQuote->effectiveRate : null,
             'callback_url' => $request->input('callback_url'),
             'return_url' => $request->input('return_url'),
         ]);
@@ -161,7 +191,7 @@ class PaypalController extends Controller implements PaymentProviderInterface
         $transaction->save();
 
         try {
-            $order = $this->client->createOrder($this->orderPayload($transaction, $amount, $payerEmail), $transaction->transaction_id);
+            $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail), $transaction->transaction_id);
         } catch (PaypalException $e) {
             return $this->failTransaction($transaction, $e->getMessage(), $e->status >= 500 ? 502 : 422);
         }
@@ -174,15 +204,29 @@ class PaypalController extends Controller implements PaymentProviderInterface
 
         $transaction->update([
             'provider_transaction_id' => $order['id'],
-            'provider_response' => ['order' => $order],
+            'provider_response' => [
+                'order' => $order,
+                ...($fxQuote ? ['fx' => $fxQuote->toArray()] : []),
+            ],
         ]);
 
-        return ApiResponse::success('Payment request initiated successfully', [
+        $responseData = [
             'transaction_id' => $transaction->transaction_id,
             'reference' => $transaction->provider_transaction_id,
             'status' => $transaction->status->value,
             'checkout_url' => $checkoutUrl,
-        ]);
+            'amount' => (float) $transaction->amount,
+            'currency' => $transaction->currency,
+            'is_fx' => (bool) $transaction->is_fx,
+            'fx_rate' => $transaction->fx_rate ? (float) $transaction->fx_rate : null,
+        ];
+
+        if ($fxQuote && $fxQuote->isFx()) {
+            $responseData['original_amount'] = (float) $fxQuote->sourceAmount->toFloat();
+            $responseData['original_currency'] = $fxQuote->sourceCurrency;
+        }
+
+        return ApiResponse::success('Payment request initiated successfully', $responseData);
     }
 
     /**
@@ -223,6 +267,8 @@ class PaypalController extends Controller implements PaymentProviderInterface
             'provider_status' => $providerStatus,
             'amount' => (float) $transaction->amount,
             'currency' => $transaction->currency,
+            'is_fx' => (bool) $transaction->is_fx,
+            'fx_rate' => $transaction->fx_rate ? (float) $transaction->fx_rate : null,
         ]);
     }
 

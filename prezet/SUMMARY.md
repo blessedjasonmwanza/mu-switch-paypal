@@ -18,4 +18,5 @@
 - [Request a Payment](content/api/request-payment)
 - [Verify a Payment](content/api/verify-payment)
 - [Send a Payout](content/api/payouts)
+- [Exchange Rates & FX Quotes](content/api/fx)
 - [Responses & Errors](content/api/responses)

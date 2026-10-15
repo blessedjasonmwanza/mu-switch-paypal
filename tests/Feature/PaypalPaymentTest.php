@@ -5,6 +5,7 @@ use App\Http\Controllers\Providers\DpoController;
 use App\Jobs\SendTransactionCallback;
 use App\Models\PaymentProvider;
 use App\Models\ProviderLog;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Support\Paypal\PaypalClient;
 use Illuminate\Http\Client\Request;
@@ -413,4 +414,52 @@ test('paypal tries share the gateway wait budget', function () {
 test('gateway calls connect fast and wait up to three minutes by default', function () {
     expect(config('services.gateways.connect_timeout'))->toBe(8)
         ->and(config('services.gateways.timeout'))->toBe(180);
+});
+
+test('paypal payment request with zmw currency converts to usd and sets fx fields', function () {
+    $user = User::factory()->create(['api_token' => 'pp-fx']);
+    paypalProvider($user);
+
+    fakePaypal(['*/v2/checkout/orders' => Http::response(paypalOrder('ORDER-FX', 'PAYER_ACTION_REQUIRED'), 201)]);
+
+    $response = $this->withToken('pp-fx')->postJson('/api/v1/payment/request', [
+        'amount' => 500,
+        'account_number' => 'payer@example.com',
+        'country' => 'ZM',
+        'currency' => 'ZMW',
+        'allow_fx' => true,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('status', 'success')
+        ->assertJsonPath('data.is_fx', true)
+        ->assertJsonPath('data.original_currency', 'ZMW')
+        ->assertJsonPath('data.original_amount', 500)
+        ->assertJsonPath('data.currency', 'USD');
+
+    $tx = Transaction::where('provider_transaction_id', 'ORDER-FX')->firstOrFail();
+    expect($tx->is_fx)->toBeTrue()
+        ->and($tx->fx_rate)->not->toBeNull()
+        ->and((float) $tx->fx_rate)->toBeGreaterThan(0)
+        ->and($tx->currency)->toBe('USD');
+});
+
+test('verifying an fx transaction includes is_fx and fx_rate in the response', function () {
+    $user = User::factory()->create(['api_token' => 'pp-fx-verify']);
+    $provider = paypalProvider($user);
+    $transaction = pendingPaypalTransaction($provider, [
+        'is_fx' => true,
+        'fx_rate' => '0.03581818',
+    ]);
+
+    fakePaypal([
+        '*/v2/checkout/orders/ORDER-1/capture' => Http::response(paypalOrder('ORDER-1', 'COMPLETED', 'COMPLETED'), 201),
+        '*/v2/checkout/orders/ORDER-1' => Http::response(paypalOrder('ORDER-1', 'APPROVED')),
+    ]);
+
+    $this->withToken('pp-fx-verify')
+        ->postJson('/api/v1/payment/verify', ['transaction_id' => $transaction->transaction_id])
+        ->assertOk()
+        ->assertJsonPath('data.is_fx', true)
+        ->assertJsonPath('data.fx_rate', 0.03581818);
 });

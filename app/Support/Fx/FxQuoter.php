@@ -44,6 +44,7 @@ class FxQuoter
         BigDecimal|int|float|string $sourceAmount,
         ?float $marginPercent = null,
         ?int $ttlMinutes = null,
+        ?int $ownerId = null,
     ): FxQuote {
         $from = strtoupper(trim($fromCurrency));
         $to = strtoupper(trim($toCurrency));
@@ -75,6 +76,7 @@ class FxQuoter
                 marginAmount: BigDecimal::zero(),
                 quotedAt: $quotedAt,
                 expiresAt: $expiresAt,
+                ownerId: $ownerId,
             );
 
             $this->store($quote);
@@ -120,6 +122,7 @@ class FxQuoter
             marginAmount: $marginAmount,
             quotedAt: $quotedAt,
             expiresAt: $expiresAt,
+            ownerId: $ownerId,
         );
 
         $this->store($quote);
@@ -138,6 +141,7 @@ class FxQuoter
         BigDecimal|int|float|string $targetAmount,
         ?float $marginPercent = null,
         ?int $ttlMinutes = null,
+        ?int $ownerId = null,
     ): FxQuote {
         $from = strtoupper(trim($fromCurrency));
         $to = strtoupper(trim($toCurrency));
@@ -169,6 +173,7 @@ class FxQuoter
                 marginAmount: BigDecimal::zero(),
                 quotedAt: $quotedAt,
                 expiresAt: $expiresAt,
+                ownerId: $ownerId,
             );
 
             $this->store($quote);
@@ -217,6 +222,7 @@ class FxQuoter
             marginAmount: $marginAmount,
             quotedAt: $quotedAt,
             expiresAt: $expiresAt,
+            ownerId: $ownerId,
         );
 
         $this->store($quote);
@@ -225,9 +231,10 @@ class FxQuoter
     }
 
     /**
-     * Retrieve a locked quote by its ID from cache.
+     * Retrieve a locked quote by its ID, only for the account that created it.
+     * Another account's quote is reported as missing, so IDs reveal nothing.
      */
-    public function findQuote(string $id): ?FxQuote
+    public function findQuote(string $id, ?int $ownerId): ?FxQuote
     {
         $data = Cache::get("fx_quote:{$id}");
 
@@ -235,18 +242,21 @@ class FxQuoter
             return null;
         }
 
-        return FxQuote::fromArray($data);
+        $quote = FxQuote::fromArray($data);
+
+        return $quote->belongsTo($ownerId) ? $quote : null;
     }
 
     /**
-     * Retrieve a quote and assert that it exists and has not expired.
+     * Retrieve a quote and assert that it exists, belongs to the account and
+     * has not expired.
      *
      * @throws FxQuoteNotFoundException
      * @throws FxQuoteExpiredException
      */
-    public function getValidQuote(string $id): FxQuote
+    public function getValidQuote(string $id, ?int $ownerId): FxQuote
     {
-        $quote = $this->findQuote($id);
+        $quote = $this->findQuote($id, $ownerId);
 
         if ($quote === null) {
             throw new FxQuoteNotFoundException($id);
@@ -325,6 +335,6 @@ class FxQuoter
 
     private function store(FxQuote $quote): void
     {
-        Cache::put("fx_quote:{$quote->id}", $quote->toArray(), $quote->expiresAt);
+        Cache::put("fx_quote:{$quote->id}", $quote->toStorage(), $quote->expiresAt);
     }
 }

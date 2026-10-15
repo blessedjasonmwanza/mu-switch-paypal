@@ -5,8 +5,10 @@ namespace App\Support;
 use App\Contracts\PaymentProviderInterface;
 use App\Contracts\PayoutProviderInterface;
 use App\Exceptions\NoEligibleProviderException;
+use App\Http\Controllers\Providers\PaypalController;
 use App\Models\PaymentProvider;
 use App\Models\User;
+use App\Support\Fx\Contracts\FxRateProviderInterface;
 use Illuminate\Support\Collection;
 
 /**
@@ -24,7 +26,7 @@ class ProviderRouter
      *
      * @throws NoEligibleProviderException
      */
-    public static function route(?User $user, string $country, string $currency, float $amount, string $capability = PaymentProviderInterface::class): Collection
+    public static function route(?User $user, string $country, string $currency, float $amount, string $capability = PaymentProviderInterface::class, bool $allowFx = false): Collection
     {
         $providers = $user ? $user->paymentProviders : collect();
 
@@ -43,9 +45,10 @@ class ProviderRouter
             throw new NoEligibleProviderException("No active {$kind} support the requested country");
         }
 
-        // Only providers that can charge the currency, so a fallback never
-        // silently charges the same amount in another currency.
-        $eligible = $eligible->filter(fn (PaymentProvider $provider): bool => Currency::isSupportedBy($provider->class, $country, $currency));
+        // Only providers that can charge the currency (or convert via FX when allowed),
+        // so a fallback never silently charges the same amount in another currency.
+        $eligible = $eligible->filter(fn (PaymentProvider $provider): bool => Currency::isSupportedBy($provider->class, $country, $currency)
+            || ($allowFx && self::supportsFx($provider->class, $currency)));
 
         if ($eligible->isEmpty()) {
             throw new NoEligibleProviderException("No active providers support {$currency} payments in {$country}");
@@ -55,6 +58,20 @@ class ProviderRouter
         return $user?->feePolicy() === 'cost_aware'
             ? self::orderByCost($eligible, $amount, $currency)
             : $eligible->values();
+    }
+
+    /**
+     * Whether a provider driver can convert the requested currency via FX.
+     */
+    public static function supportsFx(string $driverClass, string $currency): bool
+    {
+        if ($driverClass === PaypalController::class) {
+            $base = config('moneyunify_paypal.fx.base_currency', 'USD');
+
+            return app(FxRateProviderInterface::class)->supports($currency, $base);
+        }
+
+        return false;
     }
 
     /**
