@@ -153,3 +153,15 @@ test('lenco payouts are documented', function () {
         ->assertSee('Payouts through Lenco', false)
         ->assertSee('/transfers/mobile-money', false);
 });
+
+test('the send money page and assistant are documented', function () {
+    $this->get('/docs/ai-and-mcp')
+        ->assertOk()
+        ->assertSee('The Send Money assistant', false)
+        ->assertSee('StartTransfer', false);
+
+    $this->get('/docs/api/cross-border-transfers')
+        ->assertOk()
+        ->assertSee('TRANSFER_MAX_DAILY_USD', false)
+        ->assertSee('From the dashboard', false);
+});

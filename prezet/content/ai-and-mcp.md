@@ -157,6 +157,35 @@ Copy `access_token` from the response. For live, use
 > URL: mixing them fails authentication. The dashboard route above avoids both
 > problems.
 
+## The Send Money assistant
+
+On the **Send Money** page, the **Assistant** tab lets you send money by
+describing it: "Send K2,500 to my mum on 0977123456", or "How much does $100
+come to in Zambia?". It uses your account's AI providers, with failover.
+
+What it can do:
+
+| Tool | What it does | Needs your approval |
+| --- | --- | --- |
+| `ListCorridors` | Lists where you can pay out to, and the currencies senders can pay in | No |
+| `QuoteTransfer` | Quotes a transfer (rate, what each side pays and gets, route) without creating anything | No |
+| `StartTransfer` | Starts the transfer and creates the sender's PayPal checkout | **Always** |
+| `GetTransferStatus` | Checks one of your transfers | No |
+| PayPal MCP tools | PayPal's own tools, when PayPal MCP is on | **Always** |
+
+The safeguards are in code, not in the prompt:
+
+- **Nothing moves without you.** Starting a transfer always shows an approval
+  card with the recipient and amount. Rejecting it stops it. The sender then
+  pays on PayPal, which is a second approval.
+- **Spending limits** apply to every transfer, as for the API. See
+  [Cross-Border Transfers](/docs/api/cross-border-transfers).
+- **Your account only.** The tools only see your providers and your transfers,
+  and a conversation can only be continued by the account that started it.
+- **Audit.** A transfer the assistant starts is marked as coming from the
+  assistant and linked to its conversation, which is stored in the
+  conversation tables.
+
 ## Production checklist
 
 - Keys live in the dashboard or in the server's `.env` (or your host's secret

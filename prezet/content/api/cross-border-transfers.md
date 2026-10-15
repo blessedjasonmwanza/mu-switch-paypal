@@ -212,10 +212,40 @@ A transfer can only be read by the account that created it.
 | `401` | The API token is missing or invalid. |
 | `404` | The transfer doesn't exist or belongs to another account. |
 | `409` | A request with the same `Idempotency-Key` is still being processed. |
-| `422` | A field fails validation, or the `fx_quote_id` is for different currencies. |
+| `422` | A field fails validation, the `fx_quote_id` is for different currencies, or a spending limit would be passed. |
 | `502` | PayPal couldn't start the payment. The transfer is marked `payment_failed`. |
 
 See [Responses & Errors](/docs/api/responses) for the response envelope.
+
+## Spending limits
+
+Every cross-border transfer is checked against two caps, in USD, whoever
+starts it (the API, the dashboard or the AI assistant):
+
+| `.env` | Default | Limit |
+| --- | --- | --- |
+| `TRANSFER_MAX_PER_TRANSACTION_USD` | `2000` | The most one transfer may be worth. |
+| `TRANSFER_MAX_DAILY_USD` | `5000` | The most the account may send per day. Transfers whose PayPal payment wasn't completed don't count. |
+
+A transfer over a limit is refused with `422` and a message saying how much is
+left today. Nothing is created.
+
+## From the dashboard
+
+The **Send Money** page (in the sidebar) does the same without any code:
+
+- **Form.** Choose the country and the sender's currency, then enter what the
+  recipient gets or what the sender pays. The quote updates as you type and
+  shows the rate, the margin, the payout route and your estimated fees. **Pay
+  with PayPal** starts the transfer and takes the sender to PayPal; after
+  paying, they come back to the page.
+- **Assistant.** Describe the transfer in plain words, for example "Send K2,500
+  to my mum on 0977123456". The [AI assistant](/docs/ai-and-mcp) quotes it,
+  and when you say go ahead it asks for your **approval** before starting the
+  transfer. It then gives you the PayPal link.
+- **Transfers.** Every transfer shows its progress (paid, sending, delivered
+  or refunded) and its full timeline. The list updates on its own while a
+  transfer is moving; **Check now** re-checks one immediately.
 
 ## Set up (operator)
 
@@ -224,8 +254,11 @@ See [Responses & Errors](/docs/api/responses) for the response envelope.
    country, such as Lenco (set its **Account ID (for payouts)**) or pawaPay. Tick the countries each one serves.
 2. Keep a float in the payout account, in the recipient's currency. Set a float
    rule on the **Treasury** page so you're alerted before it runs low.
-3. Run a queue worker (`php artisan queue:work`). Payouts and refunds run as
-   queued jobs as soon as PayPal confirms a payment.
+3. Run a queue worker (`php artisan queue:work`) and the scheduler
+   (`php artisan schedule:run` every minute). Payouts and refunds run as
+   queued jobs as soon as PayPal confirms a payment, and
+   `cross-border:refresh` moves in-flight transfers forward every minute,
+   since payout providers rarely call back.
 4. In sandbox, the **Simulated Payouts** driver lets you test every outcome:
    numbers ending `0000` are refused (so the sender is refunded), and `1111`
    fails after acceptance.

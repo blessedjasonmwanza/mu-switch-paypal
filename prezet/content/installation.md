@@ -123,6 +123,8 @@ Then open the app in your browser:
 
 In production, serve the app with your usual PHP stack (Nginx or Apache with
 PHP-FPM, or a managed PHP host) and run `npm run build` to compile assets.
+Also run a queue worker and the scheduler (`php artisan schedule:run`
+every minute): payouts, refunds and cross-border transfers depend on both.
 
 ### Gateway wait times
 

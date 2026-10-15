@@ -153,7 +153,17 @@ awaiting_payment → funded → paying_out → delivered
 - Notifying the sender and the recipient.
 - A transfer UI with a live timeline (§4.8).
 
-### 4.6 The AI agent (Laravel AI SDK)
+### 4.6 The AI agent (Laravel AI SDK) 🟡
+
+**Built (2026-10-15) as `App\Ai\Agents\SendMoneyAgent`** (Promptable, `RemembersConversations`, `HasTools`, account AI credentials with failover):
+- Tools in `app/Ai/Tools`: `ListCorridors`, `QuoteTransfer`, `StartTransfer` (**`Approvable`, always requires approval**, with the recipient and amount as the reason) and `GetTransferStatus`. All are thin adapters over `CrossBorderTransferService` (§4.5). PayPal's MCP tools are added when PayPal MCP is on, and the SDK requires approval for each one.
+- Guardrails in code: `TransferLimits` enforces `TRANSFER_MAX_PER_TRANSACTION_USD` and `TRANSFER_MAX_DAILY_USD` for **every** cross-border transfer (API, dashboard or agent). Tools only see the account's providers and transfers, and a conversation can only be continued by its owner (`VerifiesConversationOwnership`).
+- Audit: transfers carry `origin` (`api`, `dashboard`, `agent`) and the agent's `conversation_id`.
+- Endpoints: `POST /send/assistant` (message) and `POST /send/assistant/decide` (approve or reject the pending tool calls, resumed with `Decisions`).
+- Tests: `tests/Feature/SendMoneyAgentTest.php`.
+
+**Not done yet:** streaming replies, `ExplainRouting`, the "first-time recipient" approval reason, the `PaymentsAnalystAgent`, and a MoneyUnify MCP server (§4.7). The plan below is kept for reference.
+
 
 `config/ai.php`, `config/mcp.php` and the `agent_conversations` migration are already published. Keys are set in `.env`, as described in `prezet/content/ai-and-mcp.md`.
 
@@ -227,7 +237,15 @@ class MoneyUnifyPaypalAgent implements Agent, Conversational, HasTools
 - Register it in `routes/ai.php`: `Mcp::web('/mcp/moneyunify', MoneyUnifyServer::class)`, behind `auth:sanctum` so it uses the existing API token.
 - **Example:** in Claude Desktop, connect **PayPal's MCP server** and **MoneyUnify's MCP server** side by side. Ask, for example, "invoice my client in PayPal, and when it's paid, send 60% to my supplier's M-Pesa." The agent combines both servers. MoneyUnify extends PayPal's agent ecosystem rather than competing with it.
 
-### 4.8 UI (Inertia + React)
+### 4.8 UI (Inertia + React) 🟡
+
+**Built (2026-10-15):** the **Send Money** page (`resources/js/pages/send/index.tsx`, `SendMoneyController`), in the sidebar:
+- **Form tab:** a live quote as you type (rate, margin, route, estimated fees, lock countdown), then **Pay with PayPal**, which starts the transfer and redirects to PayPal checkout. The sender returns to the page afterwards.
+- **Assistant tab:** a chat with `SendMoneyAgent`, with an approve/reject card for transfers and a Pay with PayPal button (`resources/js/components/send-money-assistant.tsx`).
+- **Transfers:** a searchable, paginated list with a progress bar (paid → sending → delivered, or the refund path), a timeline and **Check now**. It polls while a transfer is in flight, and `cross-border:refresh` runs every minute to move transfers forward.
+
+**Not done yet:** the public `pay/{transfer}` page, PayPal JS SDK v6 buttons, and corridor KPIs on the dashboard.
+
 
 - **`resources/js/pages/paypal-transfers/index.tsx`** has two panes:
   - **Chat (left):** the agent conversation, streamed. Pending approvals render as an approve/reject card.
