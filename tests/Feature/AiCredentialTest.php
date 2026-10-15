@@ -4,8 +4,13 @@ use App\Ai\Agents\ConnectionCheck;
 use App\Enums\AiProvider;
 use App\Models\AiCredential;
 use App\Models\User;
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Sleep;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Ai\Exceptions\ProviderOverloadedException;
 
 beforeEach(function () {
     config([
@@ -43,7 +48,11 @@ test('the page lists providers in failover order with their key source', functio
         ->assertInertia(fn (Assert $page) => $page
             ->component('ai/index')
             ->has('providers', count(AiProvider::cases()))
+            ->where('providers.2.value', 'gemini')
+            ->where('providers.2.defaultModel', 'gemini-3.8-flash')
+            ->where('providers.2.models.1.id', 'gemini-3-flash-preview')
             ->where('credentials.0.provider', 'openai')
+            ->where('credentials.2.defaultModel', 'gemini-3.8-flash')
             ->where('credentials.0.maskedKey', '••••••••1234')
             ->where('credentials.0.keySource', 'dashboard')
             ->where('credentials.1.keySource', 'env')
@@ -156,7 +165,7 @@ test('testing a provider prompts it alone with its own credentials', function ()
 
     $this->actingAs($user)
         ->post(route('ai.credentials.test', $openai))
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connected to OpenAI.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connected to OpenAI using gpt-test.']);
 
     ConnectionCheck::assertPrompted(fn ($prompt) => $prompt->model === 'gpt-test');
 });
@@ -169,7 +178,7 @@ test('a failing provider test is reported, not thrown', function () {
 
     $this->actingAs($user)
         ->post(route('ai.credentials.test', $credential))
-        ->assertInertiaFlash('toast', ['type' => 'error', 'message' => 'Could not connect to Anthropic (Claude): invalid x-api-key']);
+        ->assertInertiaFlash('toast', ['type' => 'error', 'message' => 'Could not connect to Anthropic (Claude) using claude-sonnet-5-5: invalid x-api-key']);
 });
 
 test('a provider without any key is not tested', function () {
@@ -183,4 +192,80 @@ test('a provider without any key is not tested', function () {
         ->assertInertiaFlash('toast', ['type' => 'error', 'message' => 'No API key is set for OpenAI. Add one here or set OPENAI_API_KEY in .env.']);
 
     ConnectionCheck::assertNeverPrompted();
+});
+
+/**
+ * The SDK's overloaded error, wrapping the provider's own 503 response.
+ */
+function overloaded(): ProviderOverloadedException
+{
+    $response = new Response(new Psr7Response(503, ['Content-Type' => 'application/json'], json_encode([
+        'error' => ['message' => 'gemini-3.8-flash is currently experiencing high demand.', 'code' => 'service_unavailable'],
+    ])));
+
+    return ProviderOverloadedException::forProvider('account_'.str_repeat('a', 64), 503, new RequestException($response));
+}
+
+test('a busy model is retried once before the test fails', function () {
+    Sleep::fake();
+    $calls = 0;
+    ConnectionCheck::fake(function () use (&$calls) {
+        return ++$calls === 1 ? throw overloaded() : 'OK';
+    });
+
+    $user = User::factory()->create();
+    $credential = aiCredential($user, 'gemini', ['api_key' => 'gm-account-key-1234']);
+
+    $this->actingAs($user)
+        ->post(route('ai.credentials.test', $credential))
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connected to Google Gemini using gemini-3.8-flash.']);
+
+    ConnectionCheck::assertPromptedTimes(2);
+    Sleep::assertSleptTimes(1);
+});
+
+test('a still-busy model reports the provider\'s own error without internal names', function () {
+    Sleep::fake();
+    ConnectionCheck::fake(fn () => throw overloaded());
+
+    $user = User::factory()->create();
+    $credential = aiCredential($user, 'gemini', ['api_key' => 'gm-account-key-1234']);
+
+    $this->actingAs($user)
+        ->post(route('ai.credentials.test', $credential))
+        ->assertInertiaFlash('toast', [
+            'type' => 'error',
+            'message' => 'Could not connect to Google Gemini using gemini-3.8-flash: 503: gemini-3.8-flash is currently experiencing high demand. Try again shortly, or choose a different model.',
+        ]);
+});
+
+test('a listed or custom model can be chosen, and the test uses it', function () {
+    ConnectionCheck::fake(['OK']);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('ai.credentials.store'), ['provider' => 'gemini', 'model' => 'gemini-3-flash-preview', 'api_key' => 'gm-account-key-1234'])
+        ->assertSessionHasNoErrors();
+
+    $credential = $user->aiCredentials()->sole();
+    expect($credential->model)->toBe('gemini-3-flash-preview');
+
+    $this->actingAs($user)
+        ->put(route('ai.credentials.update', $credential), ['model' => 'gemini-2.5-pro-custom'])
+        ->assertSessionHasNoErrors();
+    expect($credential->fresh()->model)->toBe('gemini-2.5-pro-custom');
+
+    $this->actingAs($user)
+        ->post(route('ai.credentials.test', $credential))
+        ->assertInertiaFlash('toast.message', 'Connected to Google Gemini using gemini-2.5-pro-custom.');
+
+    ConnectionCheck::assertPrompted(fn ($prompt) => $prompt->model === 'gemini-2.5-pro-custom');
+});
+
+test('model ids must look like model ids', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('ai.credentials.store'), ['provider' => 'gemini', 'model' => 'gemini flash; drop table'])
+        ->assertSessionHasErrors('model');
 });

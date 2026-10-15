@@ -36,10 +36,17 @@ import providersRoute from '@/routes/providers';
 
 type KeySource = 'dashboard' | 'env' | null;
 
+interface ModelOption {
+    id: string;
+    note: string;
+}
+
 interface ProviderOption {
     value: string;
     label: string;
     envKey: string;
+    models: ModelOption[];
+    defaultModel: string;
 }
 
 interface Credential {
@@ -47,6 +54,7 @@ interface Credential {
     provider: string;
     label: string;
     model: string | null;
+    defaultModel: string;
     maskedKey: string | null;
     keySource: KeySource;
     envKey: string;
@@ -65,6 +73,73 @@ interface Props {
 
 const selectClassName =
     'flex h-9 w-full rounded-full border border-input bg-transparent px-3.5 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+
+const CUSTOM_MODEL = '__custom';
+
+/**
+ * Choose a suggested model, the provider's default, or type any other model
+ * the provider offers.
+ */
+function ModelPicker({
+    id,
+    provider,
+    value,
+    onChange,
+    error,
+}: {
+    id: string;
+    provider: ProviderOption | undefined;
+    value: string;
+    onChange: (model: string) => void;
+    error?: string;
+}) {
+    const models = provider?.models ?? [];
+    const [isCustom, setIsCustom] = useState(
+        value !== '' && !models.some((model) => model.id === value),
+    );
+
+    return (
+        <div className="space-y-1">
+            <Label htmlFor={id}>Model</Label>
+            <select
+                id={id}
+                value={isCustom ? CUSTOM_MODEL : value}
+                onChange={(e) => {
+                    const choice = e.target.value;
+                    setIsCustom(choice === CUSTOM_MODEL);
+                    onChange(choice === CUSTOM_MODEL ? '' : choice);
+                }}
+                className={selectClassName}
+            >
+                <option value="">
+                    Provider default
+                    {provider ? ` (${provider.defaultModel})` : ''}
+                </option>
+                {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                        {model.id} · {model.note}
+                    </option>
+                ))}
+                <option value={CUSTOM_MODEL}>Other model…</option>
+            </select>
+            {isCustom && (
+                <Input
+                    id={`${id}-custom`}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value.trim())}
+                    placeholder="Model ID, exactly as the provider names it"
+                    autoComplete="off"
+                    autoFocus
+                />
+            )}
+            <InputError message={error} />
+            <p className="text-xs text-neutral-500">
+                If a model is busy or unavailable, pick another or choose Other
+                model to enter any model your provider offers.
+            </p>
+        </div>
+    );
+}
 
 function KeyBadge({ credential }: { credential: Credential }) {
     if (credential.keySource === 'dashboard') {
@@ -211,7 +286,7 @@ export default function AiAgents({
                                                 </div>
                                                 <div className="truncate text-xs text-neutral-500">
                                                     {credential.model ??
-                                                        'Default model'}
+                                                        `Default (${credential.defaultModel})`}
                                                 </div>
                                             </div>
                                         </div>
@@ -361,7 +436,11 @@ export default function AiAgents({
                                 id="ai-provider"
                                 value={addForm.data.provider}
                                 onChange={(e) =>
-                                    addForm.setData('provider', e.target.value)
+                                    addForm.setData((data) => ({
+                                        ...data,
+                                        provider: e.target.value,
+                                        model: '',
+                                    }))
                                 }
                                 className={selectClassName}
                             >
@@ -377,19 +456,16 @@ export default function AiAgents({
                             <InputError message={addForm.errors.provider} />
                         </div>
 
-                        <div className="space-y-1">
-                            <Label htmlFor="ai-model">Model (optional)</Label>
-                            <Input
-                                id="ai-model"
-                                value={addForm.data.model}
-                                onChange={(e) =>
-                                    addForm.setData('model', e.target.value)
-                                }
-                                placeholder="Provider default"
-                                autoComplete="off"
-                            />
-                            <InputError message={addForm.errors.model} />
-                        </div>
+                        <ModelPicker
+                            key={addForm.data.provider}
+                            id="ai-model"
+                            provider={selectedOption}
+                            value={addForm.data.model}
+                            onChange={(model) =>
+                                addForm.setData('model', model)
+                            }
+                            error={addForm.errors.model}
+                        />
 
                         <div className="space-y-1">
                             <Label htmlFor="ai-key">API key (optional)</Label>
@@ -449,19 +525,20 @@ export default function AiAgents({
                             </DialogDescription>
                         </DialogHeader>
 
-                        <div className="space-y-1">
-                            <Label htmlFor="edit-model">Model (optional)</Label>
-                            <Input
+                        {editing && (
+                            <ModelPicker
+                                key={editing.id}
                                 id="edit-model"
+                                provider={providers.find(
+                                    (p) => p.value === editing.provider,
+                                )}
                                 value={editForm.data.model}
-                                onChange={(e) =>
-                                    editForm.setData('model', e.target.value)
+                                onChange={(model) =>
+                                    editForm.setData('model', model)
                                 }
-                                placeholder="Provider default"
-                                autoComplete="off"
+                                error={editForm.errors.model}
                             />
-                            <InputError message={editForm.errors.model} />
-                        </div>
+                        )}
 
                         <div className="space-y-1">
                             <Label htmlFor="edit-key">API key</Label>

@@ -10,13 +10,17 @@ use App\Models\AiCredential;
 use App\Support\Ai\AiProviderChain;
 use App\Support\Ai\PaypalMcp;
 use App\Support\Ai\ResolvedAiProvider;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Ai\Exceptions\ProviderOverloadedException;
+use Laravel\Ai\Exceptions\RateLimitedException;
 use Throwable;
 
 /**
@@ -42,6 +46,7 @@ class AiCredentialController extends Controller
                     'provider' => $credential->provider->value,
                     'label' => $credential->provider->label(),
                     'model' => $credential->model,
+                    'defaultModel' => $credential->provider->defaultModel(),
                     'maskedKey' => $credential->api_key ? ResolvedAiProvider::mask($credential->api_key) : null,
                     'keySource' => $resolved->keySource,
                     'envKey' => $credential->provider->envKey(),
@@ -152,13 +157,49 @@ class AiCredentialController extends Controller
             ]), 'error');
         }
 
+        $model = $credential->model ?: $credential->provider->defaultModel();
+        $check = fn () => (new ConnectionCheck)->prompt('Connection check', provider: [$resolved->providerName() => $resolved->model]);
+
         try {
-            (new ConnectionCheck)->prompt('Connection check', provider: [$resolved->providerName() => $resolved->model]);
+            try {
+                $check();
+            } catch (ProviderOverloadedException|RateLimitedException) {
+                // A busy model often recovers within seconds: try once more.
+                Sleep::for(2)->seconds();
+                $check();
+            }
         } catch (Throwable $e) {
-            return $this->done(__('Could not connect to :provider: :reason', ['provider' => $label, 'reason' => Str::limit($e->getMessage(), 160)]), 'error');
+            return $this->done(__('Could not connect to :provider using :model: :reason', [
+                'provider' => $label,
+                'model' => $model,
+                'reason' => $this->failureReason($e),
+            ]), 'error');
         }
 
-        return $this->done(__('Connected to :provider.', ['provider' => $label]));
+        return $this->done(__('Connected to :provider using :model.', ['provider' => $label, 'model' => $model]));
+    }
+
+    /**
+     * The provider's own error, e.g. "503: the model is experiencing high
+     * demand", rather than the SDK's message naming an internal provider.
+     */
+    private function failureReason(Throwable $e): string
+    {
+        $request = $e instanceof RequestException ? $e : $e->getPrevious();
+
+        if ($request instanceof RequestException && $request->response !== null) {
+            $message = $request->response->json('error.message') ?? $request->response->json('message');
+
+            $reason = $request->response->status().(is_string($message) && $message !== '' ? ': '.$message : '');
+
+            if ($e instanceof ProviderOverloadedException || $e instanceof RateLimitedException) {
+                $reason .= ' '.__('Try again shortly, or choose a different model.');
+            }
+
+            return Str::limit($reason, 220);
+        }
+
+        return Str::limit((string) preg_replace('/\[account_[0-9a-f]+\]/', '', $e->getMessage()), 220);
     }
 
     private function authorizeOwner(Request $request, AiCredential $credential): void

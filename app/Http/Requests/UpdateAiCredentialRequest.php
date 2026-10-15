@@ -15,9 +15,18 @@ class UpdateAiCredentialRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'model' => ['nullable', 'string', 'max:100'],
+            // A listed model or any other the provider offers; blank uses its default.
+            'model' => ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9][A-Za-z0-9._:\/-]*$/'],
             // Blank keeps the saved key.
             'api_key' => ['nullable', 'string', 'min:8', 'max:500'],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return ['model.regex' => 'Enter the model ID exactly as the provider names it, e.g. gemini-3-flash-preview.'];
     }
 }

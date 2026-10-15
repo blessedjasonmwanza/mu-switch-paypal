@@ -28,13 +28,18 @@ providers**, and its agents **fail over** between them in order: they use the
 first one and move to the next when a provider is rate-limited, overloaded,
 unreachable or out of credit.
 
-1. **Add AI provider.** Pick a provider, an optional **model** (blank means the
-   provider's default) and an optional **API key** (blank means the provider's
-   key from `.env`). Each provider can be added once.
+1. **Add AI provider.** Pick a provider, a **model** and an optional
+   **API key** (blank means the provider's key from `.env`). Each provider can
+   be added once. The model list shows the provider's default plus suggested
+   faster and more capable models. Choose **Other model…** to enter any model
+   ID the provider offers, exactly as the provider names it.
 2. **Order.** Use the up and down arrows to set the failover order. The top
    provider is tried first.
 3. **Test.** Each provider has a **Test** button that sends a tiny prompt
-   through that provider alone and tells you whether its key works.
+   through that provider alone and tells you whether its key and model work.
+   A busy model is retried once. If it fails, you see the provider's own
+   error. "High demand" or "overloaded" means the model is busy, not that the
+   key is wrong: try again shortly or pick another model.
 4. **Edit** a provider to change its model or key, or **remove** it.
 
 Each provider shows where its key comes from:
