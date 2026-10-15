@@ -45,6 +45,8 @@ class ProviderController extends Controller
                         'class' => $className,
                         // The markets this driver can serve, with name + currency, for the country checkboxes.
                         'supported_country_options' => Market::options($supported),
+                        // The currencies this driver can charge, for filtering the driver picker.
+                        'supported_currencies' => $this->supportedCurrenciesFor($className, $supported),
                         // Pre-ticked markets when adding the provider.
                         'default_countries' => array_values(array_intersect($defaults, $supported)),
                         // Default (hard-coded) logo for this driver, editable in the dialog.
@@ -331,6 +333,24 @@ class ProviderController extends Controller
         }
 
         return [['key' => 'api_key', 'label' => 'API Key / Token', 'type' => 'password']];
+    }
+
+    /**
+     * The currencies a driver can charge: its declared list, else its markets' currencies.
+     *
+     * @param  list<string>  $countries
+     * @return list<string>
+     */
+    private function supportedCurrenciesFor(string $className, array $countries): array
+    {
+        $currencies = defined($className.'::SUPPORTED_CURRENCIES')
+            ? $className::SUPPORTED_CURRENCIES
+            : array_filter(array_map(Market::currency(...), $countries));
+
+        $currencies = array_values(array_unique($currencies));
+        sort($currencies);
+
+        return $currencies;
     }
 
     /**

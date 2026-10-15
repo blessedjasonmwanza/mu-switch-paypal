@@ -113,6 +113,7 @@ interface AvailableDriver {
     name: string;
     class: string;
     supported_country_options: MarketOption[];
+    supported_currencies: string[];
     default_countries: string[];
     default_logo: string | null;
     config_fields: ConfigField[];
@@ -267,6 +268,57 @@ export default function Index({
     const unusedDrivers = availableDrivers.filter(
         (d) => !addedClasses.has(d.class),
     );
+
+    // Driver picker filters: free text plus the market and currency a driver serves.
+    const [driverSearch, setDriverSearch] = useState('');
+    const [driverCountry, setDriverCountry] = useState('');
+    const [driverCurrency, setDriverCurrency] = useState('');
+    const driverQuery = driverSearch.trim().toLowerCase();
+    const hasDriverFilters = Boolean(
+        driverQuery || driverCountry || driverCurrency,
+    );
+    const resetDriverFilters = () => {
+        setDriverSearch('');
+        setDriverCountry('');
+        setDriverCurrency('');
+    };
+    const driverCountryOptions = [
+        ...new Map(
+            unusedDrivers
+                .flatMap((d) => d.supported_country_options)
+                .map((m) => [m.code, m] as const),
+        ).values(),
+    ].sort((a, b) => a.name.localeCompare(b.name));
+    const driverCurrencyOptions = [
+        ...new Set(unusedDrivers.flatMap((d) => d.supported_currencies)),
+    ].sort();
+    const filteredDrivers = unusedDrivers.filter((d) => {
+        const markets = d.supported_country_options;
+
+        if (driverCountry && !markets.some((m) => m.code === driverCountry)) {
+            return false;
+        }
+
+        if (
+            driverCurrency &&
+            !d.supported_currencies.includes(driverCurrency)
+        ) {
+            return false;
+        }
+
+        return (
+            !driverQuery ||
+            [
+                d.name,
+                d.class.split('\\').pop() ?? '',
+                ...markets.flatMap((m) => [m.name, m.code]),
+                ...d.supported_currencies,
+            ]
+                .join(' ')
+                .toLowerCase()
+                .includes(driverQuery)
+        );
+    });
 
     // Per-market integration dialog state: the market being configured plus a
     // local draft of its values (only committed to the form on Save).
@@ -859,14 +911,17 @@ export default function Index({
                 open={isCreateOpen}
                 onOpenChange={(open) => {
                     setIsCreateOpen(open);
-                    if (!open) setSelectedDriver(null);
+                    if (!open) {
+                        setSelectedDriver(null);
+                        resetDriverFilters();
+                    }
                 }}
             >
                 <DialogContent
                     className={cn(
                         'flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden',
                         selectedDriver === null
-                            ? 'sm:max-w-[500px]'
+                            ? 'sm:max-w-4xl'
                             : 'sm:max-w-[450px]',
                     )}
                 >
@@ -885,8 +940,64 @@ export default function Index({
 
                     {selectedDriver === null ? (
                         <div className="flex min-h-0 flex-1 flex-col gap-4 py-2">
-                            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
-                                {unusedDrivers.map((driver) => (
+                            {unusedDrivers.length > 0 && (
+                                <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                                    <div className="relative flex-1">
+                                        <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                                        <Input
+                                            type="search"
+                                            value={driverSearch}
+                                            onChange={(e) =>
+                                                setDriverSearch(e.target.value)
+                                            }
+                                            placeholder="Search by name, country or currency..."
+                                            aria-label="Search drivers"
+                                            className="pl-9"
+                                        />
+                                    </div>
+                                    <select
+                                        value={driverCountry}
+                                        onChange={(e) =>
+                                            setDriverCountry(e.target.value)
+                                        }
+                                        aria-label="Filter by country"
+                                        className="flex h-9 w-full rounded-full border border-input bg-transparent px-3.5 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-48"
+                                    >
+                                        <option value="">All countries</option>
+                                        {driverCountryOptions.map((market) => (
+                                            <option
+                                                key={market.code}
+                                                value={market.code}
+                                            >
+                                                {market.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={driverCurrency}
+                                        onChange={(e) =>
+                                            setDriverCurrency(e.target.value)
+                                        }
+                                        aria-label="Filter by currency"
+                                        className="flex h-9 w-full rounded-full border border-input bg-transparent px-3.5 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-40"
+                                    >
+                                        <option value="">All currencies</option>
+                                        {driverCurrencyOptions.map(
+                                            (currency) => (
+                                                <option
+                                                    key={currency}
+                                                    value={currency}
+                                                >
+                                                    {currency}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </div>
+                            )}
+
+                            <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+                                {filteredDrivers.map((driver) => (
                                     <div
                                         key={driver.class}
                                         onClick={() => {
@@ -958,6 +1069,21 @@ export default function Index({
                                             : 'All available drivers have already been added.'}
                                     </div>
                                 )}
+
+                                {unusedDrivers.length > 0 &&
+                                    filteredDrivers.length === 0 && (
+                                        <div className="col-span-full py-8 text-center text-sm text-neutral-500">
+                                            <Search className="mx-auto mb-3 h-8 w-8 text-neutral-400" />
+                                            No drivers match your filters.{' '}
+                                            <button
+                                                type="button"
+                                                onClick={resetDriverFilters}
+                                                className="cursor-pointer font-medium text-primary underline underline-offset-4"
+                                            >
+                                                Clear filters
+                                            </button>
+                                        </div>
+                                    )}
                             </div>
 
                             <DialogFooter className="shrink-0 border-t border-neutral-100 pt-4 dark:border-neutral-900">

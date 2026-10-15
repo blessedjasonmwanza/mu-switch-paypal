@@ -49,6 +49,20 @@ test('user can view their own providers', function () {
         );
 });
 
+test('drivers expose the currencies they can charge for filtering', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('providers.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('availableDrivers', function ($drivers) {
+                $drivers = collect($drivers);
+
+                // Market-bound drivers charge their markets' currencies.
+                return $drivers->firstWhere('name', 'Lenco')['supported_currencies'] === ['MWK', 'ZMW']
+                    // PayPal declares its own list.
+                    && in_array('USD', $drivers->firstWhere('name', 'PayPal')['supported_currencies'], true);
+            }));
+});
+
 test('user can create a payment provider', function () {
     $user = User::factory()->create();
 
