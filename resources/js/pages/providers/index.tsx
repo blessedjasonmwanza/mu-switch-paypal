@@ -79,6 +79,7 @@ interface ConfigField {
     label: string;
     type: string;
     options?: string[];
+    required?: boolean;
 }
 
 interface MarketOption {
@@ -350,7 +351,7 @@ export default function Index({
                     id={`${idPrefix}-${field.key}`}
                     value={data.config[field.key] || ''}
                     onChange={(e) => setConfigField(field.key, e.target.value)}
-                    required={required}
+                    required={required && field.required !== false}
                     className="flex h-9 w-full rounded-full border border-input bg-transparent px-3.5 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                     {field.options.map((opt) => (
@@ -366,7 +367,7 @@ export default function Index({
                     value={data.config[field.key] || ''}
                     onChange={(e) => setConfigField(field.key, e.target.value)}
                     placeholder={field.type === 'password' ? '••••••••' : ''}
-                    required={required}
+                    required={required && field.required !== false}
                 />
             )}
             {fieldErrors[`config.${field.key}`] && (

@@ -2,6 +2,7 @@
 
 use App\Enums\TransactionStatus;
 use App\Http\Controllers\Providers\LencoController;
+use App\Http\Controllers\Providers\PaypalController;
 use App\Models\Customer;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
@@ -202,6 +203,39 @@ test('a market needing extra integration details is rejected without them', func
         ->assertSessionHasErrors('market_extra_values.NA.product_id');
 
     $this->assertDatabaseMissing('payment_providers', ['name' => 'Kazang Incomplete']);
+});
+
+test('optional credential fields may be left blank', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('providers.store'), [
+            'name' => 'PayPal',
+            'class' => PaypalController::class,
+            'config' => ['client_id' => 'id', 'client_secret' => 'secret', 'environment' => 'sandbox'],
+            'supported_countries' => ['ZM'],
+            'is_active' => 1,
+        ])
+        ->assertRedirect(route('providers.index'));
+
+    $config = PaymentProvider::where('name', 'PayPal')->sole()->config;
+
+    expect($config)->toMatchArray(['client_id' => 'id', 'environment' => 'sandbox'])
+        ->and($config['webhook_id'] ?? null)->toBeNull();
+});
+
+test('a select credential field only accepts its listed options', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('providers.store'), [
+            'name' => 'PayPal',
+            'class' => PaypalController::class,
+            'config' => ['client_id' => 'id', 'client_secret' => 'secret', 'environment' => 'production'],
+            'supported_countries' => ['ZM'],
+            'is_active' => 1,
+        ])
+        ->assertSessionHasErrors('config.environment');
 });
 
 test('user can update their own payment provider', function () {

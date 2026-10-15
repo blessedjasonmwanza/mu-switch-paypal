@@ -164,7 +164,8 @@ class ProviderController extends Controller
             'logo_url' => 'nullable|string',
         ];
         foreach ($fields as $field) {
-            $rules['config.'.$field['key']] = 'required|'.($field['rules'] ?? 'string');
+            $presence = ($field['required'] ?? true) ? 'required|' : 'nullable|';
+            $rules['config.'.$field['key']] = $presence.($field['rules'] ?? 'string');
         }
 
         $validated = $request->validate($rules);
@@ -321,7 +322,7 @@ class ProviderController extends Controller
     /**
      * The credential fields a driver requires, defaulting to a single API key.
      *
-     * @return list<array{key: string, label: string, type: string}>
+     * @return list<array{key: string, label: string, type: string, options?: list<string>, rules?: string, required?: bool}>
      */
     private function configFieldsFor(string $className): array
     {
