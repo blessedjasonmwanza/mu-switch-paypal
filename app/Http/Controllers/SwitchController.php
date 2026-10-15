@@ -6,6 +6,7 @@ use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
+use App\Support\Currency;
 use App\Support\Market;
 use App\Support\ProviderCallContext;
 use App\Support\ProviderFees;
@@ -27,6 +28,8 @@ class SwitchController extends Controller
             'email' => 'nullable|email',
             // Optional: where we POST the final (successful/failed) result.
             'callback_url' => 'nullable|url',
+            // Optional: charge in this currency instead of the country's own (e.g. USD via PayPal).
+            'currency' => 'nullable|string|size:3|alpha',
         ]);
         $user = $request->user();
         $providers = $user ? $user->paymentProviders : collect();
@@ -60,6 +63,19 @@ class SwitchController extends Controller
 
         if ($filteredProviders->isEmpty()) {
             return ApiResponse::error('No active providers support the requested country', 400);
+        }
+
+        // Only route to providers that can charge the requested currency, so a
+        // fallback never silently charges the same amount in another currency.
+        $country = strtoupper($request['country']);
+        $currency = Currency::resolve($request->input('currency'), $country);
+
+        $filteredProviders = $filteredProviders->filter(
+            fn ($provider) => Currency::isSupportedBy($provider->class, $country, $currency)
+        );
+
+        if ($filteredProviders->isEmpty()) {
+            return ApiResponse::error("No active providers support {$currency} payments in {$country}", 400);
         }
 
         // Under the "cost aware" policy, try the cheapest provider first (by the
