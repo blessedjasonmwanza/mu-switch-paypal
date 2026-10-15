@@ -225,11 +225,14 @@ function CorridorQuotePopover({
         rate.country_code || countryInfo?.code || rate.currency.slice(0, 2);
     const baseCountryCode = CURRENCY_COUNTRY_MAP[baseCurrency]?.code || 'US';
 
-    useEffect(() => {
-        if (!isOpen) {
+    // Each time the popover opens, it starts from the page's amount.
+    const handleOpenChange = (open: boolean) => {
+        if (open) {
             setPopAmount(defaultAmount || '100');
         }
-    }, [defaultAmount, isOpen]);
+
+        setIsOpen(open);
+    };
 
     useEffect(() => {
         if (!isOpen || !lockedQuote) {
@@ -243,14 +246,18 @@ function CorridorQuotePopover({
             setRemainingSeconds(diff);
         };
 
-        tick();
+        const first = setTimeout(tick, 0);
         const interval = setInterval(tick, 1000);
 
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(first);
+            clearInterval(interval);
+        };
     }, [isOpen, lockedQuote]);
 
     const requestQuote = async (amt: string) => {
         const num = parseFloat(amt);
+
         if (isNaN(num) || num <= 0) {
             return;
         }
@@ -291,9 +298,13 @@ function CorridorQuotePopover({
     };
 
     useEffect(() => {
-        if (isOpen) {
-            requestQuote(popAmount);
+        if (!isOpen) {
+            return;
         }
+
+        const timer = setTimeout(() => requestQuote(popAmount), 0);
+
+        return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, baseCurrency, rate.currency]);
 
@@ -319,7 +330,7 @@ function CorridorQuotePopover({
     };
 
     return (
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover open={isOpen} onOpenChange={handleOpenChange}>
             <PopoverTrigger asChild>
                 <Button
                     variant="soft"
