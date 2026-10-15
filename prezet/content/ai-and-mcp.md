@@ -111,13 +111,19 @@ PayPal's MCP server with that provider's credentials:
   (`https://mcp.sandbox.paypal.com/http`) or live (`https://mcp.paypal.com/http`).
 - Access tokens are fetched and refreshed automatically, so they never expire
   mid-use.
-- With several PayPal providers, the oldest active one is used.
+- With several PayPal providers, the oldest active one with MCP enabled is used.
 
-The **AI & Agents** page shows which PayPal provider and environment are in use.
+Each PayPal provider has a **PayPal MCP for AI agents** setting (enabled by
+default). Set it to **disabled** to switch PayPal MCP off for the account: its
+agents then get no PayPal tools at all, and `.env` is **not** used in its place.
+
+The **AI & Agents** page shows which PayPal provider and environment are in use,
+or that MCP is turned off.
 
 ### From `.env` (fallback)
 
-Accounts without a PayPal provider use the server's client, configured with:
+Only accounts **without an active PayPal provider** use the server's client,
+configured with:
 
 ```ini
 MCP_PAYPAL_URL=https://mcp.sandbox.paypal.com/http

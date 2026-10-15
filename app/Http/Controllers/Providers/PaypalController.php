@@ -59,7 +59,22 @@ class PaypalController extends Controller implements PaymentProviderInterface
         ['key' => 'client_id', 'label' => 'Client ID', 'type' => 'text'],
         ['key' => 'client_secret', 'label' => 'Client Secret', 'type' => 'password'],
         ['key' => 'environment', 'label' => 'Environment', 'type' => 'text', 'options' => ['sandbox', 'live'], 'rules' => 'string|in:sandbox,live'],
-        ['key' => 'webhook_id', 'label' => 'Webhook ID (optional)', 'type' => 'text', 'required' => false],
+        [
+            'key' => 'webhook_id',
+            'label' => 'Webhook ID (optional)',
+            'type' => 'text',
+            'required' => false,
+            'help' => 'From the webhook you registered in your PayPal app. Lets PayPal confirm payments even if the payer never returns.',
+        ],
+        [
+            'key' => 'mcp',
+            'label' => 'PayPal MCP for AI agents',
+            'type' => 'text',
+            'options' => ['enabled', 'disabled'],
+            'rules' => 'string|in:enabled,disabled',
+            'required' => false,
+            'help' => 'Lets your AI agents use PayPal\'s MCP tools with these credentials. Access tokens are created and refreshed automatically, so there is nothing to paste. Disabled means agents get no PayPal tools.',
+        ],
     ];
 
     /**

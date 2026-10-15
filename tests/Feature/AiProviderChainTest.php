@@ -95,6 +95,26 @@ test('paypal mcp uses the account\'s paypal provider', function () {
     Http::assertNothingSent();
 });
 
+test('disabling mcp on the paypal provider turns it off, without an .env fallback', function () {
+    // .env is configured, but the account's explicit choice wins.
+    config(['mcp.clients.paypal.url' => 'https://mcp.sandbox.paypal.com/http', 'mcp.clients.paypal.token' => 'env-token']);
+
+    $user = User::factory()->create();
+    paypalProvider($user, ['mcp' => 'disabled']);
+
+    expect(PaypalMcp::statusFor($user))->toMatchArray(['source' => 'disabled', 'provider' => 'PayPal '.$user->id])
+        ->and(PaypalMcp::clientFor($user))->toBeNull();
+});
+
+test('an enabled paypal provider is used even when another has mcp disabled', function () {
+    $user = User::factory()->create();
+    paypalProvider($user, ['mcp' => 'disabled'])->update(['name' => 'PayPal Sandbox']);
+    paypalProvider($user, ['mcp' => 'enabled']);
+
+    expect(PaypalMcp::statusFor($user))->toMatchArray(['source' => 'dashboard', 'provider' => 'PayPal '.$user->id])
+        ->and(PaypalMcp::clientFor($user))->toBeInstanceOf(WebClient::class);
+});
+
 test('paypal mcp falls back to the .env client', function () {
     config(['mcp.clients.paypal.url' => 'https://mcp.sandbox.paypal.com/http', 'mcp.clients.paypal.token' => 'env-token']);
 

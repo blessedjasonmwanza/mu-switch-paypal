@@ -57,7 +57,7 @@ interface Props {
     credentials: Credential[];
     envDefault: { provider: string; label: string; hasKey: boolean };
     paypalMcp: {
-        source: KeySource;
+        source: KeySource | 'disabled';
         provider: string | null;
         environment: string | null;
     };
@@ -311,6 +311,20 @@ export default function AiAgents({
                             <>
                                 Using MCP_PAYPAL_URL and MCP_PAYPAL_TOKEN from
                                 .env.
+                            </>
+                        )}
+                        {paypalMcp.source === 'disabled' && (
+                            <>
+                                Turned off on your PayPal provider “
+                                {paypalMcp.provider}”, so agents get no PayPal
+                                tools. Turn it back on from the{' '}
+                                <Link
+                                    href={providersRoute.index.url()}
+                                    className="text-foreground underline underline-offset-4"
+                                >
+                                    Providers
+                                </Link>{' '}
+                                page.
                             </>
                         )}
                         {paypalMcp.source === null && (
