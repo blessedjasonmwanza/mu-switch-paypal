@@ -147,7 +147,12 @@ class ApiLogController extends Controller
             'payload' => $query->where(fn (Builder $q) => $q
                 ->where('request_body', 'like', $like)
                 ->orWhere('request_headers', 'like', $like)
-                ->orWhere('response_body', 'like', $like)),
+                ->orWhere('response_body', 'like', $like)
+                ->orWhereHas('providerCalls', fn (Builder $pq) => $pq
+                    ->where('url', 'like', $like)
+                    ->orWhere('request_body', 'like', $like)
+                    ->orWhere('response_body', 'like', $like)
+                    ->orWhere('error_message', 'like', $like))),
             'exception' => $query->where(fn (Builder $q) => $q
                 ->where('exception_class', 'like', $like)
                 ->orWhere('exception_message', 'like', $like)),
@@ -159,6 +164,11 @@ class ApiLogController extends Controller
                 ->orWhere('request_body', 'like', $like)
                 ->orWhere('request_headers', 'like', $like)
                 ->orWhere('response_body', 'like', $like)
+                ->orWhereHas('providerCalls', fn (Builder $pq) => $pq
+                    ->where('url', 'like', $like)
+                    ->orWhere('request_body', 'like', $like)
+                    ->orWhere('response_body', 'like', $like)
+                    ->orWhere('error_message', 'like', $like))
                 ->when(is_numeric($search), fn (Builder $q2) => $q2->orWhere('response_status', (int) $search))),
         };
     }

@@ -1,5 +1,5 @@
 import { Head, Link, router, usePoll } from '@inertiajs/react';
-import { Badge as RtBadge, Button, Select, Tabs, TextField } from '@radix-ui/themes';
+import { Badge as RtBadge, Button, Select, TextField } from '@radix-ui/themes';
 import { AlertTriangle, ChevronLeft, ChevronRight, Search, ScrollText } from 'lucide-react';
 import { useState } from 'react';
 import { StatusAreaChart  } from '@/components/status-area-chart';
@@ -248,6 +248,7 @@ function MnoCallItem({ call, index }: { call: MnoCall; index: number }) {
 
 export default function Index({ logs: page, stats, chart, filters, fieldOptions, perPageOptions }: LogsProps) {
     const [selected, setSelected] = useState<LogRow | null>(null);
+    const [detailTab, setDetailTab] = useState<'overview' | 'mno'>('overview');
     const [q, setQ] = useState(filters.q ?? '');
     const [field, setField] = useState(filters.field);
     const [from, setFrom] = useState(filters.from);
@@ -399,7 +400,10 @@ delete query[k];
                                     {page.data.map((log) => (
                                         <tr
                                             key={log.id}
-                                            onClick={() => setSelected(log)}
+                                            onClick={() => {
+                                                setSelected(log);
+                                                setDetailTab('overview');
+                                            }}
                                             className="cursor-pointer hover:bg-neutral-50/60 dark:hover:bg-neutral-900/40"
                                         >
                                             <td className="px-5 py-3 whitespace-nowrap" title={log.createdAt ?? undefined}>
@@ -516,56 +520,82 @@ delete query[k];
                     </DialogHeader>
 
                     {selected && (
-                        <Tabs.Root defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
-                            <Tabs.List>
-                                <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-                                <Tabs.Trigger value="mno">MNO Calls ({selected.mnoCalls.length})</Tabs.Trigger>
-                            </Tabs.List>
+                        <div className="flex min-h-0 flex-1 flex-col">
+                            <div className="flex border-b border-sidebar-border gap-6 px-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setDetailTab('overview')}
+                                    className={cn(
+                                        'relative pb-2.5 pt-1 text-sm font-medium transition-colors cursor-pointer',
+                                        detailTab === 'overview'
+                                            ? 'font-semibold text-neutral-900 dark:text-neutral-100 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-neutral-900 dark:after:bg-neutral-100'
+                                            : 'text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200',
+                                    )}
+                                >
+                                    Overview
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDetailTab('mno')}
+                                    className={cn(
+                                        'relative pb-2.5 pt-1 text-sm font-medium transition-colors cursor-pointer',
+                                        detailTab === 'mno'
+                                            ? 'font-semibold text-neutral-900 dark:text-neutral-100 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-neutral-900 dark:after:bg-neutral-100'
+                                            : 'text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200',
+                                    )}
+                                >
+                                    MNO Calls ({selected.mnoCalls.length})
+                                </button>
+                            </div>
 
-                            <Tabs.Content value="overview" className="-mr-2 mt-3 min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto pr-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium', statusClasses(selected.status))}>
-                                        HTTP {selected.status ?? '—'}
-                                    </span>
-                                    {selected.route && <Badge variant="outline">{selected.route}</Badge>}
-                                </div>
+                            {detailTab === 'overview' && (
+                                <div className="-mr-2 mt-3 min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto pr-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium', statusClasses(selected.status))}>
+                                            HTTP {selected.status ?? '—'}
+                                        </span>
+                                        {selected.route && <Badge variant="outline">{selected.route}</Badge>}
+                                    </div>
 
-                                {selected.hasException && (
-                                    <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-500/30 dark:bg-red-500/10">
-                                        <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400">
-                                            <AlertTriangle className="h-4 w-4" /> {selected.exceptionClass}
+                                    {selected.hasException && (
+                                        <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-500/30 dark:bg-red-500/10">
+                                            <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400">
+                                                <AlertTriangle className="h-4 w-4" /> {selected.exceptionClass}
+                                            </div>
+                                            {selected.exceptionMessage && (
+                                                <p className="mt-1 text-xs break-words text-red-700/90 dark:text-red-300">{selected.exceptionMessage}</p>
+                                            )}
                                         </div>
-                                        {selected.exceptionMessage && (
-                                            <p className="mt-1 text-xs break-words text-red-700/90 dark:text-red-300">{selected.exceptionMessage}</p>
-                                        )}
-                                    </div>
-                                )}
+                                    )}
 
-                                {selected.requestBody && Object.keys(selected.requestBody).length > 0 && (
-                                    <Section title="Request Body">{JSON.stringify(selected.requestBody, null, 2)}</Section>
-                                )}
-                                {selected.requestHeaders && <Section title="Request Headers">{JSON.stringify(selected.requestHeaders, null, 2)}</Section>}
-                                {selected.responseBody && <Section title="Response Body">{prettyJson(selected.responseBody)}</Section>}
-                                {selected.exceptionTrace && <Section title="Stack Trace">{selected.exceptionTrace}</Section>}
-                            </Tabs.Content>
+                                    {selected.requestBody && Object.keys(selected.requestBody).length > 0 && (
+                                        <Section title="Request Body">{JSON.stringify(selected.requestBody, null, 2)}</Section>
+                                    )}
+                                    {selected.requestHeaders && <Section title="Request Headers">{JSON.stringify(selected.requestHeaders, null, 2)}</Section>}
+                                    {selected.responseBody && <Section title="Response Body">{prettyJson(selected.responseBody)}</Section>}
+                                    {selected.exceptionTrace && <Section title="Stack Trace">{selected.exceptionTrace}</Section>}
+                                </div>
+                            )}
 
-                            <Tabs.Content value="mno" className="-mr-2 mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2">
-                                {selected.mnoCalls.length === 0 ? (
-                                    <div className="py-10 text-center text-xs text-neutral-400">
-                                        This request made no internal MNO/gateway calls.
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                            The outgoing gateway calls made while serving this request, in order — the full lifecycle behind the response above.
-                                        </p>
-                                        {selected.mnoCalls.map((call, i) => (
-                                            <MnoCallItem key={call.id} call={call} index={i} />
-                                        ))}
-                                    </div>
-                                )}
-                            </Tabs.Content>
-                        </Tabs.Root>
+                            {detailTab === 'mno' && (
+                                <div className="-mr-2 mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2">
+                                    {selected.mnoCalls.length === 0 ? (
+                                        <div className="py-10 text-center text-xs text-neutral-400">
+                                            This request made no internal MNO/gateway calls.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                                The outgoing gateway calls made while serving this request, in order — the full lifecycle behind the response above.
+                                            </p>
+                                            {selected.mnoCalls.map((call, i) => (
+                                                <MnoCallItem key={call.id} call={call} index={i} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </DialogContent>
             </Dialog>
