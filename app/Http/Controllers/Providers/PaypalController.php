@@ -147,9 +147,9 @@ class PaypalController extends Controller implements PaymentProviderInterface
             try {
                 $quoter = app(FxQuoter::class);
                 if ($request->filled('fx_quote_id')) {
-                    $fxQuote = $quoter->getValidQuote((string) $request->input('fx_quote_id'));
+                    $fxQuote = $quoter->getValidQuote((string) $request->input('fx_quote_id'), $this->provider?->user_id);
                 } else {
-                    $fxQuote = $quoter->quote($currency, $targetCurrency, (float) $request['amount']);
+                    $fxQuote = $quoter->quote($currency, $targetCurrency, (float) $request['amount'], ownerId: $this->provider?->user_id);
                 }
             } catch (\Throwable $e) {
                 return ApiResponse::error("PayPal currency conversion failed: {$e->getMessage()}", 422);

@@ -61,7 +61,7 @@ class TransferService
             if ($targetAmount === null) {
                 try {
                     $quoter = app(FxQuoter::class);
-                    $quote = $fxQuoteId ? $quoter->getValidQuote($fxQuoteId) : $quoter->quote($currency, $toCurrency, $amount);
+                    $quote = $fxQuoteId ? $quoter->getValidQuote($fxQuoteId, $by->id) : $quoter->quote($currency, $toCurrency, $amount, ownerId: $by->id);
                     $targetAmount = $quote->targetAmount;
                     $fxRate = (string) $quote->effectiveRate;
                     $fxQuoteId = $quote->id;
