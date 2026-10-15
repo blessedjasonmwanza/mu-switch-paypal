@@ -88,6 +88,18 @@ test('in-page links resolve to valid /docs urls, not /docs/content', function ()
     expect($response->getContent())->not->toContain('/docs/content/');
 });
 
+test('the ai and mcp setup guide is reachable and unbranded', function () {
+    $html = $this->get('/docs/ai-and-mcp')
+        ->assertOk()
+        ->assertSee('AI &amp; MCP Setup', false)
+        ->assertSee('ANTHROPIC_API_KEY', false)
+        ->assertSee('MCP_PAYPAL_TOKEN', false)
+        ->assertSee('Settings → AI &amp; Agents', false)
+        ->getContent();
+
+    expect(strtolower($html))->not->toContain('laravel');
+});
+
 test('the providers guide documents the paypal driver and its webhook', function () {
     $this->get('/docs/providers')
         ->assertOk()

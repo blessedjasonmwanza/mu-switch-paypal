@@ -25,7 +25,7 @@ Every step is guarded by spending limits and logged for audit.
 | **License** | Apache-2.0 (`LICENSE.txt`, `NOTICE`). |
 | **AI SDK** | [Laravel AI SDK](https://laravel.com/ai) (`laravel/ai` ^1.2). It provides agents, tools, conversation memory, human tool approval, streaming, provider failover, and fakes for testing. |
 | **MCP** | `laravel/mcp` ^1.0, both as a **server** (exposing MoneyUnify tools) and as a **client** (giving our agent PayPal's MCP tools). |
-| **Model** | Anthropic Claude: `claude-sonnet-5-5` by default, with failover to `claude-opus-5-5`. |
+| **Model** | Anthropic Claude by default (`AI_PROVIDER=anthropic`), with failover. Self-hosters can switch provider via `.env`; see `prezet/content/ai-and-mcp.md`. |
 | **Sandbox first** | Development and testing run against the PayPal and pawaPay sandboxes. The simulated payout driver (§4.4) is clearly labelled wherever it appears. |
 
 ---
@@ -60,41 +60,30 @@ All business logic lives in plain services (`TransferQuoter`, `PayoutRouter`, `P
 
 ## 4. Workstreams
 
-### 4.1 PayPal collection driver: `PaypalController`
+### 4.1 PayPal collection driver ✅
 
-`app/Http/Controllers/Providers/PaypalController.php` implements `PaymentProviderInterface`. Use `DpoController` and `FlutterwaveController` as redirect-style references, and `AirtelController` for the OAuth token pattern.
+| Piece | Location | Role |
+|---|---|---|
+| `PaypalController` | `app/Http/Controllers/Providers/` | The driver. Implements `PaymentProviderInterface` and is auto-discovered like every other driver. |
+| `PaypalClient` | `app/Support/Paypal/` | The PayPal REST client: OAuth token (cached, refreshed once on a 401), Orders v2 create/show/capture, and webhook signature verification. |
+| `PaypalException` | `app/Support/Paypal/` | Carries PayPal's HTTP status and `issue` code (e.g. `ORDER_ALREADY_CAPTURED`). |
+| `PaypalEnvironment` | `app/Enums/` | `sandbox` / `live`, and each one's API host. |
+| `Currency` | `app/Support/` | Resolves the charge currency and which drivers can charge it. |
+| `TransactionVerifier` | `app/Support/` | One verify-and-notify path shared by the verify API, checkout returns and webhooks. |
 
-- **Constants**
-  - `PROVIDER_NAME = 'PayPal'` and `DEFAULT_LOGO = '/paypal.png'`.
-  - `CONFIG_FIELDS`: `client_id`, `client_secret` (password), `mode` (`sandbox`/`live`), `webhook_id`.
-  - `SUPPORTED_COUNTRIES`: every `Market` code, since PayPal collects from payers anywhere.
-  - `FEE_SCHEDULE`: PayPal's sandbox-documented percentage plus a fixed fee, so cost-aware routing can price it.
-- **Auth.** OAuth2 client credentials against `api-m.sandbox.paypal.com` or `api-m.paypal.com`. Cache the token until shortly before `expires_in`.
-- **`requestPayment`**
-  - `POST /v2/checkout/orders` with intent `CAPTURE`.
-  - Send a `PayPal-Request-Id` header set to our `transaction_id`, for idempotency.
-  - Set `return_url` and `cancel_url` to the transfer return routes.
-  - Store the order id as `provider_transaction_id`.
-  - Return the standard envelope **plus `checkout_url`** (the `payer-action`/`approve` link).
-- **`verifyPayment`**
-  - `GET /v2/checkout/orders/{id}`.
-  - If the status is `APPROVED`, capture (`POST .../capture`). Map `COMPLETED` to `SUCCESS`, and `VOIDED` or declined to `FAILED`.
-  - Save the capture id in `provider_response` for refunds.
-- **Currency.**
-  - Add an optional `currency` field to `SwitchController::requestPayment` validation. It may differ from `Market::currency()` only for drivers that declare `MULTI_CURRENCY = true`.
-  - Default PayPal to `USD`.
-  - Format amounts with currency-aware decimals: JPY, HUF and TWD use 0 decimals.
-- **Payer identity.** For PayPal, `account_number` may be an email. Relax validation for that driver only, rather than globally.
+- **Config fields:** `client_id`, `client_secret`, `environment` (a `sandbox`/`live` select) and an optional `webhook_id`. Drivers can now mark a config field `'required' => false`.
+- **Currency routing.** `POST /api/v1/payment/request` accepts an optional `currency`. Only providers that can charge it are tried, so a fallback never charges the same amount in another currency. Drivers declare `SUPPORTED_CURRENCIES`; without it they charge their market currency only. PayPal therefore only takes part when the request names a PayPal currency such as `USD`. HUF, JPY and TWD must be whole amounts.
+- **`requestPayment`** creates the order with intent `CAPTURE`, using the transaction id as `PayPal-Request-Id` and `custom_id`. Signed return and cancel URLs are passed in `experience_context`, and the payer's email (from `email`, or an email-shaped `account_number`) pre-fills PayPal's login. The response adds `checkout_url`.
+- **`verifyPayment`** reads the order and captures it if `APPROVED`, using `capture-{orderId}` as the request id. `ORDER_ALREADY_CAPTURED` is read back rather than failing. An expired order (404) or declined capture (422) is final, and a PayPal outage returns 502 with the transaction untouched. A settled transaction is only ever re-read, never captured or downgraded, so a cancelled order can't be charged later.
+- **Checkout return.** `GET /checkout/paypal/{transaction}/return` and `/cancel` are signed links that ignore PayPal's appended `token` and `PayerID` (`PaypalCheckoutController`). They verify, then redirect to the merchant's optional `return_url` with `transaction_id` and `status` appended, or show `resources/views/checkout/result.blade.php`.
+- **Logging.** Provider call logs now redact secrets in JSON **response** bodies as well as requests, so OAuth access tokens from any driver are never stored.
 
-### 4.2 PayPal webhooks
+### 4.2 PayPal webhooks ✅
 
-- **Route.** `POST /webhooks/paypal/{provider}` in `routes/api.php`, outside `VerifyApiAccess`. Throttle it.
-- **Verification.** Call `POST /v1/notifications/verify-webhook-signature` using the provider's `webhook_id`. Reject anything not `SUCCESS`.
-- **Events handled**
-  - `CHECKOUT.ORDER.APPROVED`: capture, as a safety net if the return redirect never happens.
-  - `PAYMENT.CAPTURE.COMPLETED`: mark the funding transaction `SUCCESS`, then dispatch `DisbursePaypalTransfer`.
-  - `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED`: update state.
-- **Idempotency.** Store processed webhook event ids so retries are no-ops.
+- **Route:** `POST /api/webhooks/paypal/{provider}` (`webhooks.paypal`), outside API-token auth and throttled to 120 per minute (`PaypalWebhookController`).
+- **Verification:** `POST /v1/notifications/verify-webhook-signature` with the provider's `webhook_id`. The raw event body is spliced in untouched, because re-encoding it can break the signature. Missing transmission headers are rejected without calling PayPal.
+- **Handling:** every genuine event re-verifies the order it refers to (`resource.supplementary_data.related_ids.order_id`, or the order itself for `checkout-order` events). State therefore always comes from PayPal, never from the event body.
+- **Idempotency:** deliveries are stored in `provider_webhook_events` (unique per provider and event id). A processed event is acknowledged without reprocessing. If PayPal is unreachable, the response is 503 and the event stays unprocessed, so PayPal redelivers it.
 
 ### 4.3 Payouts in the switch (new capability)
 
@@ -150,13 +139,12 @@ quoted → awaiting_approval → funded → paying_out → delivered
 
 ### 4.6 The AI agent (Laravel AI SDK)
 
-Install once: `php artisan vendor:publish --provider="Laravel\Ai\AiServiceProvider"` then `php artisan migrate`. This creates `agent_conversations` and `agent_conversation_messages`. Set `ANTHROPIC_API_KEY` in `.env`.
+`config/ai.php`, `config/mcp.php` and the `agent_conversations` migration are already published. Keys are set in `.env`, as described in `prezet/content/ai-and-mcp.md`.
 
 **Agent:** `php artisan make:agent MoneyUnifyPaypalAgent` → `app/Ai/Agents/MoneyUnifyPaypalAgent.php`
 
 ```php
-#[Provider(Lab::Anthropic)]
-#[Model('claude-sonnet-5-5')]
+// Provider comes from AI_PROVIDER (config/ai.php), so self-hosters can switch models.
 #[MaxSteps(10)]
 #[Timeout(120)]
 class MoneyUnifyPaypalAgent implements Agent, Conversational, HasTools
@@ -175,12 +163,13 @@ class MoneyUnifyPaypalAgent implements Agent, Conversational, HasTools
             new GetTransferStatus,
             new CancelTransfer,
             new ExplainRouting,
-            ...Mcp::client('paypal')->tools(), // PayPal's MCP server (invoices, orders) via the Laravel MCP client
+            ...(PaypalMcp::clientFor($this->credentialsOwner)?->tools() ?? []), // the account's PayPal MCP tools
         ];
     }
 }
 ```
 
+- **Per-account credentials ✅.** Agents use `UsesAccountAiCredentials` (`->usingCredentialsOf($user)`). `AiCredentials` resolves the provider, model and key from the account's **Settings → AI & Agents** page (`ai_settings`, key encrypted), falling back field by field to `.env`. Account keys run on their own on-demand provider (`Ai::build`), so they never replace the shared `.env` provider. `PaypalMcp::clientFor($user)` connects with the account's PayPal provider (environment-matched URL, auto-refreshed token), falling back to the `.env` `paypal` client. `ConnectionCheck` powers the page's "Test connection".
 - **Conversation memory.** `RemembersConversations` plus `HasConversations` on `User`. Start a chat with `->forUser($user)->prompt(...)`. Resume with `->continue($conversationId, as: $user)`, after checking the conversation belongs to the user.
 - **Streaming to the React UI.** `->stream($message)->usingVercelDataProtocol()` from a controller route, which the chat pane consumes.
 - **Failover.** Pass `[Lab::Anthropic => 'claude-sonnet-5-5', ...]` style provider/model lists so rate limits or overloads fail over instead of erroring.

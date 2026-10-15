@@ -131,19 +131,24 @@ keys. These rules are enforced in code, not in the prompt:
 | **PayPal** | Orders v2 (create, capture), Webhooks (signature verification), Refunds, JavaScript SDK v6, sandbox; works alongside the PayPal MCP server |
 | **AI** | [Laravel AI SDK](https://laravel.com/ai) agents running Claude (Anthropic): tool calling for recipient resolution, quoting, routing explanations and "ask your payments" questions, with human approval before any payment, conversation memory and streaming |
 | **Agent interface** | Laravel MCP: a MoneyUnify MCP server for any MCP client, and an MCP client that gives our agent PayPal's MCP tools |
-| **Mobile money** | The MoneyUnify switch's 13 provider drivers; pawaPay sandbox for payouts |
+| **Mobile money** | The MoneyUnify switch's 13 mobile-money and card drivers; pawaPay sandbox for payouts |
 | **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest |
 | **Hosting** | Render |
 
 > **Sandbox only.** All payments run against the PayPal and provider sandboxes.
 > No real money moves.
 
+To run the AI features, each account can add its own AI key under **Settings →
+AI & Agents**, with the server's `.env` as the fallback. PayPal MCP connects
+automatically through the account's PayPal provider. See
+[AI & MCP Setup](prezet/content/ai-and-mcp.md).
+
 ### Build status
 
 The switch below existed before the hackathon. MoneyUnify-PayPal is being built
 during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 
-- [ ] PayPal collection driver and webhooks
+- [x] PayPal collection driver and webhooks
 - [ ] Payouts in the switch, with fallback
 - [ ] PayPal transfers: quotes, FX, refund on failure
 - [ ] AI agent with guardrails, and the transfer UI
@@ -265,6 +270,7 @@ Aggregators (pawaPay, Ting) reach the major mobile-money operators (MMOs) in eac
 | **DPO Pay** | 9 | Operator configured per market (MNO code) — e.g. Safaricom, Vodacom, Tigo, MTN, Airtel |
 | **pawaPay** | 20 | All major MMOs per market — auto-detected (e.g. MTN, Airtel, Vodafone, Orange, Tigo, Moov) |
 | **Ting by Cellulant** | 25 | All major MMOs per market — operator code configured per market |
+| **PayPal** | 32 | None: hosted PayPal checkout (wallet and cards), charged in a PayPal currency such as USD |
 
 ## Requirements
 
