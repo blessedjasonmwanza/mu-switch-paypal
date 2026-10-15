@@ -324,7 +324,7 @@ class ProviderController extends Controller
     /**
      * The credential fields a driver requires, defaulting to a single API key.
      *
-     * @return list<array{key: string, label: string, type: string, options?: list<string>, rules?: string, required?: bool}>
+     * @return list<array{key: string, label: string, type: string, options?: list<string>, rules?: string, required?: bool, help?: string}>
      */
     private function configFieldsFor(string $className): array
     {

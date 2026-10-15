@@ -80,6 +80,7 @@ interface ConfigField {
     type: string;
     options?: string[];
     required?: boolean;
+    help?: string;
 }
 
 interface MarketOption {
@@ -422,6 +423,11 @@ export default function Index({
                     required={required && field.required !== false}
                 />
             )}
+            {field.help && (
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    {field.help}
+                </p>
+            )}
             {fieldErrors[`config.${field.key}`] && (
                 <p className="text-xs text-red-500">
                     {fieldErrors[`config.${field.key}`]}
@@ -445,7 +451,7 @@ export default function Index({
                     This driver has no configurable markets.
                 </p>
             ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                     {options.map((market) => {
                         const checked = data.supported_countries.includes(
                             market.code,
@@ -922,7 +928,7 @@ export default function Index({
                         'flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden',
                         selectedDriver === null
                             ? 'sm:max-w-4xl'
-                            : 'sm:max-w-[450px]',
+                            : 'sm:max-w-2xl',
                     )}
                 >
                     <DialogHeader className="shrink-0">
@@ -1252,7 +1258,7 @@ export default function Index({
                 open={!!editingProvider}
                 onOpenChange={(open) => !open && setEditingProvider(null)}
             >
-                <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden">
+                <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-2xl">
                     <DialogHeader className="shrink-0">
                         <DialogTitle>Edit Payment Provider</DialogTitle>
                         <DialogDescription>
