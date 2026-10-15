@@ -6,12 +6,12 @@ use App\Enums\AiProvider;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * An account's AI provider, model and key for its agents. Blank fields fall
- * back to .env.
+ * One AI provider in an account's failover chain. A blank model or key falls
+ * back to the provider's default model and .env key.
  */
-class AiSetting extends Model
+class AiCredential extends Model
 {
-    protected $fillable = ['provider', 'model', 'api_key'];
+    protected $fillable = ['provider', 'model', 'api_key', 'priority'];
 
     protected $hidden = ['api_key'];
 
@@ -25,6 +25,7 @@ class AiSetting extends Model
         return [
             'provider' => AiProvider::class,
             'api_key' => 'encrypted',
+            'priority' => 'integer',
         ];
     }
 }

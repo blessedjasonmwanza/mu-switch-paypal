@@ -40,13 +40,13 @@ class PaypalMcp
     {
         if ($provider = self::accountProvider($user)) {
             return [
-                'source' => AiCredentials::SOURCE_DASHBOARD,
+                'source' => ResolvedAiProvider::SOURCE_DASHBOARD,
                 'provider' => $provider->name,
                 'environment' => PaypalClient::fromConfig($provider->config)->environment()->value,
             ];
         }
 
-        return ['source' => self::envConfigured() ? AiCredentials::SOURCE_ENV : null, 'provider' => null, 'environment' => null];
+        return ['source' => self::envConfigured() ? ResolvedAiProvider::SOURCE_ENV : null, 'provider' => null, 'environment' => null];
     }
 
     /**

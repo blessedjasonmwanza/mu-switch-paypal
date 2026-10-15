@@ -2,43 +2,43 @@
 
 namespace App\Support\Ai;
 
-use App\Models\User;
-use BackedEnum;
 use Laravel\Ai\Ai;
 use SensitiveParameter;
 
 /**
- * The AI provider, model and key an account's agents run with. What the
- * account sets in the dashboard wins; anything left blank falls back to .env.
+ * One provider an agent can run on, with its key already resolved from the
+ * dashboard or .env.
  */
-final class AiCredentials
+final class ResolvedAiProvider
 {
     public const SOURCE_DASHBOARD = 'dashboard';
 
     public const SOURCE_ENV = 'env';
 
-    private function __construct(
+    public function __construct(
         public readonly string $provider,
         public readonly ?string $model,
         #[SensitiveParameter] private readonly ?string $apiKey,
-        public readonly string $keySource,
+        public readonly ?string $keySource,
     ) {}
 
     /**
-     * Resolve the credentials for an account (or .env alone when null).
+     * Resolve a provider, using the .env key when no account key is given.
      */
-    public static function for(?User $user): self
+    public static function resolve(string $provider, ?string $model = null, #[SensitiveParameter] ?string $accountKey = null): self
     {
-        $setting = $user?->aiSetting;
-        $default = config('ai.default');
-        $provider = $setting?->provider?->value ?? ($default instanceof BackedEnum ? $default->value : (string) $default);
-        $accountKey = $setting?->api_key ?: null;
+        $envKey = config("ai.providers.{$provider}.key") ?: null;
+        $apiKey = $accountKey ?: $envKey;
 
         return new self(
             provider: $provider,
-            model: $setting?->model ?: null,
-            apiKey: $accountKey ?? (config("ai.providers.{$provider}.key") ?: null),
-            keySource: $accountKey ? self::SOURCE_DASHBOARD : self::SOURCE_ENV,
+            model: $model ?: null,
+            apiKey: $apiKey,
+            keySource: match (true) {
+                (bool) $accountKey => self::SOURCE_DASHBOARD,
+                $envKey !== null => self::SOURCE_ENV,
+                default => null,
+            },
         );
     }
 
@@ -48,8 +48,8 @@ final class AiCredentials
     }
 
     /**
-     * The provider name to prompt with. An account key gets its own
-     * on-demand provider, so it never touches the shared .env one.
+     * The name to prompt with. An account key gets its own on-demand
+     * provider, so it never touches the shared .env one.
      */
     public function providerName(): string
     {

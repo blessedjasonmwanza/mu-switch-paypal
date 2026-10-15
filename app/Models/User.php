@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -39,11 +38,11 @@ class User extends Authenticatable implements PasskeyUser
     }
 
     /**
-     * The account's AI settings for its agents.
+     * The account's AI providers, in failover order.
      */
-    public function aiSetting(): HasOne
+    public function aiCredentials(): HasMany
     {
-        return $this->hasOne(AiSetting::class);
+        return $this->hasMany(AiCredential::class)->orderBy('priority')->orderBy('id');
     }
 
     /**
