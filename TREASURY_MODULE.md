@@ -45,9 +45,9 @@ The treasury module lets an operator **see, track and rebalance** the money spre
 | 4 | Float rules and low-float alerts | ✅ | 2, 3 |
 | 5 | Treasury view (UI) | ✅ | 2, 3, 4 |
 | 6 | Transfers with a lifecycle (manual and API) | 🟡 | 1, 2 |
-| 7 | AI rebalancing suggestions (human-approved) | ⬜ | 4, 6, FX quoting (⏸) |
+| 7 | AI rebalancing suggestions (human-approved) | 🟡 | 4, 6, FX quoting (⏸) |
 
-**Build strictly in this order.** Each step's acceptance criteria must pass before starting the next. For the hackathon demo, steps **1, 2, 4 and 5** are enough: PayPal collects, a prefunded float pays out instantly, and the treasury view shows when to rebalance.
+**Build strictly in this order.** Each step's acceptance criteria must pass before starting the next. Steps **1, 2, 4 and 5** form the core loop: PayPal collects, a prefunded float pays out instantly, and the treasury view shows when to rebalance.
 
 ---
 
@@ -270,6 +270,16 @@ These exist today and must be reused, not rebuilt:
 
 **Tests:** agent fakes (`TreasuryAgent::fake()`), the approval gate, tool outputs.
 
+**Done (2026-10-15), same-currency suggestions:**
+- `App\Support\Treasury\TreasurySnapshot`: each account's balance, float rule, open transfers in and out, and 7-day payout volume, in minor units. It works out what each account can spare (keeping its own minimum) and still needs (to its target, counting transfers on the way).
+- `App\Ai\Agents\TreasuryAgent` (Laravel AI SDK, `UsesAccountAiCredentials`, structured output: `summary`, `suggestions`, `notes`). It reads the snapshot as JSON. **Changed from the plan:** structured output instead of tools, because the snapshot is small and the result is easier to check.
+- `App\Support\Treasury\RebalanceAdvisor`: the guardrails live in code, not the prompt. Each suggestion must use two of the user's accounts in one currency, within what the source can spare and the destination needs, including earlier suggestions in the same run. At most 5 are recorded per run. Refused ones are reported with a reason. The agent isn't called when no float needs funds.
+- Accepted suggestions become `requested` transfers with `origin = agent` and the agent's `reasoning` (new columns). A person approves or dismisses them through the step 6 lifecycle, so the agent can't approve or move money.
+- `POST /treasury/suggestions` (`RebalanceSuggestionController`, throttled), plus a **Suggest rebalances** button, an agent summary panel, and **AI suggested** badges with the reasoning on the Treasury page.
+- Tests in `tests/Feature/TreasuryTest.php`.
+
+**Not done:** cross-currency suggestions (needs FX quoting, ⏸) and route fees (suggestions carry no fee; a shortfall on arrival is reconciled at settlement).
+
 ---
 
 ## 6. Deferred: FX quoting ⏸
@@ -314,3 +324,4 @@ _Add a line whenever a step's status changes._
 | 2026-10-15 | 4 | ✅ Float rules and alerts: rules, one open alert per rule, automatic and scheduled checks |
 | 2026-10-15 | 5 | ✅ Treasury page: accounts, float status, alerts with Top up, transfers, ledger activity (ledger balances only; step 3 still ⬜) |
 | 2026-10-15 | 6 | 🟡 Manual transfers: full lifecycle, approval and balance gates, event history, ledger effects with shortfall reconciliation. API transfers parked |
+| 2026-10-15 | 7 | 🟡 AI rebalancing suggestions (same currency): treasury agent, snapshot, guardrails in code, suggestions as requested transfers awaiting approval. Cross-currency waits for FX |

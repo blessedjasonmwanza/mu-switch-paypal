@@ -9,6 +9,7 @@ use App\Http\Controllers\FloatRuleController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaypalCheckoutController;
 use App\Http\Controllers\ProviderController;
+use App\Http\Controllers\RebalanceSuggestionController;
 use App\Http\Controllers\TreasuryController;
 use App\Http\Controllers\TreasuryTransferController;
 use App\Support\Coverage;
@@ -54,6 +55,7 @@ if (! config('app.docs_only_routes')) {
         Route::get('treasury', [TreasuryController::class, 'index'])->name('treasury.index');
         Route::put('treasury/float-rules', [FloatRuleController::class, 'upsert'])->name('treasury.float-rules.upsert');
         Route::delete('treasury/float-rules/{floatRule}', [FloatRuleController::class, 'destroy'])->name('treasury.float-rules.destroy');
+        Route::post('treasury/suggestions', [RebalanceSuggestionController::class, 'store'])->middleware('throttle:10,1')->name('treasury.suggestions.store');
         Route::prefix('treasury/transfers')->name('treasury.transfers.')->controller(TreasuryTransferController::class)->group(function () {
             Route::post('/', 'store')->name('store');
             Route::post('{transfer}/approve', 'approve')->name('approve');

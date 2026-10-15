@@ -1,6 +1,6 @@
 ---
 title: Treasury
-excerpt: See your money across provider accounts, get alerted when a float runs low, and track transfers between accounts from request to settlement.
+excerpt: See your money across provider accounts, get alerted when a float runs low, track transfers between accounts, and let the treasury agent suggest rebalances for you to approve.
 date: 2026-10-15
 category: Configuration
 ---
@@ -74,3 +74,30 @@ How this keeps your records accurate:
 
 Transfers are tracked manually: you make the actual bank or provider transfer
 yourself, then record each step here.
+
+## Rebalancing suggestions (AI)
+
+**Suggest rebalances** asks the treasury agent to propose transfers that bring
+low floats back up. It reads each account's balance, float rule, transfers
+already on the way, and the last 7 days of payouts (how many days of payouts
+the float covers), then proposes which account should top up which, and why.
+
+The agent **only proposes**. Each suggestion appears in **Transfers** as a
+**Requested** transfer marked **AI suggested**, with its reasoning. You then
+**Approve** it or **Dismiss** it, and it follows the usual steps from there.
+
+Every suggestion is checked against the ledger before it's recorded. A
+suggestion is refused, and listed with the reason, if it:
+
+- uses an account that isn't yours, or the same account on both sides;
+- needs a currency conversion (FX isn't available yet);
+- is more than the destination needs to reach its target (or its minimum when
+  it has no target), counting transfers already on the way;
+- would take the source below its own minimum float, counting other transfers
+  it has promised.
+
+One run records at most five transfers. If every float is already at or above
+its target, the agent isn't asked at all.
+
+The agent uses your account's AI providers from **AI & Agents**, or the `.env`
+default. See [AI & MCP Setup](/docs/ai-and-mcp).

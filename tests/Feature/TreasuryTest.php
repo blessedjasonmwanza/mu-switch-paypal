@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\Agents\TreasuryAgent;
 use App\Enums\TransactionStatus;
 use App\Enums\TransferStatus;
 use App\Http\Controllers\Providers\LencoController;
@@ -403,4 +404,175 @@ test('actions return to the same filtered view', function () {
         ->from($from)
         ->post(route('treasury.transfers.approve', $transfer))
         ->assertRedirect($from);
+});
+
+// Rebalancing suggestions (treasury agent)
+
+/**
+ * A low payout float and a well-funded collections account, with an AI key.
+ *
+ * @return array{0: User, 1: PaymentProvider, 2: PaymentProvider}
+ */
+function rebalanceSetup(): array
+{
+    config(['ai.default' => 'anthropic', 'ai.providers.anthropic.key' => 'test-key']);
+
+    $user = User::factory()->create();
+    $collections = treasuryAccount($user, 'Collections');
+    $float = treasuryAccount($user, 'Payout float', SandboxPayoutController::class);
+    floatRule($collections, 50000);
+    floatRule($float, 100000, 300000);
+    fund($collections, '5000');
+    fund($float, '500');
+
+    return [$user, $collections, $float];
+}
+
+function suggestion(PaymentProvider $from, PaymentProvider $to, string $amount, string $currency = 'ZMW'): array
+{
+    return ['from_provider_id' => $from->id, 'to_provider_id' => $to->id, 'currency' => $currency, 'amount' => $amount, 'reasoning' => "Top up {$to->name} from {$from->name}."];
+}
+
+test('the treasury agent proposes transfers that wait for approval and move no money', function () {
+    [$user, $collections, $float] = rebalanceSetup();
+    TreasuryAgent::fake([[
+        'summary' => 'The payout float is below its minimum.',
+        'suggestions' => [suggestion($collections, $float, '2500')],
+        'notes' => [],
+    ]]);
+
+    $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertRedirect()
+        ->assertInertiaFlash('toast.type', 'success')
+        ->assertInertiaFlash('rebalance.summary', 'The payout float is below its minimum.')
+        ->assertInertiaFlash('rebalance.rejected', []);
+
+    $transfer = TreasuryTransfer::sole();
+    expect($transfer->status)->toBe(TransferStatus::REQUESTED)
+        ->and($transfer->origin)->toBe('agent')
+        ->and($transfer->reasoning)->toBe('Top up Payout float from Collections.')
+        ->and($transfer->amount_minor)->toBe(250000)
+        ->and($transfer->fee_minor)->toBe(0)
+        ->and((string) LedgerBalance::of($float, 'ZMW'))->toBe('500.00')
+        ->and((string) LedgerBalance::of($collections, 'ZMW'))->toBe('5000.00');
+
+    TreasuryAgent::assertPrompted(fn ($prompt) => str_contains($prompt->prompt, '"max_can_receive": "2500.00"')
+        && str_contains($prompt->prompt, '"max_can_send": "4500.00"'));
+
+    // A person approves it through the normal gate.
+    $this->actingAs($user)->post(route('treasury.transfers.approve', $transfer))->assertRedirect();
+    expect($transfer->fresh()->status)->toBe(TransferStatus::APPROVED);
+
+    $this->actingAs($user)->get(route('treasury.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('aiReady', true)
+            ->where('transfers.data.0.origin', 'agent')
+            ->where('transfers.data.0.reasoning', 'Top up Payout float from Collections.'));
+});
+
+test('guardrails refuse suggestions outside what the accounts can send and need', function () {
+    [$user, $collections, $float] = rebalanceSetup();
+    $stranger = treasuryAccount(User::factory()->create(), 'Not mine');
+    $usd = treasuryAccount($user, 'PayPal');
+    fund($usd, '900', 'USD');
+
+    TreasuryAgent::fake([[
+        'summary' => 'Several options.',
+        'suggestions' => [
+            suggestion($collections, $float, '3000'),        // more than the float needs (2500)
+            suggestion($stranger, $float, '100'),            // not the user's account
+            suggestion($usd, $float, '100', 'USD'),          // the float holds no USD
+            suggestion($collections, $float, 'lots'),        // not a number
+            suggestion($collections, $collections, '100'),   // same account
+            suggestion($collections, $float, '1200'),        // allowed
+            suggestion($collections, $float, '1400'),        // the float only needs 1300 more
+        ],
+        'notes' => ['USD in PayPal could help once FX is available.'],
+    ]]);
+
+    $response = $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertInertiaFlash('rebalance.notes', ['USD in PayPal could help once FX is available.']);
+
+    expect(TreasuryTransfer::pluck('amount_minor')->all())->toBe([120000]);
+
+    $rejected = collect(data_get($response->getSession()->get('inertia.flash_data'), 'rebalance.rejected'));
+    expect($rejected)->toHaveCount(6)
+        ->and($rejected->pluck('reason')->implode(' | '))
+        ->toContain('more than Payout float needs')
+        ->toContain('isn\'t yours')
+        ->toContain('needs FX')
+        ->toContain('isn\'t a number')
+        ->toContain('same account');
+});
+
+test('a source can\'t be drawn below its own minimum across one run', function () {
+    [$user, , $float] = rebalanceSetup();
+    $second = treasuryAccount($user, 'Second float', SandboxPayoutController::class);
+    floatRule($second, 100000);
+    $small = treasuryAccount($user, 'Small source');
+    floatRule($small, 50000);
+    fund($small, '1500');
+
+    TreasuryAgent::fake([[
+        'summary' => 'Two floats are low.',
+        'suggestions' => [suggestion($small, $float, '800'), suggestion($small, $second, '300')],
+        'notes' => [],
+    ]]);
+
+    $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertInertiaFlash('rebalance.rejected.0.reason', 'It would take Small source below its own minimum float (it can spare 200.00 ZMW).');
+
+    // Small source holds 1500 with a 500 minimum: 1000 to spare, 800 already used.
+    expect(TreasuryTransfer::pluck('amount_minor')->all())->toBe([80000]);
+});
+
+test('transfers already on the way count towards a float', function () {
+    [$user, $collections, $float] = rebalanceSetup();
+    requestTransfer($user, $collections, $float, ['amount' => '2500']);
+
+    TreasuryAgent::fake();
+
+    $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertInertiaFlash('rebalance.askedAgent', false)
+        ->assertInertiaFlash('toast.message', 'All floats are healthy. Nothing to suggest.');
+
+    TreasuryAgent::assertNeverPrompted();
+});
+
+test('suggestions need an AI provider and report agent failures', function () {
+    [$user] = rebalanceSetup();
+    config(['ai.providers.anthropic.key' => null]);
+    TreasuryAgent::fake();
+
+    $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertInertiaFlash('toast.type', 'error');
+    TreasuryAgent::assertNeverPrompted();
+
+    config(['ai.providers.anthropic.key' => 'test-key']);
+    TreasuryAgent::fake(fn () => throw new RuntimeException('Provider overloaded'));
+
+    $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertInertiaFlash('toast.type', 'error')
+        ->assertInertiaFlash('toast.message', 'The treasury agent could not respond: Provider overloaded');
+
+    expect(TreasuryTransfer::count())->toBe(0);
+});
+
+test('the agent sees recent payout volume and one run records at most five transfers', function () {
+    [$user, $collections, $float] = rebalanceSetup();
+    settledPayout($float, 140);
+
+    TreasuryAgent::fake([[
+        'summary' => 'Small top-ups.',
+        'suggestions' => array_fill(0, 7, suggestion($collections, $float, '100')),
+        'notes' => [],
+    ]]);
+
+    $this->actingAs($user)->post(route('treasury.suggestions.store'))
+        ->assertInertiaFlash('rebalance.rejected.1.reason', 'Only 5 transfers are suggested at a time.');
+
+    expect(TreasuryTransfer::count())->toBe(5);
+
+    TreasuryAgent::assertPrompted(fn ($prompt) => str_contains($prompt->prompt, '"payouts_last_7_days": "140.00"')
+        && str_contains($prompt->prompt, '"days_of_payouts_covered": 17.9'));
 });

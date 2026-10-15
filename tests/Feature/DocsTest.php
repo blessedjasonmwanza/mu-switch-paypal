@@ -127,5 +127,6 @@ test('the treasury guide is documented', function () {
     $this->get('/docs/treasury')
         ->assertOk()
         ->assertSee('Float rules and alerts', false)
-        ->assertSee('Confirm received', false);
+        ->assertSee('Confirm received', false)
+        ->assertSee('Rebalancing suggestions (AI)', false);
 });

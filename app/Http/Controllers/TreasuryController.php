@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Models\TreasuryTransfer;
 use App\Models\TreasuryTransferEvent;
 use App\Models\User;
+use App\Support\Ai\AiProviderChain;
 use App\Support\Currency;
 use App\Support\Ledger\LedgerBalance;
 use App\Support\Market;
@@ -57,6 +58,7 @@ class TreasuryController extends Controller
                 'transfers' => $this->search($request, 'transfers') ?: null,
                 'entries' => $this->search($request, 'entries') ?: null,
             ],
+            'aiReady' => AiProviderChain::for($user)->canRun(),
             'perPageOptions' => array_map(fn (array $table): array => $table['options'], self::TABLES),
             'providers' => $providers->map(fn (PaymentProvider $provider): array => [
                 'id' => $provider->id,
@@ -165,6 +167,7 @@ class TreasuryController extends Controller
                 ->orWhere('currency', 'like', $like)
                 ->orWhere('external_reference', 'like', $like)
                 ->orWhere('note', 'like', $like)
+                ->orWhere('reasoning', 'like', $like)
                 ->orWhereHas('fromProvider', fn (Builder $p) => $p->where('name', 'like', $like))
                 ->orWhereHas('toProvider', fn (Builder $p) => $p->where('name', 'like', $like))))
             ->with(['fromProvider:id,name', 'toProvider:id,name', 'events.user:id,name'])
@@ -183,6 +186,8 @@ class TreasuryController extends Controller
                 'status' => $transfer->status->value,
                 'externalReference' => $transfer->external_reference,
                 'note' => $transfer->note,
+                'origin' => $transfer->origin,
+                'reasoning' => $transfer->reasoning,
                 'failureReason' => $transfer->failure_reason,
                 'createdAt' => $transfer->created_at?->diffForHumans(),
                 'events' => $transfer->events->map(fn (TreasuryTransferEvent $event): array => [

@@ -16,7 +16,7 @@ class TreasuryTransfer extends Model
 {
     protected $fillable = [
         'reference', 'user_id', 'from_provider_id', 'to_provider_id', 'currency', 'amount_minor', 'fee_minor',
-        'received_minor', 'status', 'method', 'external_reference', 'note', 'failure_reason',
+        'received_minor', 'status', 'method', 'origin', 'external_reference', 'note', 'reasoning', 'failure_reason',
         'approved_at', 'sent_at', 'settled_at',
     ];
 

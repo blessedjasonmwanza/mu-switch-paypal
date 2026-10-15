@@ -151,6 +151,7 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] PayPal collection driver and webhooks
 - [x] Payouts in the switch, with fallback, plus a double-entry ledger
 - [x] Treasury: balances, float-low alerts, and tracked transfers between accounts
+- [x] Treasury agent: AI rebalancing suggestions, checked by guardrails and approved by a person
 - [ ] PayPal transfers: quotes, FX, refund on failure
 - [ ] AI agent with guardrails, and the transfer UI
 - [ ] MCP server

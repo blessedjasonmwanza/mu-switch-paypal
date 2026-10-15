@@ -24,11 +24,12 @@ class TransferService
     public function __construct(private readonly LedgerRecorder $ledger) {}
 
     /**
-     * Ask to move money; nothing moves until it's approved and sent.
+     * Ask to move money; nothing moves until it's approved and sent. The
+     * treasury agent's suggestions arrive here too, with `origin` "agent".
      *
      * @throws TransferException
      */
-    public function request(User $by, PaymentProvider $from, PaymentProvider $to, string $currency, BigDecimal $amount, BigDecimal $fee, ?string $note = null): TreasuryTransfer
+    public function request(User $by, PaymentProvider $from, PaymentProvider $to, string $currency, BigDecimal $amount, BigDecimal $fee, ?string $note = null, string $origin = 'operator', ?string $reasoning = null): TreasuryTransfer
     {
         $currency = strtoupper($currency);
 
@@ -40,7 +41,7 @@ class TransferService
             throw new TransferException('The amount must be positive and the fee zero or more.');
         }
 
-        return DB::transaction(function () use ($by, $from, $to, $currency, $amount, $fee, $note): TreasuryTransfer {
+        return DB::transaction(function () use ($by, $from, $to, $currency, $amount, $fee, $note, $origin, $reasoning): TreasuryTransfer {
             $transfer = TreasuryTransfer::create([
                 'reference' => (string) Str::uuid(),
                 'user_id' => $by->id,
@@ -51,7 +52,9 @@ class TransferService
                 'fee_minor' => Currency::toMinorUnits($fee, $currency),
                 'status' => TransferStatus::REQUESTED,
                 'method' => 'manual',
+                'origin' => $origin,
                 'note' => $note,
+                'reasoning' => $reasoning,
             ]);
 
             $transfer->events()->create(['user_id' => $by->id, 'from_status' => null, 'to_status' => TransferStatus::REQUESTED, 'note' => $note, 'created_at' => now()]);

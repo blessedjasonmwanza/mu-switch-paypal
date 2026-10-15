@@ -71,4 +71,12 @@ final class AiProviderChain
 
         return false;
     }
+
+    /**
+     * Whether an agent can run: a provider with a key, here or in .env.
+     */
+    public function canRun(): bool
+    {
+        return $this->hasUsableProvider() || self::envDefault()->hasKey();
+    }
 }

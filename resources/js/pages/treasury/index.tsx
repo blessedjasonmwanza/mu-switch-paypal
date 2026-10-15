@@ -1,15 +1,19 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Button } from '@radix-ui/themes';
 import {
     AlertTriangle,
     ArrowRight,
     CheckCircle2,
     Landmark,
+    Loader2,
     Plus,
+    Sparkles,
+    X,
 } from 'lucide-react';
 import type { FormEvent, ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import FloatRuleController from '@/actions/App/Http/Controllers/FloatRuleController';
+import RebalanceSuggestionController from '@/actions/App/Http/Controllers/RebalanceSuggestionController';
 import TreasuryTransferController from '@/actions/App/Http/Controllers/TreasuryTransferController';
 import InputError from '@/components/input-error';
 import { TableFooter } from '@/components/table-footer';
@@ -28,6 +32,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import ai from '@/routes/ai';
 import { index as treasuryIndex } from '@/routes/treasury';
 
 type FloatStatus = 'ok' | 'low' | 'none';
@@ -79,6 +84,8 @@ interface Transfer {
     status: TransferStatus;
     externalReference: string | null;
     note: string | null;
+    origin: 'operator' | 'agent';
+    reasoning: string | null;
     failureReason: string | null;
     createdAt: string | null;
     events: Array<{
@@ -121,6 +128,16 @@ interface Props {
     providers: ProviderOption[];
     filters: Record<TableKey, string | null>;
     perPageOptions: Record<TableKey, number[]>;
+    aiReady: boolean;
+}
+
+/** The treasury agent's last answer, flashed after "Suggest rebalances". */
+interface RebalanceInsight {
+    summary: string;
+    notes: string[];
+    rejected: Array<{ suggestion: string; reason: string }>;
+    suggested: string[];
+    askedAgent: boolean;
 }
 
 /** Each table's query keys, matching TreasuryController::TABLES. */
@@ -280,8 +297,11 @@ export default function Treasury({
     providers,
     filters,
     perPageOptions,
+    aiReady,
 }: Props) {
     const [isTransferOpen, setIsTransferOpen] = useState(false);
+    const [isSuggesting, setIsSuggesting] = useState(false);
+    const [insight, setInsight] = useState<RebalanceInsight | null>(null);
     const [ruleFor, setRuleFor] = useState<Account | null>(null);
     const [step, setStep] = useState<{
         action: StepAction;
@@ -380,6 +400,28 @@ export default function Treasury({
     const quickAction = (url: string) =>
         router.post(url, {}, { preserveScroll: true });
 
+    useEffect(() => {
+        return router.on('flash', (event) => {
+            const rebalance = (event as CustomEvent).detail?.flash
+                ?.rebalance as RebalanceInsight | undefined;
+
+            if (rebalance) {
+                setInsight(rebalance);
+            }
+        });
+    }, []);
+
+    const suggestRebalances = () =>
+        router.post(
+            RebalanceSuggestionController.store.url(),
+            {},
+            {
+                preserveScroll: true,
+                onStart: () => setIsSuggesting(true),
+                onFinish: () => setIsSuggesting(false),
+            },
+        );
+
     return (
         <>
             <Head title="Treasury" />
@@ -394,14 +436,113 @@ export default function Treasury({
                             and transfers between accounts.
                         </p>
                     </div>
-                    <Button
-                        onClick={() => openTransfer()}
-                        disabled={providers.length < 2}
-                        className="shrink-0 cursor-pointer gap-2"
-                    >
-                        <Plus className="h-4 w-4" /> New transfer
-                    </Button>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        {aiReady ? (
+                            <Button
+                                variant="soft"
+                                onClick={suggestRebalances}
+                                disabled={isSuggesting || providers.length < 2}
+                                className="cursor-pointer gap-2"
+                            >
+                                {isSuggesting ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Sparkles className="h-4 w-4" />
+                                )}
+                                {isSuggesting
+                                    ? 'Thinking…'
+                                    : 'Suggest rebalances'}
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="soft"
+                                color="gray"
+                                asChild
+                                className="cursor-pointer gap-2"
+                            >
+                                <Link
+                                    href={ai.index.url()}
+                                    title="Add an AI provider to get rebalancing suggestions"
+                                >
+                                    <Sparkles className="h-4 w-4" /> Set up AI
+                                </Link>
+                            </Button>
+                        )}
+                        <Button
+                            onClick={() => openTransfer()}
+                            disabled={providers.length < 2}
+                            className="cursor-pointer gap-2"
+                        >
+                            <Plus className="h-4 w-4" /> New transfer
+                        </Button>
+                    </div>
                 </div>
+
+                {insight && (
+                    <div
+                        className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm dark:border-violet-900/60 dark:bg-violet-950/30"
+                        data-test="rebalance-insight"
+                    >
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2.5">
+                                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                                <div className="space-y-1.5">
+                                    <p className="font-medium text-violet-950 dark:text-violet-100">
+                                        {insight.askedAgent
+                                            ? 'Treasury agent'
+                                            : 'No rebalancing needed'}
+                                    </p>
+                                    {insight.summary && (
+                                        <p className="text-xs text-violet-900 dark:text-violet-200/80">
+                                            {insight.summary}
+                                        </p>
+                                    )}
+                                    {insight.notes.length > 0 && (
+                                        <ul className="list-disc space-y-0.5 pl-4 text-xs text-violet-900 dark:text-violet-200/80">
+                                            {insight.notes.map(
+                                                (note, index) => (
+                                                    <li key={index}>{note}</li>
+                                                ),
+                                            )}
+                                        </ul>
+                                    )}
+                                    {insight.rejected.length > 0 && (
+                                        <div className="text-xs text-amber-800 dark:text-amber-300/90">
+                                            <p className="font-medium">
+                                                Blocked by guardrails
+                                            </p>
+                                            <ul className="list-disc space-y-0.5 pl-4">
+                                                {insight.rejected.map(
+                                                    (item, index) => (
+                                                        <li key={index}>
+                                                            {item.suggestion}:{' '}
+                                                            {item.reason}
+                                                        </li>
+                                                    ),
+                                                )}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    {insight.suggested.length > 0 && (
+                                        <p className="text-xs text-violet-900 dark:text-violet-200/80">
+                                            Suggestions are requested transfers
+                                            below. Nothing moves until you
+                                            approve and send them.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setInsight(null)}
+                                className="shrink-0 cursor-pointer rounded p-0.5 text-violet-500 hover:bg-violet-100 hover:text-violet-700 dark:hover:bg-violet-900/50"
+                                aria-label="Dismiss"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {alerts.length > 0 && (
                     <div className="space-y-2" data-test="float-alerts">
@@ -612,6 +753,13 @@ export default function Treasury({
                                                         ]
                                                     }
                                                 </span>
+                                                {transfer.origin ===
+                                                    'agent' && (
+                                                    <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                                        <Sparkles className="h-3 w-3" />
+                                                        AI suggested
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="mt-0.5 text-xs text-neutral-500">
                                                 <span className="font-medium text-neutral-700 tabular-nums dark:text-neutral-300">
@@ -631,6 +779,11 @@ export default function Treasury({
                                                 {transfer.createdAt &&
                                                     ` · ${transfer.createdAt}`}
                                             </div>
+                                            {transfer.reasoning && (
+                                                <p className="mt-1 max-w-2xl text-xs text-violet-800 dark:text-violet-300/90">
+                                                    {transfer.reasoning}
+                                                </p>
+                                            )}
                                             {transfer.failureReason && (
                                                 <p className="mt-0.5 text-xs text-red-600">
                                                     {transfer.failureReason}
@@ -716,7 +869,12 @@ export default function Treasury({
                                                     }
                                                     className="cursor-pointer"
                                                 >
-                                                    Cancel
+                                                    {transfer.origin ===
+                                                        'agent' &&
+                                                    transfer.status ===
+                                                        'requested'
+                                                        ? 'Dismiss'
+                                                        : 'Cancel'}
                                                 </Button>
                                             )}
                                         </div>
