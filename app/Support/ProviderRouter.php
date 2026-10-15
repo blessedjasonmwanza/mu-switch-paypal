@@ -80,13 +80,24 @@ class ProviderRouter
      *
      * @param  class-string  $capability
      */
-    private static function supports(PaymentProvider $provider, string $capability): bool
+    public static function supports(PaymentProvider $provider, string $capability): bool
     {
         if (! class_exists($provider->class)) {
             return true;
         }
 
-        return is_subclass_of($provider->class, $capability) && DriverRegistry::isAvailable($provider->class);
+        if (! is_subclass_of($provider->class, $capability) || ! DriverRegistry::isAvailable($provider->class)) {
+            return false;
+        }
+
+        // A payout driver may need extra settings before it can pay out (e.g. Lenco's account ID).
+        if ($capability === PayoutProviderInterface::class && method_exists($provider->class, 'payoutReady')) {
+            $config = is_string($provider->config) ? (json_decode($provider->config, true) ?? []) : (array) ($provider->config ?? []);
+
+            return $provider->class::payoutReady($config);
+        }
+
+        return true;
     }
 
     /**

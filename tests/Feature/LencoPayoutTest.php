@@ -4,6 +4,7 @@ use App\Enums\TransactionStatus;
 use App\Http\Controllers\Providers\LencoController;
 use App\Http\Controllers\Providers\SandboxPayoutController;
 use App\Models\CrossBorderTransfer;
+use App\Models\Customer;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Models\User;
@@ -160,15 +161,30 @@ test('an unknown lenco outcome stops without trying another provider', function 
     'duplicate reference' => [400, 'Duplicate reference'],
 ]);
 
-test('lenco refuses payouts until an account id is set', function () {
+test('lenco is left out of payout routing until an account id is set', function () {
     lencoPayouts($this->user, ['account_id' => null]);
     Http::fake();
 
     lencoPayout()
-        ->assertStatus(422)
-        ->assertJsonPath('message', 'Set the Lenco account ID on this provider to send payouts');
+        ->assertStatus(400)
+        ->assertJsonPath('message', 'No active payout providers support the requested country');
 
     Http::assertNothingSent();
+});
+
+test('the lenco driver itself refuses a payout without an account id', function () {
+    $provider = lencoPayouts($this->user, ['account_id' => null]);
+    $driver = app(LencoController::class);
+    $driver->setProvider($provider);
+
+    $transaction = Transaction::create([
+        'transaction_id' => 'no-account', 'provider_transaction_id' => 'no-account', 'payment_provider_id' => $provider->id,
+        'customer_id' => Customer::create(['name' => 'R', 'email' => 'r@moneyunify.local'])->id,
+        'amount' => 10, 'currency' => 'ZMW', 'country' => 'ZM', 'status' => TransactionStatus::PENDING, 'direction' => 'debit',
+    ]);
+
+    expect($driver->requestPayout($transaction, ['account_number' => '0977123456'])->getStatusCode())->toBe(422)
+        ->and($transaction->refresh()->status)->toBe(TransactionStatus::FAILED);
 });
 
 test('lenco needs the network for malawi numbers it cannot place', function () {

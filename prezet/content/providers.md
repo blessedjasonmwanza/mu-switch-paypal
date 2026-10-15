@@ -64,8 +64,8 @@ and Malawi (Airtel, TNM), from one of your Lenco accounts. Payouts also power
 pays with PayPal and the recipient is paid through Lenco. To turn payouts on,
 set **Account ID (for payouts)** on the provider: the 36-character ID of the
 Lenco account to pay from (from your Lenco dashboard or `GET /accounts`).
-Without it, Lenco is used for collections only and refuses payouts, so the
-switch tries your next payout provider.
+Without it, Lenco is used for collections only and isn't offered for payouts
+or cross-border transfers.
 
 | | |
 | --- | --- |

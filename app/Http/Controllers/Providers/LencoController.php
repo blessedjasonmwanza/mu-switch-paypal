@@ -111,6 +111,16 @@ class LencoController extends Controller implements PaymentProviderInterface, Pa
     }
 
     /**
+     * Payouts need the Lenco account to pay from; without it, Lenco only collects.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    public static function payoutReady(array $config): bool
+    {
+        return filled($config['account_id'] ?? null);
+    }
+
+    /**
      * Send a mobile-money transfer from the configured Lenco account.
      *
      * @see https://lenco-api.readme.io/v2.0/reference/initiate-transfer-to-mobile-money

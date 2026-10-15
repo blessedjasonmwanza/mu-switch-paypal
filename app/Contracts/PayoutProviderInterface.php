@@ -16,6 +16,10 @@ use Illuminate\Http\JsonResponse;
  * - 4xx: the provider definitely refused it, so trying another provider is safe.
  * - 5xx: the outcome is unknown. The switch stops and the payout must be
  *   verified; trying another provider could pay the recipient twice.
+ *
+ * A driver whose payouts need extra settings may add a static
+ * `payoutReady(array $config): bool`; providers that return false are left
+ * out of payout routing.
  */
 interface PayoutProviderInterface
 {
