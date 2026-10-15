@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AiCredentialController;
 use App\Http\Controllers\ApiLogController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\DashboardController;
@@ -46,6 +47,16 @@ if (! config('app.docs_only_routes')) {
 
         Route::get('fee-policy', [FeePolicyController::class, 'show'])->name('fee-policy.show');
         Route::put('fee-policy', [FeePolicyController::class, 'update'])->name('fee-policy.update');
+
+        Route::get('ai', [AiCredentialController::class, 'index'])->name('ai.index');
+        Route::prefix('ai/credentials')->name('ai.credentials.')->controller(AiCredentialController::class)->group(function () {
+            Route::post('/', 'store')->name('store');
+            Route::put('order', 'reorder')->name('reorder');
+            Route::put('{credential}', 'update')->name('update');
+            Route::delete('{credential}', 'destroy')->name('destroy');
+            Route::delete('{credential}/key', 'destroyKey')->name('key.destroy');
+            Route::post('{credential}/test', 'test')->middleware('throttle:6,1')->name('test');
+        });
     });
 
     // Where PayPal returns the payer after checkout (signed links).

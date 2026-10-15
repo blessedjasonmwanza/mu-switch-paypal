@@ -1,8 +1,4 @@
 import { Link } from '@inertiajs/react';
-import logs from '@/routes/logs';
-import payments from '@/routes/payments';
-import providers from '@/routes/providers';
-import feePolicy from '@/routes/fee-policy';
 import {
     BookOpen,
     Sliders,
@@ -10,6 +6,7 @@ import {
     ScrollText,
     Wallet,
     Percent,
+    Bot,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -25,6 +22,11 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as aiIndex } from '@/routes/ai';
+import feePolicy from '@/routes/fee-policy';
+import logs from '@/routes/logs';
+import payments from '@/routes/payments';
+import providers from '@/routes/providers';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -52,6 +54,11 @@ const mainNavItems: NavItem[] = [
         title: 'Fee Policy',
         href: feePolicy.show.url(),
         icon: Percent,
+    },
+    {
+        title: 'AI & Agents',
+        href: aiIndex.url(),
+        icon: Bot,
     },
 ];
 
