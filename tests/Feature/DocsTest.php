@@ -146,3 +146,10 @@ test('cross-border transfers are documented', function () {
         ->assertSee('/api/v1/transfer/request', false)
         ->assertSee('refund_failed', false);
 });
+
+test('lenco payouts are documented', function () {
+    $this->get('/docs/providers')
+        ->assertOk()
+        ->assertSee('Payouts through Lenco', false)
+        ->assertSee('/transfers/mobile-money', false);
+});

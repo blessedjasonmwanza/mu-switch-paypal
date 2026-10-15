@@ -101,6 +101,7 @@ Every driver today is collection-only (`direction = 'credit'`). The `transaction
   - `requestPayout(Transaction $transaction, array $recipient): JsonResponse`
   - `verifyPayout(Transaction $transaction): JsonResponse`
 - Implement it first on **pawaPay**, which has a public sandbox with payouts across about 20 markets. Then add MTN MoMo Disbursement and Airtel Money if time allows.
+  _Built:_ pawaPay and **Lenco** (Zambia and Malawi mobile money, `POST /transfers/mobile-money`).
 - `PayoutRouter` reuses the collection routing:
   1. Filter by country.
   2. Apply cost-aware ordering.
@@ -117,7 +118,7 @@ Every driver today is collection-only (`direction = 'credit'`). The `transaction
 
 ### 4.5 Cross-border transfers (PayPal → mobile money) ✅
 
-**How MoneyUnify does it.** The operator owns both accounts: a PayPal business account and a mobile-money payout account (e.g. pawaPay) that holds a float in the recipient's currency. No money crosses between providers during a transfer:
+**How MoneyUnify does it.** The operator owns both accounts: a PayPal business account and a mobile-money payout account (e.g. pawaPay or Lenco) that holds a float in the recipient's currency. No money crosses between providers during a transfer:
 
 1. The sender pays the operator's **PayPal** account (e.g. 92.30 USD) through a normal PayPal checkout.
 2. Once PayPal confirms the capture, the switch **pays the recipient's wallet from the operator's payout float** (e.g. 2,500.00 ZMW), at the FX rate locked when the transfer was quoted.

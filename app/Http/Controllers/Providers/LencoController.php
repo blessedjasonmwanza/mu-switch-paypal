@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Providers;
 
 use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
+use App\Contracts\PayoutProviderInterface;
 use App\DataTypes\TypeAccountNumber;
 use App\Enums\TransactionStatus;
 use App\Http\Controllers\Controller;
@@ -18,7 +19,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
-class LencoController extends Controller implements PaymentProviderInterface
+/**
+ * Lenco driver: mobile-money collections and payouts in Zambia and Malawi.
+ *
+ * @see https://lenco-api.readme.io/v2.0/reference
+ */
+class LencoController extends Controller implements PaymentProviderInterface, PayoutProviderInterface
 {
     public const PROVIDER_NAME = 'Lenco';
 
@@ -39,14 +45,31 @@ class LencoController extends Controller implements PaymentProviderInterface
      */
     public const CONFIG_FIELDS = [
         ['key' => 'api_key', 'label' => 'API Key / Token', 'type' => 'password'],
+        [
+            'key' => 'account_id',
+            'label' => 'Account ID (for payouts)',
+            'type' => 'text',
+            'required' => false,
+            'help' => 'The Lenco account payouts are paid from (a 36-character ID from your Lenco dashboard or GET /accounts). Leave blank to use Lenco for collections only.',
+        ],
     ];
 
     /**
-     * Lenco's fees: 1% on collections, K8.50 to settle K1–K1000.
+     * Operators Lenco can pay out to, by country.
+     */
+    private const PAYOUT_OPERATORS = [
+        'ZM' => ['airtel', 'mtn', 'zamtel'],
+        'MW' => ['airtel', 'tnm'],
+    ];
+
+    /**
+     * Lenco's fees: 1% on collections, K8.50 to settle K1–K1000, and K8.50 per
+     * mobile-money transfer (an estimate; Lenco reports the actual fee).
      */
     public const FEE_SCHEDULE = [
         'collection' => ['percent' => 1.0, 'flat' => 0.0],
         'settlement' => ['tiers' => [['max' => 1000, 'fee' => 8.5]], 'default' => 8.5],
+        'payout' => ['percent' => 0.0, 'flat' => 8.5],
     ];
 
     public string $api_key {
@@ -54,6 +77,11 @@ class LencoController extends Controller implements PaymentProviderInterface
     }
 
     public $provider;
+
+    /**
+     * The Lenco account payouts are paid from.
+     */
+    private ?string $account_id = null;
 
     private readonly string $baseUrl;
 
@@ -76,7 +104,148 @@ class LencoController extends Controller implements PaymentProviderInterface
             return ApiResponse::error('API key is required for Lenco provider', 400);
         }
         $this->api_key = $apiKey;
+        $this->account_id = isset($config['account_id']) ? trim((string) $config['account_id']) : null;
         $this->provider = $provider;
+
+        return null;
+    }
+
+    /**
+     * Send a mobile-money transfer from the configured Lenco account.
+     *
+     * @see https://lenco-api.readme.io/v2.0/reference/initiate-transfer-to-mobile-money
+     */
+    public function requestPayout(Transaction $transaction, array $recipient): JsonResponse
+    {
+        if (! $this->account_id) {
+            return $this->refusePayout($transaction, 'Set the Lenco account ID on this provider to send payouts');
+        }
+
+        $country = strtoupper($transaction->country);
+        $phone = self::localNumber((string) $recipient['account_number'], $country);
+        $network = strtolower(trim((string) ($recipient['network'] ?? '')));
+        $operator = in_array($network, self::PAYOUT_OPERATORS[$country] ?? [], true) ? $network : self::detectOperator($phone, $country);
+
+        if (! $operator) {
+            return $this->refusePayout($transaction, 'Lenco can\'t tell this number\'s mobile network in '.Market::name($country).'. Send `network` ('.implode(', ', self::PAYOUT_OPERATORS[$country] ?? []).').');
+        }
+
+        // A connection error is thrown on purpose: the outcome is unknown.
+        $response = Http::withToken($this->api_key)
+            ->acceptJson()
+            ->post($this->baseUrl.'/transfers/mobile-money', array_filter([
+                'accountId' => $this->account_id,
+                'amount' => (float) $transaction->amount,
+                'reference' => $transaction->transaction_id,
+                'narration' => $recipient['narration'] ?? null,
+                'phone' => $phone,
+                'operator' => $operator,
+                'country' => strtolower($country),
+            ], fn ($value): bool => $value !== null));
+
+        // Lenco has no definite answer (server error), or already has this
+        // reference from an earlier attempt: verify instead of guessing.
+        if ($response->serverError() || str_contains(strtolower((string) $response->json('message')), 'duplicate reference')) {
+            $transaction->update(['provider_response' => $response->json()]);
+
+            return ApiResponse::error($response->json('message') ?: 'Lenco did not confirm the payout', 502);
+        }
+
+        if (! $response->successful() || ! $response->json('status')) {
+            return $this->refusePayout($transaction, $response->json('message') ?: 'Lenco refused the payout', $response->json());
+        }
+
+        $status = self::mapStatus((string) $response->json('data.status'));
+        $transaction->update([
+            'status' => $status,
+            'provider_transaction_id' => $response->json('data.id') ?? $transaction->provider_transaction_id,
+            'provider_response' => $response->json(),
+        ]);
+
+        if ($status === TransactionStatus::FAILED) {
+            return ApiResponse::error($response->json('data.reasonForFailure') ?: 'Lenco could not deliver the payout', 422);
+        }
+
+        return ApiResponse::success('Payout initiated successfully', [
+            'transaction_id' => $transaction->transaction_id,
+            'reference' => $transaction->provider_transaction_id,
+            'status' => $status->value,
+        ]);
+    }
+
+    /**
+     * Re-check a payout by the reference we sent (our transaction id).
+     *
+     * @see https://lenco-api.readme.io/v2.0/reference/get-transfer-by-reference
+     */
+    public function verifyPayout(Transaction $transaction): JsonResponse
+    {
+        $response = Http::withToken($this->api_key)
+            ->acceptJson()
+            ->get($this->baseUrl.'/transfers/status/'.$transaction->transaction_id);
+
+        // Lenco never created the transfer, so it can't complete later.
+        if ($response->notFound()) {
+            $status = TransactionStatus::FAILED;
+            $providerStatus = 'not_found';
+        } elseif (! $response->successful() || ! $response->json('status')) {
+            return ApiResponse::error($response->json('message') ?? 'Unable to verify the payout with Lenco', $response->status() >= 400 ? $response->status() : 502);
+        } else {
+            $providerStatus = (string) $response->json('data.status');
+            $status = self::mapStatus($providerStatus);
+        }
+
+        $transaction->update(['status' => $status, 'provider_response' => $response->json()]);
+
+        return ApiResponse::status($status->value, self::statusMessage($status), [
+            'transaction_id' => $transaction->transaction_id,
+            'reference' => $transaction->provider_transaction_id,
+            'status' => $status->value,
+            'provider_status' => $providerStatus,
+            'amount' => (float) $transaction->amount,
+            'currency' => $transaction->currency,
+        ]);
+    }
+
+    /**
+     * A definite refusal: nothing was sent, so another provider may be tried.
+     *
+     * @param  array<string, mixed>|null  $providerResponse
+     */
+    private function refusePayout(Transaction $transaction, string $message, ?array $providerResponse = null): JsonResponse
+    {
+        $transaction->update(['status' => TransactionStatus::FAILED, 'provider_response' => $providerResponse ?? ['error' => $message]]);
+
+        return ApiResponse::error($message, 422);
+    }
+
+    /**
+     * The number in local format (e.g. 0977123456), as Lenco expects.
+     */
+    private static function localNumber(string $number, string $country): string
+    {
+        $msisdn = Market::msisdn($number, $country);
+        $code = (string) Market::callingCode($country);
+
+        return $code !== '' && str_starts_with($msisdn, $code) ? '0'.substr($msisdn, strlen($code)) : $msisdn;
+    }
+
+    /**
+     * The operator for a local number, from prefixes we're sure of. Anything
+     * else needs `network`, so money is never sent to a guessed network.
+     */
+    private static function detectOperator(string $localNumber, string $country): ?string
+    {
+        $prefix = substr(ltrim($localNumber, '0'), 0, 2);
+        $prefixes = $country === 'MW'
+            ? ['airtel' => ['99'], 'tnm' => ['88']]
+            : ['mtn' => ['76', '96', '56'], 'airtel' => ['77', '97', '57'], 'zamtel' => ['75', '95', '55']];
+
+        foreach ($prefixes as $operator => $codes) {
+            if (in_array($prefix, $codes, true)) {
+                return $operator;
+            }
+        }
 
         return null;
     }

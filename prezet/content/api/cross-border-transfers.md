@@ -8,7 +8,7 @@ category: API Reference
 A cross-border transfer connects two accounts **you already own**:
 
 1. A **PayPal** business account, where the sender pays (for example USD).
-2. A **mobile-money payout** account, such as pawaPay, that holds a float in the
+2. A **mobile-money payout** account, such as Lenco or pawaPay, that holds a float in the
    recipient's currency (for example ZMW).
 
 No money moves between PayPal and the mobile-money provider during the
@@ -221,7 +221,7 @@ See [Responses & Errors](/docs/api/responses) for the response envelope.
 
 1. On the **Providers** page, add your **PayPal** account (collects the
    sender's payment) and at least one **payout** provider for the recipient's
-   country, such as pawaPay. Tick the countries each one serves.
+   country, such as Lenco (set its **Account ID (for payouts)**) or pawaPay. Tick the countries each one serves.
 2. Keep a float in the payout account, in the recipient's currency. Set a float
    rule on the **Treasury** page so you're alerted before it runs low.
 3. Run a queue worker (`php artisan queue:work`). Payouts and refunds run as

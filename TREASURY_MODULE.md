@@ -113,6 +113,7 @@ These exist today and must be reused, not rebuilt:
 - `app/Http/Controllers/PayoutController.php`: `POST /api/v1/payout/request` and `POST /api/v1/payout/verify`. It creates the `debit` transaction before calling the driver, falls back only on 4xx, and stops on 5xx or an exception (`202 pending`).
 - **Idempotency:** the `Idempotency-Key` header, stored in `transactions.idempotency_key`. A replay returns the original payout, a cache lock stops concurrent duplicates (`409`), and the key is re-checked under the lock.
 - **pawaPay** (`PawapayController`): `POST /payouts` and `GET /payouts/{id}`, with the payout id = our transaction id, plus a `live`/`sandbox` **Environment** config field (default live).
+- **Lenco** (`LencoController`, added 2026-10-15): `POST /transfers/mobile-money` from the account in the new optional **Account ID (for payouts)** field, verified with `GET /transfers/status/{reference}` (reference = our transaction id). Zambia (MTN, Airtel, Zamtel) and Malawi (Airtel, TNM). A server error or a duplicate reference is an unknown outcome; a transfer Lenco never created fails on verify. Tests in `tests/Feature/LencoPayoutTest.php`.
 - **`SandboxPayoutController`:** `SANDBOX_ONLY`, so it's hidden and refused in production and excluded from coverage. Outcomes are set by the number suffix (0000 refused, 9999 unknown, 1111 fails later).
 - **Fees:** schedules gain an optional `payout` section (`FeeCalculator::payoutFee`). For a debit, `net_amount` is `amount + fee`, the total taken from the float.
 - **Shared pieces:** `TransactionVerifier` verifies debits through `verifyPayout`. `DriverRegistry` centralises driver discovery and capabilities, and `Market::msisdn()` normalises numbers.
@@ -325,6 +326,7 @@ _Add a line whenever a step's status changes._
 |---|---|---|
 | 2026-10-15 | All | Plan created. Step 0 ✅; steps 2 and 5 🟡 (partial pieces listed); steps 1, 3, 4, 6, 7 ⬜; FX ⏸ |
 | 2026-10-15 | 1 | ✅ Payouts: contract, routing by capability, payout API with idempotency, pawaPay payouts and sandbox environment, simulated driver, payout fees, docs and tests |
+| 2026-10-15 | 1 | Lenco payouts (Zambia and Malawi mobile money), so cross-border transfers can deliver through Lenco |
 | 2026-10-15 | 2 | ✅ Ledger: double-entry entries in minor units, synced from transactions, balances, Accounts dialog on the ledger, rebuild and opening-balance commands, tests |
 | 2026-10-15 | 4 | ✅ Float rules and alerts: rules, one open alert per rule, automatic and scheduled checks |
 | 2026-10-15 | 5 | ✅ Treasury page: accounts, float status, alerts with Top up, transfers, ledger activity (ledger balances only; step 3 still ⬜) |

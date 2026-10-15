@@ -56,6 +56,25 @@ collections in Zambia (`ZM`) and Malawi (`MW`). It:
 To enable it, add a provider in the dashboard, choose the **Lenco** driver, paste
 your Lenco API key, and set the supported countries to `ZM,MW`.
 
+### Payouts through Lenco
+
+Lenco also sends **payouts** to mobile wallets in Zambia (MTN, Airtel, Zamtel)
+and Malawi (Airtel, TNM), from one of your Lenco accounts. Payouts also power
+[cross-border transfers](/docs/api/cross-border-transfers), where the sender
+pays with PayPal and the recipient is paid through Lenco. To turn payouts on,
+set **Account ID (for payouts)** on the provider: the 36-character ID of the
+Lenco account to pay from (from your Lenco dashboard or `GET /accounts`).
+Without it, Lenco is used for collections only and refuses payouts, so the
+switch tries your next payout provider.
+
+| | |
+| --- | --- |
+| **Endpoint** | `POST /transfers/mobile-money`, checked with `GET /transfers/status/{reference}` |
+| **Reference** | The switch's `transaction_id`, so a payout can always be looked up |
+| **Network** | Detected from the number in Zambia. In Malawi, only `099…` (Airtel) and `088…` (TNM) are detected. For other numbers, send `network` with [Send a Payout](/docs/api/payouts), or the payout is refused rather than sent to a guessed network. |
+| **Fee** | Estimated at K8.50 per transfer. |
+| **Unknown outcomes** | A Lenco server error, or a "duplicate reference" (an earlier attempt already reached Lenco), stops the switch: verify the payout before retrying. A transfer Lenco never created is marked failed on verify. |
+
 ## Built-in driver: Airtel Money
 
 The platform also ships an **Airtel Money** driver (`AirtelController`) for

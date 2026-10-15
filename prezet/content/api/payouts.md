@@ -27,7 +27,7 @@ Both need your API token. See [Authentication](/docs/api/authentication).
 | `account_number` | string | required | The recipient's mobile-money number, e.g. `0977123456`. |
 | `country` | string | required, 2 letters | The recipient's market. |
 | `currency` | string | nullable, 3 letters | Defaults to the country's own currency (e.g. ZMW for `ZM`). |
-| `network` | string | nullable | The recipient's operator, when the provider can't detect it (e.g. pawaPay's `MTN_MOMO_ZMB`). |
+| `network` | string | nullable | The recipient's operator, when the provider can't detect it (e.g. pawaPay's `MTN_MOMO_ZMB`, or Lenco's `airtel`, `mtn`, `zamtel` or `tnm`). |
 | `narration` | string | nullable, max 100 | A note shown to the recipient where the provider supports it. |
 | `callback_url` | string | nullable, valid URL | Where the final result is POSTed once the payout settles. |
 
@@ -99,6 +99,7 @@ The switch asks the provider for the latest status and returns `success`,
 | Driver | Notes |
 | --- | --- |
 | **pawaPay** | Mobile-money payouts in its markets. Set the provider's **Environment** to `sandbox` with a sandbox API token to test. |
+| **Lenco** | Mobile-money payouts in Zambia and Malawi, from the Lenco account set in the provider's **Account ID (for payouts)**. See [Payouts through Lenco](/docs/providers). |
 | **Simulated Payouts** | Sandbox only, never available in production. The recipient number decides the outcome: ending in `0000` is refused (so fallback runs), `9999` gives no answer (so you verify), `1111` fails on verification, and anything else completes. |
 
 ## Errors
