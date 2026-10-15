@@ -106,3 +106,11 @@ test('the providers guide documents the paypal driver and its webhook', function
         ->assertSee('Built-in driver: PayPal', false)
         ->assertSee('/api/webhooks/paypal/{provider_id}', false);
 });
+
+test('the quote api is documented', function () {
+    $this->get('/docs/api/quote-payment')
+        ->assertOk()
+        ->assertSee('Quote a Payment', false)
+        ->assertSee('/api/v1/payment/quote', false)
+        ->assertSee('payer_pays_fees', false);
+});

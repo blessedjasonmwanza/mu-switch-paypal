@@ -143,6 +143,7 @@ collecting via `POST /api/v1/payment/request`.
 - Installation: https://moneyunify.one/docs/installation
 - API — How the switch works: https://moneyunify.one/docs/api/overview
 - API — Request a payment: https://moneyunify.one/docs/api/request-payment
+- API — Quote a payment: https://moneyunify.one/docs/api/quote-payment
 - API — Verify a payment: https://moneyunify.one/docs/api/verify-payment
 - API — Responses & errors: https://moneyunify.one/docs/api/responses
 - Coverage: https://moneyunify.one/docs/api/coverage

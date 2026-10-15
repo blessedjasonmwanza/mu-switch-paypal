@@ -515,6 +515,13 @@ PayPal can charge AUD, BRL, CAD, CNY, CZK, DKK, EUR, GBP, HKD, HUF, ILS, JPY,
 MXN, MYR, NOK, NZD, PHP, PLN, SEK, SGD, CHF, THB, TWD and USD. HUF, JPY and TWD
 amounts must be whole numbers.
 
+**Fees.** Before capture, PayPal's fee is estimated from its published Checkout
+rate: 3.49% plus a fixed fee in the charged currency (0.49 USD, 0.39 EUR, 0.39
+GBP and so on). Once captured, the switch records the **exact** fee PayPal
+reports, and the transaction is marked **Actual**. If your PayPal rate differs,
+set a `fee_schedule` on the provider. Use [Quote a Payment](/docs/api/quote-payment)
+to see the fees before charging.
+
 ## Adding your own driver
 
 Drivers are plain classes in `app/Http/Controllers/Providers` that implement

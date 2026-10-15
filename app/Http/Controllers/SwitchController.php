@@ -7,6 +7,9 @@ use App\Contracts\PaymentProviderInterface;
 use App\Exceptions\NoEligibleProviderException;
 use App\Models\Transaction;
 use App\Support\Currency;
+use App\Support\Fees\FeeCalculator;
+use App\Support\Fees\PaymentQuoter;
+use App\Support\Fees\ProviderQuote;
 use App\Support\Market;
 use App\Support\ProviderCallContext;
 use App\Support\ProviderRouter;
@@ -107,6 +110,43 @@ class SwitchController extends Controller
         }
 
         return $lastError ?? ApiResponse::error('No provider could process the payment request', 500);
+    }
+
+    /**
+     * Quote a payment's fees for every provider that would take it, before
+     * charging anyone. Each quote shows both sides: the merchant absorbing the
+     * fees, and the payer being charged extra to cover them.
+     */
+    public function quotePayment(Request $request, PaymentQuoter $quoter): JsonResponse
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'country' => ['required', 'string', 'size:2', Rule::in(Market::codes())],
+            'currency' => 'nullable|string|size:3|alpha',
+        ]);
+
+        $country = strtoupper($request['country']);
+        $currency = Currency::resolve($request->input('currency'), $country);
+        $amount = FeeCalculator::money((string) $request->input('amount'));
+        $decimals = Currency::decimals($currency);
+
+        if ($amount->strippedOfTrailingZeros()->getScale() > $decimals) {
+            return ApiResponse::error("{$currency} amounts can have at most {$decimals} decimal places", 422);
+        }
+
+        try {
+            $quotes = $quoter->quote($request->user(), $amount, $country, $currency);
+        } catch (NoEligibleProviderException $e) {
+            return ApiResponse::error($e->getMessage(), 400);
+        }
+
+        return ApiResponse::success('Quote generated', [
+            'amount' => (string) $amount->toScale($decimals),
+            'currency' => $currency,
+            'country' => $country,
+            'quoted_at' => now()->toIso8601String(),
+            'quotes' => array_map(fn (ProviderQuote $quote): array => $quote->toArray(), $quotes),
+        ]);
     }
 
     /**
