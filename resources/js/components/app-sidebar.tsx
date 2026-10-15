@@ -9,6 +9,7 @@ import {
     Bot,
     Landmark,
     ArrowLeftRight,
+    Send,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -30,6 +31,7 @@ import logs from '@/routes/logs';
 import payments from '@/routes/payments';
 import providers from '@/routes/providers';
 import rates from '@/routes/rates';
+import { index as sendIndex } from '@/routes/send';
 import { index as treasuryIndex } from '@/routes/treasury';
 import type { NavItem } from '@/types';
 
@@ -48,6 +50,11 @@ const mainNavItems: NavItem[] = [
         title: 'Payments',
         href: payments.index.url(),
         icon: Wallet,
+    },
+    {
+        title: 'Send Money',
+        href: sendIndex.url(),
+        icon: Send,
     },
     {
         title: 'Logs',

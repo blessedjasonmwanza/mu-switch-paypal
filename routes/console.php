@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Balances change as money moves, but re-check floats regularly as a safety net.
 Schedule::command('treasury:check-floats')->everyFiveMinutes()->withoutOverlapping();
+
+// Payout providers rarely call back, so move in-flight transfers forward every minute.
+Schedule::command('cross-border:refresh')->everyMinute()->withoutOverlapping();

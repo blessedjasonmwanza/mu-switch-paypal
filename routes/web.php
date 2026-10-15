@@ -12,6 +12,7 @@ use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\RatesController;
 use App\Http\Controllers\RebalanceSuggestionController;
 use App\Http\Controllers\SendMoneyAssistantController;
+use App\Http\Controllers\SendMoneyController;
 use App\Http\Controllers\TreasuryController;
 use App\Http\Controllers\TreasuryTransferController;
 use App\Support\Coverage;
@@ -54,6 +55,10 @@ if (! config('app.docs_only_routes')) {
         Route::get('fee-policy', [FeePolicyController::class, 'show'])->name('fee-policy.show');
         Route::put('fee-policy', [FeePolicyController::class, 'update'])->name('fee-policy.update');
 
+        Route::get('send', [SendMoneyController::class, 'index'])->name('send.index');
+        Route::post('send/quote', [SendMoneyController::class, 'quote'])->middleware('throttle:60,1')->name('send.quote');
+        Route::post('send', [SendMoneyController::class, 'store'])->name('send.store');
+        Route::post('send/{transfer:reference}/verify', [SendMoneyController::class, 'verify'])->name('send.verify');
         Route::post('send/assistant', [SendMoneyAssistantController::class, 'message'])->middleware('throttle:20,1')->name('send.assistant.message');
         Route::post('send/assistant/decide', [SendMoneyAssistantController::class, 'decide'])->middleware('throttle:20,1')->name('send.assistant.decide');
 
