@@ -228,7 +228,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                     </Avatar>
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-56" align="end">
+                            <DropdownMenuContent className="w-60" align="end">
                                 {auth.user && (
                                     <UserMenuContent user={auth.user} />
                                 )}
