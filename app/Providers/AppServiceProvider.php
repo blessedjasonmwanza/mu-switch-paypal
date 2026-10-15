@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Support\Fx\Contracts\FxRateProviderInterface;
+use App\Support\Fx\FxQuoter;
+use App\Support\Fx\Providers\StaticFxRateProvider;
 use App\Support\ProviderCallLogger;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Events\ConnectionFailed;
@@ -28,6 +31,13 @@ class AppServiceProvider extends ServiceProvider
             GetHeadings::class,
             \App\Support\Prezet\GetHeadings::class,
         );
+
+        $this->app->singleton(
+            FxRateProviderInterface::class,
+            fn () => new StaticFxRateProvider(config('moneyunify_paypal.fx', []))
+        );
+
+        $this->app->singleton(FxQuoter::class);
     }
 
     /**
