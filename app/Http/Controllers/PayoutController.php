@@ -4,26 +4,19 @@ namespace App\Http\Controllers;
 
 use App\ApiResponse;
 use App\Contracts\PayoutProviderInterface;
-use App\Enums\TransactionStatus;
 use App\Exceptions\NoEligibleProviderException;
-use App\Models\Customer;
-use App\Models\CustomerAccount;
-use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Support\Currency;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Market;
-use App\Support\ProviderCallContext;
+use App\Support\Payouts\PayoutDispatcher;
 use App\Support\ProviderRouter;
 use App\Support\TransactionVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Throwable;
 
 /**
  * Sends money out (payouts) through the account's payout-capable providers.
@@ -34,6 +27,8 @@ use Throwable;
  */
 class PayoutController extends Controller
 {
+    public function __construct(private readonly PayoutDispatcher $dispatcher) {}
+
     /**
      * How long an Idempotency-Key is locked while its payout is being sent.
      */
@@ -95,14 +90,17 @@ class PayoutController extends Controller
                 return $this->replay($existing);
             }
 
-            $recipient = [
+            $result = $this->dispatcher->send($providers, [
                 'account_number' => (string) $request['account_number'],
                 'network' => $request->input('network'),
                 'narration' => $request->input('narration'),
-            ];
-            $customer = $this->resolveRecipient($recipient['account_number'], $country);
+            ], (string) $request['amount'], $currency, $country, $request->input('callback_url'));
 
-            return $this->sendThroughProviders($providers->all(), $request, $recipient, $customer, $currency, $country, $idempotencyKey);
+            if ($idempotencyKey && ! $result->refused()) {
+                $result->transaction?->update(['idempotency_key' => $idempotencyKey]);
+            }
+
+            return $result->response;
         } finally {
             $lock?->release();
         }
@@ -130,105 +128,6 @@ class PayoutController extends Controller
     }
 
     /**
-     * Try each provider in turn until one accepts, refuses for good, or can't say.
-     *
-     * @param  list<PaymentProvider>  $providers
-     * @param  array{account_number: string, network: ?string, narration: ?string}  $recipient
-     */
-    private function sendThroughProviders(array $providers, Request $request, array $recipient, Customer $customer, string $currency, string $country, ?string $idempotencyKey): JsonResponse
-    {
-        $lastError = null;
-
-        foreach ($providers as $provider) {
-            $driver = app($provider->class);
-
-            if (! $driver instanceof PayoutProviderInterface) {
-                $lastError = ApiResponse::error("Payout driver {$provider->class} is not available", 500);
-
-                continue;
-            }
-
-            if ($configError = $driver->setProvider($provider)) {
-                $lastError = $configError;
-
-                continue;
-            }
-
-            $transaction = $this->newPayout($provider, $request, $customer, $currency, $country);
-            ProviderCallContext::set($provider);
-
-            try {
-                $response = $driver->requestPayout($transaction, $recipient);
-            } catch (Throwable $e) {
-                report($e);
-
-                return $this->unknownOutcome($transaction, $idempotencyKey);
-            } finally {
-                ProviderCallContext::clear();
-            }
-
-            $code = $response->getStatusCode();
-
-            if ($code < 300) {
-                $transaction->update(['idempotency_key' => $idempotencyKey]);
-
-                return $response;
-            }
-
-            if ($code >= 500) {
-                return $this->unknownOutcome($transaction, $idempotencyKey);
-            }
-
-            // A definite refusal: safe to try the next provider.
-            if ($transaction->refresh()->status !== TransactionStatus::FAILED) {
-                $transaction->update(['status' => TransactionStatus::FAILED]);
-            }
-
-            $lastError = $response;
-        }
-
-        return $lastError ?? ApiResponse::error('No payout provider could process the request', 500);
-    }
-
-    /**
-     * The payout record, created before the provider is called.
-     */
-    private function newPayout(PaymentProvider $provider, Request $request, Customer $customer, string $currency, string $country): Transaction
-    {
-        $transactionId = (string) Str::uuid();
-
-        $transaction = new Transaction([
-            'transaction_id' => $transactionId,
-            'provider_transaction_id' => $transactionId,
-            'customer_id' => $customer->id,
-            'amount' => $request['amount'],
-            'currency' => $currency,
-            'country' => $country,
-            'status' => TransactionStatus::PENDING,
-            'direction' => 'debit',
-            'callback_url' => $request->input('callback_url'),
-        ]);
-        $transaction->paymentProvider()->associate($provider);
-        $transaction->save();
-
-        return $transaction;
-    }
-
-    /**
-     * The provider gave no definite answer: keep the payout pending and stop.
-     */
-    private function unknownOutcome(Transaction $transaction, ?string $idempotencyKey): JsonResponse
-    {
-        $transaction->update(['status' => TransactionStatus::PENDING, 'idempotency_key' => $idempotencyKey]);
-
-        return ApiResponse::status('pending', 'The payout outcome is unknown. Verify it before retrying; no other provider was tried.', [
-            'transaction_id' => $transaction->transaction_id,
-            'reference' => $transaction->provider_transaction_id,
-            'status' => TransactionStatus::PENDING->value,
-        ], 202);
-    }
-
-    /**
      * The payout already sent for this Idempotency-Key, if any.
      */
     private function findByIdempotencyKey(User $user, string $key): ?Transaction
@@ -252,27 +151,5 @@ class PayoutController extends Controller
             'status' => $transaction->status->value,
             'replayed' => true,
         ]);
-    }
-
-    /**
-     * Find or create the recipient's customer record idempotently.
-     */
-    private function resolveRecipient(string $accountNumber, string $country): Customer
-    {
-        $msisdn = Market::msisdn($accountNumber, $country);
-
-        return DB::transaction(function () use ($msisdn, $country): Customer {
-            $customer = Customer::firstOrCreate(
-                ['email' => $msisdn.'@moneyunify.local'],
-                ['name' => 'Customer '.$msisdn],
-            );
-
-            CustomerAccount::updateOrCreate(
-                ['number' => $msisdn, 'country' => $country],
-                ['customer_id' => $customer->id, 'name' => $customer->name],
-            );
-
-            return $customer;
-        });
     }
 }
