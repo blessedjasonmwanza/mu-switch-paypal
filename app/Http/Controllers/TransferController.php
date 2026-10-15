@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\CrossBorderStatus;
 use App\Enums\TransactionStatus;
 use App\Models\CrossBorderTransfer;
+use App\Models\CrossBorderTransferEvent;
 use App\Models\Transaction;
 use App\Support\Currency;
 use App\Support\Fees\FeeCalculator;
@@ -71,12 +72,21 @@ class TransferController extends Controller
         $perPage = (int) $request->integer('perPage');
         $perPage = in_array($perPage, self::PER_PAGE_OPTIONS, true) ? $perPage : self::PER_PAGE_OPTIONS[0];
 
-        // IDs of payout transactions that are the payout leg of a cross-border transfer.
-        // We exclude these from standalone payouts to prevent double-counting.
-        $cbPayoutTxIds = CrossBorderTransfer::query()
+        // IDs of all transactions that belong to any cross-border transfer
+        // (funding, payout, or refund) or are refunds of those transactions.
+        // We exclude these from standalone payouts to prevent double-counting or phantom payouts.
+        $cbTransfers = CrossBorderTransfer::query()
             ->where('user_id', $user->id)
-            ->whereNotNull('payout_transaction_id')
-            ->pluck('payout_transaction_id');
+            ->get(['funding_transaction_id', 'payout_transaction_id', 'refund_transaction_id']);
+
+        $cbTxIds = $cbTransfers
+            ->flatMap(fn ($cb) => array_filter([
+                $cb->funding_transaction_id,
+                $cb->payout_transaction_id,
+                $cb->refund_transaction_id,
+            ]))
+            ->unique()
+            ->values();
 
         // Cross-border base query
         $cbBase = fn (): Builder => CrossBorderTransfer::query()
@@ -87,7 +97,11 @@ class TransferController extends Controller
         $payoutBase = fn (): Builder => Transaction::query()
             ->whereIn('payment_provider_id', $providerIds)
             ->where('direction', 'debit')
-            ->whereNotIn('id', $cbPayoutTxIds)
+            ->whereNotIn('id', $cbTxIds)
+            ->where(function (Builder $q) use ($cbTxIds) {
+                $q->whereNull('refund_of_id')
+                    ->orWhereNotIn('refund_of_id', $cbTxIds);
+            })
             ->tap(fn (Builder $q) => $this->applyPayoutSearch($q, $search));
 
         $cbInWindow = fn (): Builder => $cbBase()->when($from, fn (Builder $q) => $q->where('created_at', '>=', $from));
@@ -211,7 +225,7 @@ class TransferController extends Controller
     private function metrics(Builder $cbQuery, Builder $payoutQuery): array
     {
         // Cross-border counts and volume
-        $cbSuccessStatuses = [CrossBorderStatus::DELIVERED->value, CrossBorderStatus::REFUNDED->value];
+        $cbSuccessStatuses = [CrossBorderStatus::DELIVERED->value];
         $cbPendingStatuses = [
             CrossBorderStatus::AWAITING_PAYMENT->value,
             CrossBorderStatus::FUNDED->value,
@@ -222,6 +236,7 @@ class TransferController extends Controller
             CrossBorderStatus::PAYMENT_FAILED->value,
             CrossBorderStatus::PAYOUT_FAILED->value,
             CrossBorderStatus::REFUND_FAILED->value,
+            CrossBorderStatus::REFUNDED->value,
         ];
 
         $cbRow = $cbQuery
@@ -281,7 +296,7 @@ class TransferController extends Controller
         $days = 14;
         $start = Carbon::now()->subDays($days - 1)->startOfDay();
 
-        $cbSuccessStatuses = [CrossBorderStatus::DELIVERED->value, CrossBorderStatus::REFUNDED->value];
+        $cbSuccessStatuses = [CrossBorderStatus::DELIVERED->value];
         $cbPendingStatuses = [
             CrossBorderStatus::AWAITING_PAYMENT->value,
             CrossBorderStatus::FUNDED->value,
@@ -292,6 +307,7 @@ class TransferController extends Controller
             CrossBorderStatus::PAYMENT_FAILED->value,
             CrossBorderStatus::PAYOUT_FAILED->value,
             CrossBorderStatus::REFUND_FAILED->value,
+            CrossBorderStatus::REFUNDED->value,
         ];
 
         $cbRows = $cbQuery
@@ -339,7 +355,7 @@ class TransferController extends Controller
      */
     private function topCurrencies(Builder $cbQuery, Builder $payoutQuery): array
     {
-        $cbSuccessStatuses = [CrossBorderStatus::DELIVERED->value, CrossBorderStatus::REFUNDED->value];
+        $cbSuccessStatuses = [CrossBorderStatus::DELIVERED->value];
 
         $cbCurrencies = $cbQuery
             ->selectRaw('target_currency as currency')
@@ -453,7 +469,7 @@ class TransferController extends Controller
         // Apply status scoping to Cross-Border query
         if ($status) {
             $cbQuery->whereIn('status', match ($status) {
-                'success' => [CrossBorderStatus::DELIVERED, CrossBorderStatus::REFUNDED],
+                'success' => [CrossBorderStatus::DELIVERED],
                 'pending' => [
                     CrossBorderStatus::AWAITING_PAYMENT,
                     CrossBorderStatus::FUNDED,
@@ -464,6 +480,7 @@ class TransferController extends Controller
                     CrossBorderStatus::PAYMENT_FAILED,
                     CrossBorderStatus::PAYOUT_FAILED,
                     CrossBorderStatus::REFUND_FAILED,
+                    CrossBorderStatus::REFUNDED,
                 ],
                 default => [],
             });
@@ -486,9 +503,10 @@ class TransferController extends Controller
                 ->with([
                     'fundingProvider:id,name,class,logo_url',
                     'payoutProvider:id,name,class,logo_url',
-                    'fundingTransaction:id,transaction_id,amount,currency,status,provider_transaction_id',
-                    'payoutTransaction:id,transaction_id,amount,currency,status,provider_transaction_id',
-                    'refundTransaction:id,transaction_id,amount,currency,status,provider_transaction_id',
+                    'fundingTransaction:id,transaction_id,amount,currency,status,provider_transaction_id,provider_response',
+                    'payoutTransaction:id,transaction_id,amount,currency,status,provider_transaction_id,provider_response',
+                    'refundTransaction:id,transaction_id,amount,currency,status,provider_transaction_id,provider_response',
+                    'events',
                 ])
                 ->latest()
                 ->get()
@@ -544,6 +562,29 @@ class TransferController extends Controller
         $sourceAmount = $transfer->sourceAmount()->toFloat();
         $targetAmount = $transfer->targetAmount()->toFloat();
 
+        // Extract provider feedback from payout or refund legs if present
+        $payoutResponse = $transfer->payoutTransaction?->provider_response;
+        $providerFeedback = null;
+        if (is_array($payoutResponse)) {
+            $providerFeedback = $payoutResponse['message']
+                ?? $payoutResponse['error']
+                ?? $payoutResponse['rejectionReason']
+                ?? $payoutResponse['description']
+                ?? (isset($payoutResponse['data']) && is_array($payoutResponse['data']) ? ($payoutResponse['data']['message'] ?? $payoutResponse['data']['error'] ?? null) : null);
+        }
+
+        // Format timeline events
+        $events = $transfer->events->map(fn (CrossBorderTransferEvent $e): array => [
+            'id' => $e->id,
+            'from' => $e->from_status?->value,
+            'to' => $e->to_status?->value,
+            'fromLabel' => $e->from_status?->label(),
+            'toLabel' => $e->to_status?->label(),
+            'note' => $e->note,
+            'createdAt' => $e->created_at?->format('Y-m-d H:i:s T'),
+            'createdAtHuman' => $e->created_at?->diffForHumans(),
+        ])->values()->all();
+
         return [
             'id' => "cb_{$transfer->id}",
             'type' => 'cross_border',
@@ -574,6 +615,35 @@ class TransferController extends Controller
             'fxMargin' => $transfer->fx_margin_percent !== null ? (string) $transfer->fx_margin_percent : null,
             'narration' => $transfer->narration,
             'failureReason' => $transfer->failure_reason,
+            'providerFeedback' => $providerFeedback,
+            'fundingLeg' => $transfer->fundingTransaction ? [
+                'id' => $transfer->fundingTransaction->transaction_id,
+                'providerReference' => $transfer->fundingTransaction->provider_transaction_id,
+                'status' => $transfer->fundingTransaction->status->value,
+                'amount' => (float) $transfer->fundingTransaction->amount,
+                'currency' => $transfer->fundingTransaction->currency,
+                'provider' => $transfer->fundingProvider?->name,
+            ] : null,
+            'payoutLeg' => $transfer->payoutTransaction ? [
+                'id' => $transfer->payoutTransaction->transaction_id,
+                'providerReference' => $transfer->payoutTransaction->provider_transaction_id,
+                'status' => $transfer->payoutTransaction->status->value,
+                'amount' => (float) $transfer->payoutTransaction->amount,
+                'currency' => $transfer->payoutTransaction->currency,
+                'provider' => $transfer->payoutProvider?->name,
+                'providerResponse' => $transfer->payoutTransaction->provider_response,
+            ] : null,
+            'refundLeg' => $transfer->refundTransaction ? [
+                'id' => $transfer->refundTransaction->transaction_id,
+                'providerReference' => $transfer->refundTransaction->provider_transaction_id,
+                'status' => $transfer->refundTransaction->status->value,
+                'amount' => (float) $transfer->refundTransaction->amount,
+                'currency' => $transfer->refundTransaction->currency,
+                'provider' => $transfer->fundingProvider?->name,
+                'providerResponse' => $transfer->refundTransaction->provider_response,
+            ] : null,
+            'logsUrl' => route('logs.index', ['q' => $transfer->reference]),
+            'events' => $events,
             'fundedAt' => $transfer->funded_at?->format('Y-m-d H:i:s T'),
             'deliveredAt' => $transfer->delivered_at?->format('Y-m-d H:i:s T'),
             'refundedAt' => $transfer->refunded_at?->format('Y-m-d H:i:s T'),
@@ -598,6 +668,16 @@ class TransferController extends Controller
         };
 
         $amount = round((float) $tx->amount, 2);
+
+        $payoutResponse = $tx->provider_response;
+        $providerFeedback = null;
+        if (is_array($payoutResponse)) {
+            $providerFeedback = $payoutResponse['message']
+                ?? $payoutResponse['error']
+                ?? $payoutResponse['rejectionReason']
+                ?? $payoutResponse['description']
+                ?? (isset($payoutResponse['data']) && is_array($payoutResponse['data']) ? ($payoutResponse['data']['message'] ?? $payoutResponse['data']['error'] ?? null) : null);
+        }
 
         return [
             'id' => "tx_{$tx->id}",
@@ -628,7 +708,21 @@ class TransferController extends Controller
             'fxRate' => $tx->is_fx && $tx->fx_rate !== null ? (string) $tx->fx_rate : null,
             'fxMargin' => null,
             'narration' => null,
-            'failureReason' => $tx->status === TransactionStatus::FAILED ? ($tx->provider_response['message'] ?? 'Payout declined') : null,
+            'failureReason' => $tx->status === TransactionStatus::FAILED ? ($providerFeedback ?? 'Payout declined') : null,
+            'providerFeedback' => $providerFeedback,
+            'fundingLeg' => null,
+            'payoutLeg' => [
+                'id' => $tx->transaction_id,
+                'providerReference' => $tx->provider_transaction_id,
+                'status' => $tx->status->value,
+                'amount' => $amount,
+                'currency' => $tx->currency,
+                'provider' => $tx->paymentProvider?->name,
+                'providerResponse' => $tx->provider_response,
+            ],
+            'refundLeg' => null,
+            'logsUrl' => route('logs.index', ['q' => $tx->transaction_id]),
+            'events' => [],
             'fees' => $this->feeBreakdown($tx),
             'fundedAt' => null,
             'deliveredAt' => $tx->status === TransactionStatus::SUCCESS ? $tx->updated_at?->format('Y-m-d H:i:s T') : null,

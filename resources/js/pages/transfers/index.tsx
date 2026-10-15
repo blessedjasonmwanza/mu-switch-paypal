@@ -3,9 +3,30 @@ import { Button, Select, TextField } from '@radix-ui/themes';
 import { ArrowUpRight, ChevronLeft, ChevronRight, Coins, Globe, Search, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { index as transfersIndex } from '@/routes/transfers';
+
+interface TransferLeg {
+    id: string;
+    providerReference: string | null;
+    status: string;
+    amount: number;
+    currency: string;
+    provider: string | null;
+    providerResponse?: Record<string, unknown> | null;
+}
+
+interface TransferEventItem {
+    id: number;
+    from: string | null;
+    to: string | null;
+    fromLabel: string | null;
+    toLabel: string | null;
+    note: string | null;
+    createdAt: string | null;
+    createdAtHuman: string | null;
+}
 
 interface TransferItem {
     id: string;
@@ -15,6 +36,8 @@ interface TransferItem {
     providerReference: string | null;
     provider: string | null;
     providerLogo: string | null;
+    fundingProvider?: string | null;
+    payoutProvider?: string | null;
     account: string | null;
     recipientName: string | null;
     amount: number;
@@ -22,6 +45,7 @@ interface TransferItem {
     country: string | null;
     countryName: string | null;
     status: string;
+    rawStatus: string;
     sourceAmount: number | null;
     sourceCurrency: string | null;
     targetAmount: number;
@@ -36,6 +60,12 @@ interface TransferItem {
         estimated: boolean;
     } | null;
     failureReason: string | null;
+    providerFeedback: string | null;
+    fundingLeg: TransferLeg | null;
+    payoutLeg: TransferLeg | null;
+    refundLeg: TransferLeg | null;
+    logsUrl: string;
+    events: TransferEventItem[];
     createdAtHuman: string | null;
     createdAt: string | null;
 }
@@ -536,7 +566,13 @@ export default function TransfersIndex({
                                                 </span>
                                             </td>
                                             <td className="px-5 py-3 whitespace-nowrap text-neutral-700 dark:text-neutral-300">
-                                                {tx.provider ?? '—'}
+                                                {tx.type === 'cross_border' && tx.fundingProvider && tx.payoutProvider ? (
+                                                    <span className="text-xs">
+                                                        {tx.fundingProvider} <span className="text-neutral-400">→</span> {tx.payoutProvider}
+                                                    </span>
+                                                ) : (
+                                                    (tx.provider ?? '—')
+                                                )}
                                             </td>
                                             <td className="px-5 py-3 font-mono text-xs whitespace-nowrap text-neutral-600 dark:text-neutral-400">
                                                 {tx.account ?? '—'}
@@ -550,12 +586,62 @@ export default function TransfersIndex({
                                                 {tx.country ? <span title={tx.countryName ?? undefined}>{tx.country}</span> : '—'}
                                             </td>
                                             <td className="px-5 py-3 whitespace-nowrap">
-                                                <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(tx.status))}>
-                                                    {tx.status}
-                                                </span>
+                                                {tx.type === 'cross_border' && tx.rawStatus === 'refunded' ? (
+                                                    <div className="flex flex-col items-start gap-0.5">
+                                                        <span className="inline-flex rounded-md bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                                            PayPal Reversed
+                                                        </span>
+                                                        <span className="text-[11px] font-medium text-red-600 dark:text-red-400">
+                                                            {tx.targetCurrency} payout failed
+                                                        </span>
+                                                    </div>
+                                                ) : tx.type === 'cross_border' && (tx.rawStatus === 'payout_failed' || tx.rawStatus === 'refund_failed') ? (
+                                                    <div className="flex flex-col items-start gap-0.5">
+                                                        <span className="inline-flex rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                                                            Payout Failed
+                                                        </span>
+                                                        <span className="text-[11px] text-neutral-500">
+                                                            Refunding sender…
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(tx.status))}>
+                                                        {tx.status}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-5 py-3 text-right font-semibold tabular-nums whitespace-nowrap">
-                                                {formatMoney(tx.amount, tx.currency)}
+                                                {tx.type === 'cross_border' && tx.rawStatus === 'refunded' ? (
+                                                    <div>
+                                                        <div className="text-violet-700 dark:text-violet-300">
+                                                            {formatMoney(tx.sourceAmount ?? tx.amount, tx.sourceCurrency ?? tx.currency)}
+                                                            <span className="ml-1 text-[11px] font-normal text-violet-600/80 dark:text-violet-400/80">
+                                                                reversed
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-[11px] font-normal text-neutral-400 line-through">
+                                                            {formatMoney(tx.targetAmount, tx.targetCurrency)} failed
+                                                        </div>
+                                                    </div>
+                                                ) : tx.type === 'cross_border' && (tx.rawStatus === 'payout_failed' || tx.rawStatus === 'refund_failed') ? (
+                                                    <div>
+                                                        <div className="text-red-600 dark:text-red-400">
+                                                            {formatMoney(tx.targetAmount, tx.targetCurrency)}
+                                                        </div>
+                                                        <div className="text-[11px] font-normal text-neutral-400">
+                                                            payout failed
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        <div>{formatMoney(tx.amount, tx.currency)}</div>
+                                                        {tx.type === 'cross_border' && tx.sourceAmount && (
+                                                            <div className="text-[11px] font-normal text-neutral-400">
+                                                                from {formatMoney(tx.sourceAmount, tx.sourceCurrency ?? 'USD')}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}
@@ -595,49 +681,84 @@ export default function TransfersIndex({
 
             {/* Detail dialog */}
             <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader className="border-b pb-4">
-                        <DialogTitle className="flex items-center gap-2">
+                <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+                    <DialogHeader className="shrink-0 border-b border-sidebar-border/70 px-6 py-4 pr-12 text-left">
+                        <DialogTitle className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-sm">{selected?.reference}</span>
                             {selected && (
-                                <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(selected.status))}>
-                                    {selected.status}
-                                </span>
+                                selected.type === 'cross_border' && selected.rawStatus === 'refunded' ? (
+                                    <span className="inline-flex rounded-md bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                        PayPal Reversed
+                                    </span>
+                                ) : (
+                                    <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(selected.status))}>
+                                        {selected.status}
+                                    </span>
+                                )
                             )}
                         </DialogTitle>
-                        <DialogDescription>{selected?.createdAt}</DialogDescription>
+                        <DialogDescription className="text-xs text-neutral-500">{selected?.createdAt}</DialogDescription>
                     </DialogHeader>
 
-                    {selected && (
-                        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                            <Detail label="Amount" value={formatMoney(selected.amount, selected.currency)} />
-                            <Detail label="Currency" value={selected.currency} />
-                            <Detail label="Type" value={selected.type === 'cross_border' ? 'Cross-Border' : 'Direct Payout'} />
-                            <Detail label="Provider" value={selected.provider ?? '—'} />
-                            <Detail label="Provider Ref" value={selected.providerReference ?? '—'} mono />
-                            <Detail label="Account" value={selected.account ?? '—'} mono />
-                            <Detail label="Recipient" value={selected.recipientName ?? '—'} />
-                            <Detail label="Country" value={selected.countryName ? `${selected.countryName} (${selected.country})` : (selected.country ?? '—')} />
-                            <Detail label="Created" value={selected.createdAtHuman ?? '—'} />
-                        </dl>
-                    )}
+                    <div className="flex-1 min-h-0 space-y-4 overflow-y-auto px-6 py-4">
+                        {selected && (
+                            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                                {selected.type === 'cross_border' && selected.rawStatus === 'refunded' ? (
+                                    <>
+                                        <Detail
+                                            label="PayPal Reversal"
+                                            value={`${formatMoney(selected.sourceAmount ?? selected.amount, selected.sourceCurrency ?? selected.currency)} (Refunded to sender)`}
+                                        />
+                                        <Detail
+                                            label="Failed Payout"
+                                            value={`${formatMoney(selected.targetAmount, selected.targetCurrency)} (Delivery Failed)`}
+                                        />
+                                    </>
+                                ) : (
+                                    <>
+                                        <Detail label="Amount" value={formatMoney(selected.amount, selected.currency)} />
+                                        <Detail label="Currency" value={selected.currency} />
+                                    </>
+                                )}
+                                <Detail label="Type" value={selected.typeLabel} />
+                                <Detail label="Provider" value={selected.type === 'cross_border' && selected.fundingProvider && selected.payoutProvider ? `${selected.fundingProvider} → ${selected.payoutProvider}` : (selected.provider ?? '—')} />
+                                <Detail label="Provider Ref" value={selected.providerReference ?? '—'} mono />
+                                <Detail label="Account" value={selected.account ?? '—'} mono />
+                                <Detail label="Recipient" value={selected.recipientName ?? '—'} />
+                                <Detail label="Country" value={selected.countryName ? `${selected.countryName} (${selected.country})` : (selected.country ?? '—')} />
+                                <Detail label="Created" value={selected.createdAtHuman ?? '—'} />
+                            </dl>
+                        )}
 
-                    {selected && selected.type === 'cross_border' && (
-                        <CrossBorderBreakdown tx={selected} />
-                    )}
+                        {selected && selected.type === 'cross_border' && (
+                            <CrossBorderBreakdown tx={selected} />
+                        )}
 
-                    {selected && selected.type === 'payout' && selected.fees && (
-                        <FeeBreakdown fees={selected.fees} amount={selected.amount} currency={selected.currency} />
-                    )}
+                        {selected && selected.type === 'payout' && selected.fees && (
+                            <FeeBreakdown fees={selected.fees} amount={selected.amount} currency={selected.currency} />
+                        )}
 
-                    {selected && selected.failureReason && (
-                        <div className="border-t pt-4">
-                            <div className="text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
-                                Failure Reason
-                            </div>
-                            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{selected.failureReason}</p>
-                        </div>
-                    )}
+                        {selected && (
+                            <FailureAndRefundSection tx={selected} />
+                        )}
+
+                        {selected && selected.events && selected.events.length > 0 && (
+                            <TransferTimeline events={selected.events} />
+                        )}
+                    </div>
+
+                    <DialogFooter className="shrink-0 border-t border-sidebar-border/70 bg-neutral-50/60 px-6 py-3.5 dark:bg-neutral-900/40 flex flex-row items-center justify-between sm:justify-between">
+                        <Button variant="ghost" size="2" onClick={() => setSelected(null)} className="cursor-pointer">
+                            Close
+                        </Button>
+                        {selected && (
+                            <Button variant="soft" size="2" asChild className="cursor-pointer">
+                                <a href={selected.logsUrl}>
+                                    View Gateway Logs <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                                </a>
+                            </Button>
+                        )}
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
@@ -649,8 +770,10 @@ function CrossBorderBreakdown({ tx }: { tx: TransferItem }) {
         return null;
     }
 
+    const isRefunded = tx.status === 'refunded' || tx.rawStatus === 'refunded';
+
     const rows: Array<[string, string]> = [
-        ['Sender paid', formatMoney(tx.sourceAmount, tx.sourceCurrency)],
+        ['Sender paid (PayPal)', formatMoney(tx.sourceAmount, tx.sourceCurrency)],
         ['Exchange rate', `1 ${tx.sourceCurrency} = ${tx.fxRate ?? '—'} ${tx.targetCurrency}`],
     ];
 
@@ -672,9 +795,19 @@ function CrossBorderBreakdown({ tx }: { tx: TransferItem }) {
                     </div>
                 ))}
                 <div className="flex items-center justify-between border-t pt-1.5 font-semibold">
-                    <dt>Recipient receives</dt>
-                    <dd className="tabular-nums">{formatMoney(tx.targetAmount, tx.targetCurrency)}</dd>
+                    <dt>{isRefunded ? 'Attempted payout (failed)' : 'Recipient receives'}</dt>
+                    <dd className={cn('tabular-nums', isRefunded && 'text-neutral-400 line-through dark:text-neutral-500')}>
+                        {formatMoney(tx.targetAmount, tx.targetCurrency)}
+                    </dd>
                 </div>
+                {isRefunded && (
+                    <div className="flex items-center justify-between text-xs font-medium text-violet-700 dark:text-violet-300">
+                        <dt>Reversed to sender (PayPal)</dt>
+                        <dd className="tabular-nums font-semibold">
+                            {formatMoney(tx.sourceAmount, tx.sourceCurrency)}
+                        </dd>
+                    </div>
+                )}
             </dl>
         </div>
     );
@@ -715,6 +848,131 @@ function FeeBreakdown({ fees, amount, currency }: { fees: NonNullable<TransferIt
                     <dd className="tabular-nums">{formatExact(fees.net, currency)}</dd>
                 </div>
             </dl>
+        </div>
+    );
+}
+
+function FailureAndRefundSection({ tx }: { tx: TransferItem }) {
+    const isFailed = tx.status === 'failed' || tx.rawStatus.includes('failed');
+    const isRefunded = tx.status === 'refunded' || tx.rawStatus === 'refunded';
+    const isRefunding = tx.rawStatus === 'refunding';
+
+    if (!isFailed && !isRefunded && !isRefunding && !tx.failureReason && !tx.providerFeedback && !tx.refundLeg) {
+        return null;
+    }
+
+    return (
+        <div className="border-t pt-4">
+            <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
+                    Failure & Reversal Details
+                </span>
+                {isRefunded && (
+                    <span className="rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                        PayPal Reversed to Sender
+                    </span>
+                )}
+                {isRefunding && (
+                    <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                        Reversing…
+                    </span>
+                )}
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+                {tx.failureReason && (
+                    <div className="rounded-md border border-red-200/60 bg-red-50/50 p-2.5 text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+                        <div className="flex items-center justify-between font-semibold text-red-900 dark:text-red-200">
+                            <span>
+                                {tx.type === 'cross_border'
+                                    ? `${tx.targetCurrency} Payout Failure (${tx.payoutProvider ?? tx.provider ?? 'MNO'})`
+                                    : 'Payout Failure'}
+                            </span>
+                            {tx.targetAmount !== null && tx.targetCurrency && (
+                                <span className="text-[11px] font-normal line-through opacity-75">
+                                    {formatMoney(tx.targetAmount, tx.targetCurrency)} failed
+                                </span>
+                            )}
+                        </div>
+                        <p className="mt-1 leading-relaxed">{tx.failureReason}</p>
+                        {tx.providerFeedback && tx.providerFeedback !== tx.failureReason && (
+                            <div className="mt-1.5 border-t border-red-200/50 pt-1 text-[11px] text-red-700 dark:border-red-900/40 dark:text-red-400">
+                                <span className="font-medium">Provider feedback:</span> {tx.providerFeedback}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {tx.refundLeg && (
+                    <div className="rounded-md border border-violet-200/60 bg-violet-50/40 p-2.5 dark:border-violet-900/40 dark:bg-violet-950/20">
+                        <div className="flex items-center justify-between font-semibold text-violet-900 dark:text-violet-200">
+                            <span>PayPal Payment Reversal</span>
+                            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium capitalize', statusClasses(tx.refundLeg.status))}>
+                                {tx.refundLeg.status}
+                            </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-violet-700/80 dark:text-violet-300/80">
+                            The original funding payment was reversed back to the sender because delivery to the recipient failed.
+                        </p>
+                        <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px]">
+                            <div>
+                                <dt className="text-neutral-500 dark:text-neutral-400">Refund TX ID</dt>
+                                <dd className="font-mono text-neutral-800 truncate dark:text-neutral-200" title={tx.refundLeg.id}>
+                                    {tx.refundLeg.id}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-neutral-500 dark:text-neutral-400">PayPal Reversal Ref</dt>
+                                <dd className="font-mono text-neutral-800 truncate dark:text-neutral-200" title={tx.refundLeg.providerReference ?? undefined}>
+                                    {tx.refundLeg.providerReference ?? '—'}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-neutral-500 dark:text-neutral-400">Reversed to Sender</dt>
+                                <dd className="font-semibold text-violet-700 dark:text-violet-300">
+                                    {formatMoney(tx.refundLeg.amount, tx.refundLeg.currency)}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-neutral-500 dark:text-neutral-400">Delivered to Recipient</dt>
+                                <dd className="text-neutral-600 dark:text-neutral-400">
+                                    {tx.targetCurrency} 0.00
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function TransferTimeline({ events }: { events: TransferEventItem[] }) {
+    if (!events || events.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="border-t pt-4">
+            <div className="mb-2 text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
+                Transfer Timeline
+            </div>
+            <ol className="relative ml-2 space-y-3 border-l border-sidebar-border/70 pl-3 dark:border-sidebar-border">
+                {events.map((ev) => (
+                    <li key={ev.id} className="relative text-xs">
+                        <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full border border-background bg-neutral-400 dark:bg-neutral-500" />
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                                {ev.toLabel ?? ev.to ?? 'Step'}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-neutral-400" title={ev.createdAt ?? undefined}>
+                                {ev.createdAtHuman}
+                            </span>
+                        </div>
+                        {ev.note && <p className="mt-0.5 text-neutral-500 dark:text-neutral-400">{ev.note}</p>}
+                    </li>
+                ))}
+            </ol>
         </div>
     );
 }

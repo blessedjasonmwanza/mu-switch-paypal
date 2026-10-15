@@ -2,9 +2,11 @@
 
 use App\Enums\CrossBorderStatus;
 use App\Enums\TransactionStatus;
+use App\Models\ApiLog;
 use App\Models\CrossBorderTransfer;
 use App\Models\Customer;
 use App\Models\PaymentProvider;
+use App\Models\ProviderLog;
 use App\Models\Transaction;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -237,4 +239,116 @@ test('user can re-verify a payout transaction', function () {
     $this->actingAs($user)
         ->post(route('transfers.transactions.verify', $tx->transaction_id))
         ->assertRedirect();
+});
+
+test('transfer details payload includes timeline events, provider feedback, refund details, and logs link', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create(['name' => 'Frank', 'email' => 'frank@example.com']);
+    $funding = transfersProvider($user, 'PayPal');
+    $payout = transfersProvider($user, 'Lenco');
+
+    $fundingTx = makePayoutTransaction($funding, $customer, [
+        'direction' => 'credit',
+        'status' => TransactionStatus::SUCCESS,
+    ]);
+
+    $payoutTx = makePayoutTransaction($payout, $customer, [
+        'direction' => 'debit',
+        'status' => TransactionStatus::FAILED,
+        'provider_response' => ['message' => 'Destination mobile account is not registered'],
+    ]);
+
+    $refundTx = makePayoutTransaction($funding, $customer, [
+        'direction' => 'debit',
+        'status' => TransactionStatus::SUCCESS,
+        'provider_transaction_id' => 'PAYPAL-REFUND-999',
+    ]);
+
+    $transfer = makeCrossBorderTransfer($user, $funding, $payout, [
+        'reference' => 'XFER-TRACEABLE-001',
+        'status' => CrossBorderStatus::REFUNDED,
+        'funding_transaction_id' => $fundingTx->id,
+        'payout_transaction_id' => $payoutTx->id,
+        'refund_transaction_id' => $refundTx->id,
+        'failure_reason' => 'Every payout provider refused the payout: Destination mobile account is not registered',
+    ]);
+
+    $transfer->events()->createMany([
+        ['from_status' => null, 'to_status' => CrossBorderStatus::AWAITING_PAYMENT, 'note' => 'Quoted at 1 USD = 27 ZMW', 'created_at' => now()->subMinutes(10)],
+        ['from_status' => CrossBorderStatus::AWAITING_PAYMENT, 'to_status' => CrossBorderStatus::FUNDED, 'note' => 'PayPal payment captured', 'created_at' => now()->subMinutes(8)],
+        ['from_status' => CrossBorderStatus::FUNDED, 'to_status' => CrossBorderStatus::PAYOUT_FAILED, 'note' => 'Every payout provider refused the payout', 'created_at' => now()->subMinutes(5)],
+        ['from_status' => CrossBorderStatus::PAYOUT_FAILED, 'to_status' => CrossBorderStatus::REFUNDED, 'note' => 'Refunded to the sender', 'created_at' => now()->subMinutes(2)],
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('transfers.index', ['range' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('transfers.data.0.reference', 'XFER-TRACEABLE-001')
+            ->where('transfers.data.0.status', 'refunded')
+            ->where('transfers.data.0.failureReason', 'Every payout provider refused the payout: Destination mobile account is not registered')
+            ->where('transfers.data.0.providerFeedback', 'Destination mobile account is not registered')
+            ->where('transfers.data.0.refundLeg.providerReference', 'PAYPAL-REFUND-999')
+            ->where('transfers.data.0.refundLeg.status', 'success')
+            ->where('transfers.data.0.logsUrl', url('/logs?q=XFER-TRACEABLE-001'))
+            ->has('transfers.data.0.events', 4)
+            ->where('transfers.data.0.events.0.note', 'Quoted at 1 USD = 27 ZMW')
+            ->where('transfers.data.0.events.3.to', 'refunded')
+        );
+});
+
+test('api logs can be searched by transfer reference and correlated provider mno calls', function () {
+    $user = User::factory()->create();
+    $provider = transfersProvider($user, 'Lenco');
+    $requestId = (string) Str::uuid();
+
+    ApiLog::create([
+        'user_id' => $user->id,
+        'request_id' => $requestId,
+        'method' => 'POST',
+        'url' => url('/transfers/XFER-SEARCH-999/disburse'),
+        'route' => 'transfers.disburse',
+        'response_status' => 422,
+        'response_body' => json_encode([
+            'reference' => 'XFER-SEARCH-999',
+            'status' => 'payout_failed',
+            'failure_reason' => 'Every payout provider refused the payout: Invalid recipient wallet',
+        ]),
+        'duration_ms' => 450,
+        'created_at' => now(),
+    ]);
+
+    ProviderLog::create([
+        'request_id' => $requestId,
+        'payment_provider_id' => $provider->id,
+        'method' => 'POST',
+        'host' => 'api.lenco.co',
+        'url' => 'https://api.lenco.co/access/v2/transfers',
+        'request_body' => json_encode(['account' => '0977000111']),
+        'response_status' => 422,
+        'response_body' => json_encode(['message' => 'Invalid recipient wallet']),
+        'failed' => true,
+        'error_message' => 'HTTP 422: Invalid recipient wallet',
+        'duration_ms' => 380,
+        'created_at' => now(),
+    ]);
+
+    // Search by transfer reference
+    $this->actingAs($user)
+        ->get(route('logs.index', ['q' => 'XFER-SEARCH-999', 'range' => 'today']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('logs.data', 1)
+            ->where('logs.data.0.mnoCalls.0.url', 'https://api.lenco.co/access/v2/transfers')
+            ->where('logs.data.0.mnoCalls.0.failed', true)
+        );
+
+    // Search by provider call error message
+    $this->actingAs($user)
+        ->get(route('logs.index', ['q' => 'Invalid recipient wallet', 'range' => 'today']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('logs.data', 1)
+            ->where('logs.data.0.route', 'transfers.disburse')
+        );
 });
