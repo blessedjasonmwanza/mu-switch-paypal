@@ -13,6 +13,7 @@ use App\Http\Controllers\RatesController;
 use App\Http\Controllers\RebalanceSuggestionController;
 use App\Http\Controllers\SendMoneyAssistantController;
 use App\Http\Controllers\SendMoneyController;
+use App\Http\Controllers\TransferController;
 use App\Http\Controllers\TreasuryController;
 use App\Http\Controllers\TreasuryTransferController;
 use App\Http\Middleware\LogApiRequests;
@@ -52,6 +53,8 @@ if (! config('app.docs_only_routes')) {
         Route::delete('providers/{provider}', [ProviderController::class, 'destroy'])->name('providers.destroy');
 
         Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+        Route::get('transfers', [TransferController::class, 'index'])->name('transfers.index');
+        Route::post('transfers/transactions/{transaction:transaction_id}/verify', [TransferController::class, 'verifyTransaction'])->middleware(LogApiRequests::class)->name('transfers.transactions.verify');
 
         Route::get('fee-policy', [FeePolicyController::class, 'show'])->name('fee-policy.show');
         Route::put('fee-policy', [FeePolicyController::class, 'update'])->name('fee-policy.update');

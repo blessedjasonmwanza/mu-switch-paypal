@@ -37,6 +37,11 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(PaymentProvider::class);
     }
 
+    public function crossBorderTransfers(): HasMany
+    {
+        return $this->hasMany(CrossBorderTransfer::class);
+    }
+
     /**
      * The account's AI providers, in failover order.
      */
