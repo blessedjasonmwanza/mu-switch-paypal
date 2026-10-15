@@ -2,8 +2,19 @@
 
 ![MoneyUnify Logo](public/moneyunify-logo-horizontal.png)
 
+> **PayPal AI Hackathon 2026 entry: MoneyUnify-PayPal.** An AI agent that lets
+> anyone with a PayPal account pay someone who only has mobile money, routed
+> through the MoneyUnify switch. [Jump to MoneyUnify-PayPal ↓](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
+
 ## Table of Contents
 
+- [MoneyUnify-PayPal: PayPal to mobile money, with an AI agent](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
+  - [The problem](#the-problem)
+  - [The solution](#the-solution)
+  - [How it works](#how-it-works)
+  - [Why an agent, and why it's safe](#why-an-agent-and-why-its-safe)
+  - [Built with](#built-with)
+  - [Build status](#build-status)
 - [Introduction and Objective](#introduction-and-objective)
   - [What does MoneyUnify do?](#what-does-moneyunify-do)
   - [Documentation](#documentation)
@@ -18,9 +29,130 @@
 - [Show Your Support](#show-your-support)
 - [License](#license)
 
+## MoneyUnify-PayPal: PayPal to mobile money, with an AI agent
+
+### The problem
+
+Hundreds of millions of people across Africa keep their money on a phone:
+MTN MoMo, Airtel Money, M-Pesa, Zamtel Kwacha. Their relatives abroad, and the
+customers and clients who want to pay them, keep theirs in a PayPal wallet.
+The two worlds barely touch.
+
+- A nurse in London who wants to pay her mother's grocery bill in Kitwe has
+  PayPal, but her mother only has an Airtel number. She falls back on cash
+  agents, transfer counters and opaque fees. The World Bank's Remittance Prices
+  Worldwide data ranks Sub-Saharan Africa as the most expensive region in the
+  world to send money to.
+- A freelance designer in Nairobi is paid by an overseas client through PayPal,
+  but rent, school fees and suppliers are all paid on M-Pesa.
+- A small shop in Lusaka could sell to the diaspora, but its customers abroad
+  can't pay into a mobile wallet, so the sale never happens.
+
+The money exists on both sides. What's missing is a trustworthy path between a
+PayPal balance and a mobile-money wallet, simple enough that you can just ask
+for it.
+
+### The solution
+
+**MoneyUnify-PayPal** connects the two. You tell an AI agent what you want in
+plain language:
+
+> "Send mum K2,000 for groceries, same Airtel number as last time."
+
+The agent:
+
+1. **Understands the request.** It resolves the recipient, the country and the
+   mobile network, and checks them against your past transfers.
+2. **Quotes honestly.** It shows the all-in cost (fees and FX rate) and what the
+   recipient will actually receive. It explains in plain English why it picked
+   the cheapest provider.
+3. **Collects with PayPal.** You approve in PayPal, so the money only moves when
+   you say so.
+4. **Delivers to the phone.** The MoneyUnify switch pays out in local currency.
+   If one provider is down, it automatically tries the next one: pawaPay, MTN,
+   Airtel, Lenco and so on.
+5. **Never strands your money.** If every provider fails, the PayPal payment is
+   refunded automatically, and you can see each step on a live timeline.
+
+Every PayPal wallet becomes a way to pay someone on mobile money in **32
+countries**. Every transfer is a new local payout through the mobile-money
+networks the switch already integrates. Merchants and freelancers get paid by
+PayPal customers straight into the wallet they actually use.
+
+The same capabilities are exposed as an **MCP server**. Any AI agent, including
+one already using PayPal's MCP server, can quote corridors and pay out to
+mobile money. For example: *"invoice my client in PayPal, and when it's paid,
+send 60% to my supplier's M-Pesa."*
+
+### How it works
+
+```mermaid
+flowchart LR
+    S[Sender] -->|plain-language request| A[MoneyUnify-PayPal agent<br/>Laravel AI SDK + Claude]
+    A -->|quote: fees, FX, best route| S
+    A -->|create order| PP[(PayPal<br/>Orders v2)]
+    S -->|approves in PayPal| PP
+    PP -->|webhook: capture completed| B[PayPal transfer]
+    B -->|payout with automatic fallback| SW[MoneyUnify Switch]
+    SW --> M1[pawaPay] & M2[MTN MoMo] & M3[Airtel Money] & M4[...]
+    B -.->|all providers failed| R[PayPal refund]
+```
+
+1. **Collect.** A new PayPal driver plugs into the switch like any other
+   provider. It creates PayPal orders, sends the payer to approve, and captures
+   the payment.
+2. **Confirm.** Signature-verified PayPal webhooks mark the funding leg as paid.
+3. **Pay out.** The switch, which already handles collections across 13
+   providers, now also handles **payouts**, with the same country filtering,
+   cost-aware ordering and automatic fallback.
+4. **Settle or refund.** The transfer records both legs, the locked FX rate
+   and every state change. It ends either *delivered* or *refunded*, never
+   stuck.
+
+### Why an agent, and why it's safe
+
+The agent does the work people find hard: working out who and where, comparing
+routes, explaining costs, and recovering from failures. It never holds the
+keys. These rules are enforced in code, not in the prompt:
+
+- **You approve every payment twice:** first in the chat, when the agent asks
+  to create the payment, and then in PayPal itself. The agent can't move money
+  on its own.
+- **Spending limits** per transfer and per day. Requests over the limit are
+  refused, and the agent explains why.
+- **New recipients must be confirmed** before the first transfer.
+- **Quotes expire**, so you never pay at a stale FX rate.
+- **Every tool call is audited** and shown on the order timeline.
+
+### Built with
+
+| | |
+| --- | --- |
+| **PayPal** | Orders v2 (create, capture), Webhooks (signature verification), Refunds, JavaScript SDK v6, sandbox; works alongside the PayPal MCP server |
+| **AI** | [Laravel AI SDK](https://laravel.com/ai) agents running Claude (Anthropic): tool calling for recipient resolution, quoting, routing explanations and "ask your payments" questions, with human approval before any payment, conversation memory and streaming |
+| **Agent interface** | Laravel MCP: a MoneyUnify MCP server for any MCP client, and an MCP client that gives our agent PayPal's MCP tools |
+| **Mobile money** | The MoneyUnify switch's 13 provider drivers; pawaPay sandbox for payouts |
+| **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest |
+| **Hosting** | Render |
+
+> **Sandbox only.** All payments run against the PayPal and provider sandboxes.
+> No real money moves.
+
+### Build status
+
+The switch below existed before the hackathon. MoneyUnify-PayPal is being built
+during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
+
+- [ ] PayPal collection driver and webhooks
+- [ ] Payouts in the switch, with fallback
+- [ ] PayPal transfers: quotes, FX, refund on failure
+- [ ] AI agent with guardrails, and the transfer UI
+- [ ] MCP server
+- [ ] Hosted demo on Render
+
 ## Introduction and Objective
 
-MoneyUnify Switch is a source-available, unified payment switch API platform designed to orchestrate payment provider integrations, manage customer accounts, and process transaction flows from a centralized dashboard. The platform provides a standardized interface for multiple payment gateways, allowing applications to initiate collections and automatically failover/retry across configured providers sequentially without modifying core business logic.
+MoneyUnify Switch is an open-source (Apache-2.0), unified payment switch API platform designed to orchestrate payment provider integrations, manage customer accounts, and process transaction flows from a centralized dashboard. The platform provides a standardized interface for multiple payment gateways, allowing applications to initiate collections and automatically failover/retry across configured providers sequentially without modifying core business logic.
 
 <p align="center">
   <a href="https://moneyunify.one">
@@ -185,8 +317,8 @@ check — no PHP reconfiguration is needed.
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/MoneyUnify/mu-switch.git
-cd mu-switch
+git clone https://github.com/blessedjasonmwanza/mu-switch-paypal.git
+cd mu-switch-paypal
 ```
 
 2. Run the automated setup command:
@@ -289,4 +421,4 @@ If you want to donate, please use the MoneyUnify team or sponsorship links assoc
 
 ## License
 
-This project is licensed under a Source-Available Proprietary License. See the [LICENSE.txt](LICENSE.txt) file for full details.
+This project is licensed under the [Apache License 2.0](LICENSE.txt). See [NOTICE](NOTICE) for attribution.
