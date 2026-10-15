@@ -1,6 +1,7 @@
 <?php
 
 use App\ApiResponse;
+use App\Http\Controllers\PaypalWebhookController;
 use App\Http\Controllers\SwitchController;
 use App\Http\Middleware\VerifyApiAccess;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,11 @@ Route::prefix('v1')->middleware(VerifyApiAccess::class)->controller(SwitchContro
         Route::post('/verify', 'verifyPayment');
     });
 });
+
+// Provider webhooks: authenticated by the provider's signature, not an API token.
+Route::post('/webhooks/paypal/{provider}', PaypalWebhookController::class)
+    ->middleware('throttle:120,1')
+    ->name('webhooks.paypal');
 
 // catch all 404 for api routes
 Route::any('/{any}', function () {
