@@ -297,7 +297,7 @@ class DashboardController extends Controller
 
         return Transaction::query()
             ->whereIn('payment_provider_id', $providerIds)
-            ->with(['paymentProvider:id,name,logo_url', 'customer:id,name,email'])
+            ->with(['paymentProvider:id,name,class,logo_url', 'customer:id,name,email'])
             ->when($search !== '', function (Builder $query) use ($search): void {
                 $like = '%'.$search.'%';
                 $query->where(function (Builder $inner) use ($like, $search): void {

@@ -43,6 +43,11 @@ class PaypalController extends Controller implements PaymentProviderInterface
     public const DEFAULT_COUNTRIES = 'ZM';
 
     /**
+     * Default logo shown for this driver (editable in the provider dialog).
+     */
+    public const DEFAULT_LOGO = '/paypal.png';
+
+    /**
      * Currencies PayPal can charge. Requests must name one via `currency`.
      */
     public const SUPPORTED_CURRENCIES = [

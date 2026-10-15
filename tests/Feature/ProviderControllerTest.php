@@ -63,6 +63,37 @@ test('drivers expose the currencies they can charge for filtering', function () 
             }));
 });
 
+test('providers without a saved logo show their driver\'s default logo', function () {
+    $user = User::factory()->create();
+    $paypal = PaymentProvider::create([
+        'user_id' => $user->id,
+        'name' => 'PayPal',
+        'class' => PaypalController::class,
+        'config' => ['supported_countries' => ['ZM']],
+        'is_active' => true,
+    ]);
+    $custom = PaymentProvider::create([
+        'user_id' => $user->id,
+        'name' => 'Lenco',
+        'class' => LencoController::class,
+        'config' => ['supported_countries' => ['ZM']],
+        'logo_url' => '/custom-lenco.png',
+        'is_active' => true,
+    ]);
+
+    expect($paypal->logo_url)->toBe('/paypal.png')
+        ->and(file_exists(public_path('paypal.png')))->toBeTrue()
+        ->and($custom->logo_url)->toBe('/custom-lenco.png')
+        // Drivers without a default and no saved logo stay empty.
+        ->and(PaymentProvider::make(['class' => 'App\\Missing\\Driver'])->logo_url)->toBeNull();
+
+    $this->actingAs($user)
+        ->get(route('providers.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('providers', fn ($providers) => collect($providers)->firstWhere('name', 'PayPal')['logo_url'] === '/paypal.png')
+            ->where('availableDrivers', fn ($drivers) => collect($drivers)->firstWhere('name', 'PayPal')['default_logo'] === '/paypal.png'));
+});
+
 test('user can create a payment provider', function () {
     $user = User::factory()->create();
 

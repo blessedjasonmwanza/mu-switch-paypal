@@ -235,7 +235,7 @@ class PaymentController extends Controller
         return $query
             ->when($status, fn (Builder $q) => $q->where('status', $status))
             ->with([
-                'paymentProvider:id,name,logo_url',
+                'paymentProvider:id,name,class,logo_url',
                 'customer:id,name,email',
                 'customer.accounts:id,customer_id,number,country',
             ])
