@@ -2,11 +2,14 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Button } from '@radix-ui/themes';
 import {
     AlertTriangle,
+    ArrowLeftRight,
     ArrowRight,
     CheckCircle2,
+    Clock,
     Landmark,
     Loader2,
     Plus,
+    ShieldCheck,
     Sparkles,
     X,
 } from 'lucide-react';
@@ -201,6 +204,68 @@ function formatMoney(amount: string, currency: string): string {
     }
 }
 
+const CURRENCY_COUNTRY_MAP: Record<string, { code: string; name: string }> = {
+    USD: { code: 'US', name: 'United States' },
+    EUR: { code: 'EU', name: 'Eurozone' },
+    GBP: { code: 'GB', name: 'United Kingdom' },
+    CAD: { code: 'CA', name: 'Canada' },
+    AUD: { code: 'AU', name: 'Australia' },
+    ZMW: { code: 'ZM', name: 'Zambia' },
+    KES: { code: 'KE', name: 'Kenya' },
+    UGX: { code: 'UG', name: 'Uganda' },
+    TZS: { code: 'TZ', name: 'Tanzania' },
+    GHS: { code: 'GH', name: 'Ghana' },
+    RWF: { code: 'RW', name: 'Rwanda' },
+    MWK: { code: 'MW', name: 'Malawi' },
+    XOF: { code: 'SN', name: 'WAEMU' },
+    XAF: { code: 'CM', name: 'CEMAC' },
+    ZAR: { code: 'ZA', name: 'South Africa' },
+    NGN: { code: 'NG', name: 'Nigeria' },
+    CDF: { code: 'CD', name: 'DR Congo' },
+    MZN: { code: 'MZ', name: 'Mozambique' },
+};
+
+function flagEmoji(currency: string): string {
+    const code = CURRENCY_COUNTRY_MAP[currency]?.code || currency.slice(0, 2);
+    if (!code || code.length !== 2) {
+        return '🌐';
+    }
+    return code
+        .toUpperCase()
+        .replace(/./g, (char) =>
+            String.fromCodePoint(127397 + char.charCodeAt(0)),
+        );
+}
+
+function StatCard({
+    title,
+    value,
+    icon,
+    footer,
+}: {
+    title: string;
+    value: ReactNode;
+    icon: ReactNode;
+    footer: ReactNode;
+}) {
+    return (
+        <Card className="gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border">
+            <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    {title}
+                </span>
+                <span className="text-neutral-400">{icon}</span>
+            </div>
+            <div className="mt-3 text-xl font-bold tracking-tight tabular-nums">
+                {value}
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                {footer}
+            </div>
+        </Card>
+    );
+}
+
 function transferBadgeClass(status: TransferStatus): string {
     return {
         requested:
@@ -219,18 +284,29 @@ function transferBadgeClass(status: TransferStatus): string {
 
 function FloatBadge({ status }: { status: FloatStatus }) {
     if (status === 'low') {
-        return <Badge variant="destructive">Below minimum</Badge>;
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                Below minimum
+            </span>
+        );
     }
 
     if (status === 'ok') {
         return (
-            <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 Healthy
-            </Badge>
+            </span>
         );
     }
 
-    return <Badge variant="outline">No float rule</Badge>;
+    return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
+            No float rule
+        </span>
+    );
 }
 
 /** A compact section header with a title, a one-line description and its search. */
@@ -478,27 +554,80 @@ export default function Treasury({
                     </div>
                 </div>
 
+                {/* Metric Summary Strip */}
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <StatCard
+                        title="Provider Accounts"
+                        value={`${accounts.total ?? accounts.data.length}`}
+                        icon={<Landmark className="h-4 w-4" />}
+                        footer={
+                            <span>
+                                Across {providers.length} payment {providers.length === 1 ? 'provider' : 'providers'}
+                            </span>
+                        }
+                    />
+                    <StatCard
+                        title="Float Health"
+                        value={alerts.length === 0 ? 'Healthy' : `${alerts.length} Low Float`}
+                        icon={
+                            alerts.length === 0 ? (
+                                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                            ) : (
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            )
+                        }
+                        footer={
+                            alerts.length === 0 ? (
+                                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                    All accounts meet minimum float rules
+                                </span>
+                            ) : (
+                                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                    {alerts.length} {alerts.length === 1 ? 'account requires' : 'accounts require'} top up
+                                </span>
+                            )
+                        }
+                    />
+                    <StatCard
+                        title="Inter-Account Transfers"
+                        value={`${transfers.total ?? transfers.data.length}`}
+                        icon={<ArrowLeftRight className="h-4 w-4" />}
+                        footer={
+                            <span>
+                                {transfers.data.filter((t) => ['requested', 'approved', 'in_transit'].includes(t.status)).length} active in flight
+                            </span>
+                        }
+                    />
+                </div>
+
                 {insight && (
-                    <div
-                        className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm dark:border-violet-900/60 dark:bg-violet-950/30"
+                    <Card
+                        className="gap-0 border border-sidebar-border/70 p-5 shadow-xs dark:border-sidebar-border"
                         data-test="rebalance-insight"
                     >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-start gap-2.5">
-                                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-start gap-3.5">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
+                                    <Sparkles className="h-4.5 w-4.5" />
+                                </div>
                                 <div className="space-y-1.5">
-                                    <p className="font-medium text-violet-950 dark:text-violet-100">
-                                        {insight.askedAgent
-                                            ? 'Treasury agent'
-                                            : 'No rebalancing needed'}
-                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                                            {insight.askedAgent
+                                                ? 'Treasury Agent'
+                                                : 'Rebalance Check'}
+                                        </span>
+                                    </div>
                                     {insight.summary && (
-                                        <p className="text-xs text-violet-900 dark:text-violet-200/80">
+                                        <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
                                             {insight.summary}
                                         </p>
                                     )}
                                     {insight.notes.length > 0 && (
-                                        <ul className="list-disc space-y-0.5 pl-4 text-xs text-violet-900 dark:text-violet-200/80">
+                                        <ul className="list-disc space-y-0.5 pl-4 text-xs text-neutral-600 dark:text-neutral-400">
                                             {insight.notes.map(
                                                 (note, index) => (
                                                     <li key={index}>{note}</li>
@@ -507,15 +636,15 @@ export default function Treasury({
                                         </ul>
                                     )}
                                     {insight.rejected.length > 0 && (
-                                        <div className="text-xs text-amber-800 dark:text-amber-300/90">
-                                            <p className="font-medium">
+                                        <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                                            <p className="font-semibold text-amber-800 dark:text-amber-300">
                                                 Blocked by guardrails
                                             </p>
-                                            <ul className="list-disc space-y-0.5 pl-4">
+                                            <ul className="mt-1 list-disc space-y-0.5 pl-4">
                                                 {insight.rejected.map(
                                                     (item, index) => (
                                                         <li key={index}>
-                                                            {item.suggestion}:{' '}
+                                                            <span className="font-medium">{item.suggestion}:</span>{' '}
                                                             {item.reason}
                                                         </li>
                                                     ),
@@ -524,10 +653,8 @@ export default function Treasury({
                                         </div>
                                     )}
                                     {insight.suggested.length > 0 && (
-                                        <p className="text-xs text-violet-900 dark:text-violet-200/80">
-                                            Suggestions are requested transfers
-                                            below. Nothing moves until you
-                                            approve and send them.
+                                        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                            Suggestions are requested transfers in the Transfers table below. Nothing moves until you approve and send them.
                                         </p>
                                     )}
                                 </div>
@@ -535,63 +662,113 @@ export default function Treasury({
                             <button
                                 type="button"
                                 onClick={() => setInsight(null)}
-                                className="shrink-0 cursor-pointer rounded p-0.5 text-violet-500 hover:bg-violet-100 hover:text-violet-700 dark:hover:bg-violet-900/50"
+                                className="shrink-0 cursor-pointer rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                                 aria-label="Dismiss"
                             >
-                                <X className="h-3.5 w-3.5" />
+                                <X className="h-4 w-4" />
                             </button>
                         </div>
-                    </div>
+                    </Card>
                 )}
 
                 {alerts.length > 0 && (
-                    <div className="space-y-2" data-test="float-alerts">
-                        {alerts.map((alert) => (
-                            <div
-                                key={alert.id}
-                                className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30"
-                            >
-                                <div className="flex items-start gap-2.5">
-                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                                    <div>
-                                        <p className="font-medium text-amber-900 dark:text-amber-200">
-                                            {alert.provider} ({alert.currency})
-                                            is below its minimum float
-                                        </p>
-                                        <p className="text-xs text-amber-800 dark:text-amber-300/80">
-                                            Balance{' '}
-                                            {formatMoney(
-                                                alert.balance,
-                                                alert.currency,
-                                            )}{' '}
-                                            · minimum{' '}
-                                            {formatMoney(
-                                                alert.minimum,
-                                                alert.currency,
-                                            )}
-                                            {alert.target &&
-                                                ` · top up to ${formatMoney(alert.target, alert.currency)}`}
-                                            {alert.openedAt &&
-                                                ` · since ${alert.openedAt}`}
-                                        </p>
+                    <div className="space-y-3" data-test="float-alerts">
+                        {alerts.map((alert) => {
+                            const deficit = Number(alert.minimum) - Number(alert.balance);
+                            return (
+                                <Card
+                                    key={alert.id}
+                                    className="gap-0 border border-sidebar-border/70 p-5 shadow-xs transition-colors dark:border-sidebar-border"
+                                >
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex items-start gap-3.5">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+                                                <AlertTriangle className="h-5 w-5" />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                                        Float Deficit
+                                                    </span>
+                                                    <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                                                        {flagEmoji(alert.currency)} {alert.provider} ({alert.currency})
+                                                    </span>
+                                                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                                                        {CURRENCY_COUNTRY_MAP[alert.currency]?.name || 'Operating Account'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                                                    <span>
+                                                        Balance:{' '}
+                                                        <strong className="font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
+                                                            {formatMoney(alert.balance, alert.currency)}
+                                                        </strong>
+                                                    </span>
+                                                    <span className="text-neutral-300 dark:text-neutral-700">·</span>
+                                                    <span>
+                                                        Minimum float:{' '}
+                                                        <strong className="font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
+                                                            {formatMoney(alert.minimum, alert.currency)}
+                                                        </strong>
+                                                    </span>
+                                                    {deficit > 0 && (
+                                                        <>
+                                                            <span className="text-neutral-300 dark:text-neutral-700">·</span>
+                                                            <span className="text-red-600 dark:text-red-400">
+                                                                Shortfall:{' '}
+                                                                <strong className="font-semibold tabular-nums">
+                                                                    -{formatMoney(deficit.toFixed(2), alert.currency)}
+                                                                </strong>
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                    {alert.target && (
+                                                        <>
+                                                            <span className="text-neutral-300 dark:text-neutral-700">·</span>
+                                                            <span>
+                                                                Target:{' '}
+                                                                <strong className="font-medium tabular-nums text-neutral-800 dark:text-neutral-200">
+                                                                    {formatMoney(alert.target, alert.currency)}
+                                                                </strong>
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                    {alert.openedAt && (
+                                                        <>
+                                                            <span className="text-neutral-300 dark:text-neutral-700">·</span>
+                                                            <span className="inline-flex items-center gap-1 text-neutral-500">
+                                                                <Clock className="h-3 w-3" />
+                                                                since {alert.openedAt}
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {providers.length > 1 && (
+                                            <div className="flex shrink-0 items-center gap-2 pl-13 sm:pl-0">
+                                                <Button
+                                                    size="2"
+                                                    onClick={() =>
+                                                        openTransfer(
+                                                            alert.providerId,
+                                                            alert.currency,
+                                                        )
+                                                    }
+                                                    className="cursor-pointer gap-1.5"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                    Top up account
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                                {providers.length > 1 && (
-                                    <Button
-                                        size="1"
-                                        onClick={() =>
-                                            openTransfer(
-                                                alert.providerId,
-                                                alert.currency,
-                                            )
-                                        }
-                                        className="shrink-0 cursor-pointer"
-                                    >
-                                        Top up
-                                    </Button>
-                                )}
-                            </div>
-                        ))}
+                                </Card>
+                            );
+                        })}
                     </div>
                 )}
 
@@ -638,29 +815,36 @@ export default function Treasury({
                                         <tr
                                             key={`${account.providerId}-${account.currency}`}
                                         >
-                                            <td className="py-2 pr-4">
-                                                <div className="font-medium">
-                                                    {account.provider}
-                                                </div>
-                                                <div className="text-xs text-neutral-500">
-                                                    {account.currency}
+                                            <td className="py-3 pr-4">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-base dark:bg-neutral-800">
+                                                        {flagEmoji(account.currency)}
+                                                    </span>
+                                                    <div>
+                                                        <div className="font-medium text-neutral-900 dark:text-neutral-100">
+                                                            {account.provider}
+                                                        </div>
+                                                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                                                            {account.currency} · {CURRENCY_COUNTRY_MAP[account.currency]?.name || 'Operating Account'}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </td>
-                                            <td className="py-2 text-right font-semibold whitespace-nowrap tabular-nums">
+                                            <td className="py-3 text-right font-semibold whitespace-nowrap tabular-nums">
                                                 {formatMoney(
                                                     account.balance,
                                                     account.currency,
                                                 )}
                                                 {account.estimated && (
                                                     <span
-                                                        className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                                        className="ml-1.5 inline-flex items-center rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
                                                         title="Includes fees estimated from a published schedule"
                                                     >
                                                         Est.
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="hidden py-2 text-right whitespace-nowrap text-neutral-500 tabular-nums sm:table-cell">
+                                            <td className="hidden py-3 text-right whitespace-nowrap text-neutral-500 tabular-nums sm:table-cell">
                                                 {account.inTransitOut
                                                     ? formatMoney(
                                                           account.inTransitOut,
@@ -668,7 +852,7 @@ export default function Treasury({
                                                       )
                                                     : '—'}
                                             </td>
-                                            <td className="hidden py-2 text-right whitespace-nowrap tabular-nums md:table-cell">
+                                            <td className="hidden py-3 text-right whitespace-nowrap tabular-nums md:table-cell">
                                                 {account.rule
                                                     ? formatMoney(
                                                           account.rule.minimum,
@@ -676,12 +860,12 @@ export default function Treasury({
                                                       )
                                                     : '—'}
                                             </td>
-                                            <td className="py-2 pl-4">
+                                            <td className="py-3 pl-4">
                                                 <FloatBadge
                                                     status={account.status}
                                                 />
                                             </td>
-                                            <td className="py-2 text-right">
+                                            <td className="py-3 text-right">
                                                 <Button
                                                     variant="soft"
                                                     size="1"
@@ -732,8 +916,9 @@ export default function Treasury({
                                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                                                <span className="truncate">
-                                                    {transfer.from}
+                                                <span className="flex items-center gap-1.5 truncate">
+                                                    <span className="text-sm">{flagEmoji(transfer.currency)}</span>
+                                                    <span>{transfer.from}</span>
                                                 </span>
                                                 <ArrowRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
                                                 <span className="truncate">
@@ -950,23 +1135,30 @@ export default function Treasury({
                                 <tbody className="divide-y divide-sidebar-border/50 dark:divide-sidebar-border/70">
                                     {entries.data.map((entry) => (
                                         <tr key={entry.id}>
-                                            <td className="py-2 pr-4">
-                                                <div className="font-medium">
-                                                    {entryLabels[entry.type] ??
-                                                        entry.type}
-                                                </div>
-                                                <div className="max-w-[20rem] truncate text-xs text-neutral-500">
-                                                    {entry.provider}
-                                                    {entry.reference &&
-                                                        ` · ${entry.reference}`}
+                                            <td className="py-3 pr-4">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-sm dark:bg-neutral-800">
+                                                        {flagEmoji(entry.currency)}
+                                                    </span>
+                                                    <div>
+                                                        <div className="font-medium text-neutral-900 dark:text-neutral-100">
+                                                            {entryLabels[entry.type] ??
+                                                                entry.type}
+                                                        </div>
+                                                        <div className="max-w-[20rem] truncate text-xs text-neutral-500 dark:text-neutral-400">
+                                                            {entry.provider}
+                                                            {entry.reference &&
+                                                                ` · ${entry.reference}`}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </td>
-                                            <td className="hidden py-2 pr-4 text-xs whitespace-nowrap text-neutral-500 sm:table-cell">
+                                            <td className="hidden py-3 pr-4 text-xs whitespace-nowrap text-neutral-500 sm:table-cell">
                                                 {entry.occurredAt}
                                             </td>
                                             <td
                                                 className={cn(
-                                                    'py-2 text-right font-medium whitespace-nowrap tabular-nums',
+                                                    'py-3 text-right font-medium whitespace-nowrap tabular-nums',
                                                     entry.amount.startsWith('-')
                                                         ? 'text-red-600 dark:text-red-400'
                                                         : 'text-emerald-600 dark:text-emerald-400',
@@ -977,7 +1169,7 @@ export default function Treasury({
                                                     entry.currency,
                                                 )}
                                                 {entry.estimated && (
-                                                    <span className="ml-1 text-[10px] text-amber-600">
+                                                    <span className="ml-1.5 inline-flex items-center rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                                                         Est.
                                                     </span>
                                                 )}
