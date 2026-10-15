@@ -3,6 +3,7 @@ import { Eye, Route as RouteIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, RadioCards } from '@radix-ui/themes';
 import { Card } from '@/components/ui/card';
+import { DisabledTooltip } from '@/components/ui/tooltip';
 import feePolicy from '@/routes/fee-policy';
 import { cn } from '@/lib/utils';
 
@@ -112,13 +113,22 @@ export default function FeePolicyPage({ policy }: FeePolicyProps) {
                         <span className="text-xs text-neutral-400">
                             {dirty ? 'Unsaved changes' : 'Active policy saved'}
                         </span>
-                        <Button
-                            onClick={save}
+                        <DisabledTooltip
                             disabled={!dirty || processing}
-                            className="cursor-pointer"
+                            content={
+                                processing
+                                    ? 'Saving policy changes…'
+                                    : 'Select a different fee policy to enable saving.'
+                            }
                         >
-                            Save policy
-                        </Button>
+                            <Button
+                                onClick={save}
+                                disabled={!dirty || processing}
+                                className="cursor-pointer"
+                            >
+                                Save policy
+                            </Button>
+                        </DisabledTooltip>
                     </div>
                 </Card>
             </div>

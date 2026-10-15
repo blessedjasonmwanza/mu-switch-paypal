@@ -22,7 +22,6 @@ import InputError from '@/components/input-error';
 import { TableFooter } from '@/components/table-footer';
 import type { PageMeta } from '@/components/table-footer';
 import { TableSearch } from '@/components/table-search';
-import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import {
     Dialog,
@@ -34,6 +33,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DisabledTooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import ai from '@/routes/ai';
 import { index as treasuryIndex } from '@/routes/treasury';
@@ -227,9 +227,11 @@ const CURRENCY_COUNTRY_MAP: Record<string, { code: string; name: string }> = {
 
 function flagEmoji(currency: string): string {
     const code = CURRENCY_COUNTRY_MAP[currency]?.code || currency.slice(0, 2);
+
     if (!code || code.length !== 2) {
         return '🌐';
     }
+
     return code
         .toUpperCase()
         .replace(/./g, (char) =>
@@ -280,6 +282,35 @@ function transferBadgeClass(status: TransferStatus): string {
         cancelled:
             'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400',
     }[status];
+}
+
+/** One labelled figure in a float alert: small label above, value below. */
+function AlertStat({
+    label,
+    tone = 'default',
+    children,
+}: {
+    label: string;
+    tone?: 'default' | 'danger';
+    children: ReactNode;
+}) {
+    return (
+        <div className="min-w-0">
+            <dt className="text-[11px] font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
+                {label}
+            </dt>
+            <dd
+                className={cn(
+                    'mt-0.5 truncate text-sm font-semibold tabular-nums',
+                    tone === 'danger'
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-neutral-900 dark:text-neutral-100',
+                )}
+            >
+                {children}
+            </dd>
+        </div>
+    );
 }
 
 function FloatBadge({ status }: { status: FloatStatus }) {
@@ -514,21 +545,30 @@ export default function Treasury({
                     </div>
                     <div className="flex shrink-0 flex-wrap justify-end gap-2">
                         {aiReady ? (
-                            <Button
-                                variant="soft"
-                                onClick={suggestRebalances}
+                            <DisabledTooltip
                                 disabled={isSuggesting || providers.length < 2}
-                                className="cursor-pointer gap-2"
+                                content={
+                                    isSuggesting
+                                        ? 'Rebalancing analysis in progress…'
+                                        : 'Connect at least 2 payment providers to enable rebalancing suggestions.'
+                                }
                             >
-                                {isSuggesting ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Sparkles className="h-4 w-4" />
-                                )}
-                                {isSuggesting
-                                    ? 'Thinking…'
-                                    : 'Suggest rebalances'}
-                            </Button>
+                                <Button
+                                    variant="soft"
+                                    onClick={suggestRebalances}
+                                    disabled={isSuggesting || providers.length < 2}
+                                    className="cursor-pointer gap-2"
+                                >
+                                    {isSuggesting ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Sparkles className="h-4 w-4" />
+                                    )}
+                                    {isSuggesting
+                                        ? 'Thinking…'
+                                        : 'Suggest rebalances'}
+                                </Button>
+                            </DisabledTooltip>
                         ) : (
                             <Button
                                 variant="soft"
@@ -544,13 +584,18 @@ export default function Treasury({
                                 </Link>
                             </Button>
                         )}
-                        <Button
-                            onClick={() => openTransfer()}
+                        <DisabledTooltip
                             disabled={providers.length < 2}
-                            className="cursor-pointer gap-2"
+                            content="Connect at least 2 payment providers to transfer funds between accounts."
                         >
-                            <Plus className="h-4 w-4" /> New transfer
-                        </Button>
+                            <Button
+                                onClick={() => openTransfer()}
+                                disabled={providers.length < 2}
+                                className="cursor-pointer gap-2"
+                            >
+                                <Plus className="h-4 w-4" /> New transfer
+                            </Button>
+                        </DisabledTooltip>
                     </div>
                 </div>
 
@@ -674,84 +719,132 @@ export default function Treasury({
                 {alerts.length > 0 && (
                     <div className="space-y-3" data-test="float-alerts">
                         {alerts.map((alert) => {
-                            const deficit = Number(alert.minimum) - Number(alert.balance);
+                            const balance = Number(alert.balance);
+                            const minimum = Number(alert.minimum);
+                            const shortfall = Math.max(0, minimum - balance);
+                            const coverage =
+                                minimum > 0
+                                    ? Math.min(
+                                          100,
+                                          Math.max(0, (balance / minimum) * 100),
+                                      )
+                                    : 0;
+                            const country =
+                                CURRENCY_COUNTRY_MAP[alert.currency]?.name;
+
                             return (
                                 <Card
                                     key={alert.id}
-                                    className="gap-0 border border-sidebar-border/70 p-5 shadow-xs transition-colors dark:border-sidebar-border"
+                                    className="gap-0 border border-amber-200/70 p-4 shadow-xs sm:p-5 dark:border-amber-900/50"
                                 >
-                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                        <div className="flex items-start gap-3.5">
-                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
-                                                <AlertTriangle className="h-5 w-5" />
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                                        <div className="flex min-w-0 flex-1 gap-3.5">
+                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+                                                <AlertTriangle className="h-4.5 w-4.5" />
                                             </div>
-                                            <div className="space-y-1.5">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                                        Float Deficit
-                                                    </span>
-                                                    <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                                                        {flagEmoji(alert.currency)} {alert.provider} ({alert.currency})
-                                                    </span>
-                                                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                                                        {CURRENCY_COUNTRY_MAP[alert.currency]?.name || 'Operating Account'}
+
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                                    <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                                                        {flagEmoji(
+                                                            alert.currency,
+                                                        )}{' '}
+                                                        {alert.provider} (
+                                                        {alert.currency})
+                                                    </h3>
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                                        Below minimum float
                                                     </span>
                                                 </div>
-
-                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-600 dark:text-neutral-400">
-                                                    <span>
-                                                        Balance:{' '}
-                                                        <strong className="font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
-                                                            {formatMoney(alert.balance, alert.currency)}
-                                                        </strong>
-                                                    </span>
-                                                    <span className="text-neutral-300 dark:text-neutral-700">·</span>
-                                                    <span>
-                                                        Minimum float:{' '}
-                                                        <strong className="font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
-                                                            {formatMoney(alert.minimum, alert.currency)}
-                                                        </strong>
-                                                    </span>
-                                                    {deficit > 0 && (
-                                                        <>
-                                                            <span className="text-neutral-300 dark:text-neutral-700">·</span>
-                                                            <span className="text-red-600 dark:text-red-400">
-                                                                Shortfall:{' '}
-                                                                <strong className="font-semibold tabular-nums">
-                                                                    -{formatMoney(deficit.toFixed(2), alert.currency)}
-                                                                </strong>
-                                                            </span>
-                                                        </>
+                                                <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                                                    {country && (
+                                                        <span>{country}</span>
                                                     )}
-                                                    {alert.target && (
-                                                        <>
-                                                            <span className="text-neutral-300 dark:text-neutral-700">·</span>
-                                                            <span>
-                                                                Target:{' '}
-                                                                <strong className="font-medium tabular-nums text-neutral-800 dark:text-neutral-200">
-                                                                    {formatMoney(alert.target, alert.currency)}
-                                                                </strong>
+                                                    {country &&
+                                                        alert.openedAt && (
+                                                            <span aria-hidden>
+                                                                ·
                                                             </span>
-                                                        </>
-                                                    )}
+                                                        )}
                                                     {alert.openedAt && (
-                                                        <>
-                                                            <span className="text-neutral-300 dark:text-neutral-700">·</span>
-                                                            <span className="inline-flex items-center gap-1 text-neutral-500">
-                                                                <Clock className="h-3 w-3" />
-                                                                since {alert.openedAt}
-                                                            </span>
-                                                        </>
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Clock className="h-3 w-3" />
+                                                            Low since{' '}
+                                                            {alert.openedAt}
+                                                        </span>
                                                     )}
+                                                </p>
+
+                                                <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                                                    <AlertStat label="Balance">
+                                                        {formatMoney(
+                                                            alert.balance,
+                                                            alert.currency,
+                                                        )}
+                                                    </AlertStat>
+                                                    <AlertStat label="Minimum float">
+                                                        {formatMoney(
+                                                            alert.minimum,
+                                                            alert.currency,
+                                                        )}
+                                                    </AlertStat>
+                                                    <AlertStat
+                                                        label="Shortfall"
+                                                        tone="danger"
+                                                    >
+                                                        {formatMoney(
+                                                            shortfall.toFixed(2),
+                                                            alert.currency,
+                                                        )}
+                                                    </AlertStat>
+                                                    <AlertStat label="Top up to">
+                                                        {formatMoney(
+                                                            alert.target ??
+                                                                alert.minimum,
+                                                            alert.currency,
+                                                        )}
+                                                    </AlertStat>
+                                                </dl>
+
+                                                <div className="mt-3 flex items-center gap-3">
+                                                    <div
+                                                        className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800"
+                                                        role="progressbar"
+                                                        aria-valuenow={Math.round(
+                                                            coverage,
+                                                        )}
+                                                        aria-valuemin={0}
+                                                        aria-valuemax={100}
+                                                        aria-label="Balance as a share of the minimum float"
+                                                    >
+                                                        <div
+                                                            className="h-full rounded-full bg-amber-500"
+                                                            style={{
+                                                                width: `${Math.max(coverage, 2)}%`,
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <span className="shrink-0 text-[11px] text-neutral-500 tabular-nums">
+                                                        {coverage < 1
+                                                            ? '<1'
+                                                            : Math.round(
+                                                                  coverage,
+                                                              )}
+                                                        % of minimum
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {providers.length > 1 && (
-                                            <div className="flex shrink-0 items-center gap-2 pl-13 sm:pl-0">
+                                        <div className="shrink-0 self-start sm:self-center">
+                                            <DisabledTooltip
+                                                disabled={providers.length < 2}
+                                                content="Connect at least 2 payment providers to transfer funds and top up this account."
+                                            >
                                                 <Button
                                                     size="2"
+                                                    disabled={providers.length < 2}
                                                     onClick={() =>
                                                         openTransfer(
                                                             alert.providerId,
@@ -763,8 +856,8 @@ export default function Treasury({
                                                     <Plus className="h-3.5 w-3.5" />
                                                     Top up account
                                                 </Button>
-                                            </div>
-                                        )}
+                                            </DisabledTooltip>
+                                        </div>
                                     </div>
                                 </Card>
                             );

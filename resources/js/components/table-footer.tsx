@@ -1,5 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { Select } from '@radix-ui/themes';
+import { DisabledTooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export interface PageMeta {
@@ -101,11 +102,22 @@ export function TableFooter({
                                 dangerouslySetInnerHTML={{ __html: link.label }}
                             />
                         ) : (
-                            <span
+                            <DisabledTooltip
                                 key={i}
-                                className="min-w-8 px-2.5 py-1 text-center text-xs text-neutral-300 dark:text-neutral-700"
-                                dangerouslySetInnerHTML={{ __html: link.label }}
-                            />
+                                disabled={true}
+                                content={
+                                    link.label.toLowerCase().includes('previous')
+                                        ? 'You are on the first page'
+                                        : link.label.toLowerCase().includes('next')
+                                          ? 'You are on the last page'
+                                          : undefined
+                                }
+                            >
+                                <span
+                                    className="min-w-8 cursor-not-allowed select-none px-2.5 py-1 text-center text-xs text-neutral-300 dark:text-neutral-700"
+                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                />
+                            </DisabledTooltip>
                         ),
                     )}
                 </div>

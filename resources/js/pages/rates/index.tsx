@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DisabledTooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import ratesRoute from '@/routes/rates';
 
@@ -457,14 +458,19 @@ export default function RatesIndexPage({
                                         placeholder="100.00"
                                         className="tabular-nums"
                                     />
-                                    <Button
-                                        onClick={handleRecalculate}
+                                    <DisabledTooltip
                                         disabled={isQuoting}
-                                        className="shrink-0 cursor-pointer gap-1.5"
+                                        content="Fetching mid-market quote…"
                                     >
-                                        <RefreshCw className={cn('h-3.5 w-3.5', isQuoting && 'animate-spin')} />
-                                        Quote
-                                    </Button>
+                                        <Button
+                                            onClick={handleRecalculate}
+                                            disabled={isQuoting}
+                                            className="shrink-0 cursor-pointer gap-1.5"
+                                        >
+                                            <RefreshCw className={cn('h-3.5 w-3.5', isQuoting && 'animate-spin')} />
+                                            Quote
+                                        </Button>
+                                    </DisabledTooltip>
                                 </div>
                             </div>
 
@@ -864,19 +870,24 @@ export default function RatesIndexPage({
 
                             {totalPages > 1 && (
                                 <div className="flex flex-wrap items-center gap-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    <DisabledTooltip
                                         disabled={safePage === 1}
-                                        className={cn(
-                                            'min-w-8 rounded-md px-2.5 py-1 text-center text-xs transition-colors',
-                                            safePage === 1
-                                                ? 'cursor-not-allowed text-neutral-400 dark:text-neutral-600'
-                                                : 'cursor-pointer text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
-                                        )}
+                                        content="You are on the first page."
                                     >
-                                        Previous
-                                    </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                            disabled={safePage === 1}
+                                            className={cn(
+                                                'min-w-8 rounded-md px-2.5 py-1 text-center text-xs transition-colors',
+                                                safePage === 1
+                                                    ? 'cursor-not-allowed text-neutral-400 dark:text-neutral-600'
+                                                    : 'cursor-pointer text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                                            )}
+                                        >
+                                            Previous
+                                        </button>
+                                    </DisabledTooltip>
                                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
                                         <button
                                             key={pageNum}
@@ -892,19 +903,24 @@ export default function RatesIndexPage({
                                             {pageNum}
                                         </button>
                                     ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                    <DisabledTooltip
                                         disabled={safePage === totalPages}
-                                        className={cn(
-                                            'min-w-8 rounded-md px-2.5 py-1 text-center text-xs transition-colors',
-                                            safePage === totalPages
-                                                ? 'cursor-not-allowed text-neutral-400 dark:text-neutral-600'
-                                                : 'cursor-pointer text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
-                                        )}
+                                        content="You are on the last page."
                                     >
-                                        Next
-                                    </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                            disabled={safePage === totalPages}
+                                            className={cn(
+                                                'min-w-8 rounded-md px-2.5 py-1 text-center text-xs transition-colors',
+                                                safePage === totalPages
+                                                    ? 'cursor-not-allowed text-neutral-400 dark:text-neutral-600'
+                                                    : 'cursor-pointer text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                                            )}
+                                        >
+                                            Next
+                                        </button>
+                                    </DisabledTooltip>
                                 </div>
                             )}
                         </div>
