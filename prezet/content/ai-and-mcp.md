@@ -1,6 +1,6 @@
 ---
 title: AI & MCP Setup
-excerpt: Add an AI provider key and connect PayPal's MCP server so the switch's AI features run, from the dashboard or from .env.
+excerpt: Add AI provider keys with failover and connect PayPal's MCP server, from the dashboard or from .env.
 date: 2026-10-15
 category: Configuration
 ---
@@ -14,34 +14,48 @@ any AI key. You only need this page if you want the AI features.
 
 | Where | Who it's for | Scope |
 | --- | --- | --- |
-| **Dashboard** → Settings → **AI & Agents** | Each account, no server access needed | That account only |
+| **AI & Agents** in the dashboard sidebar | Each account, no server access needed | That account only |
 | **`.env`** on the server | Whoever runs the server | Every account, as the fallback |
 
 The rule is simple: **what an account sets in the dashboard wins, and anything
-it leaves blank falls back to `.env`.** An account can, for example, pick
-OpenAI in the dashboard but leave the key blank, and the server's
-`OPENAI_API_KEY` is used.
+it leaves blank falls back to `.env`.** An account can, for example, add OpenAI
+without a key, and the server's `OPENAI_API_KEY` is used.
 
 ## Option A: the dashboard
 
-Open **Settings → AI & Agents**.
+Open **AI & Agents** in the sidebar. An account can add **several AI
+providers**, and its agents **fail over** between them in order: they use the
+first one and move to the next when a provider is rate-limited, overloaded,
+unreachable or out of credit.
 
-1. **Provider.** Pick one, or choose *Use .env defaults* to follow the server.
-2. **Model** *(optional)*. Leave blank for the provider's default model.
-3. **API key** *(optional)*. Paste your key, or leave it blank to use the
-   provider's key from `.env`.
-4. **Save**, then **Test connection**. This sends a tiny prompt and tells you
-   whether the provider accepted the key.
+1. **Add AI provider.** Pick a provider, an optional **model** (blank means the
+   provider's default) and an optional **API key** (blank means the provider's
+   key from `.env`). Each provider can be added once.
+2. **Order.** Use the up and down arrows to set the failover order. The top
+   provider is tried first.
+3. **Test.** Each provider has a **Test** button that sends a tiny prompt
+   through that provider alone and tells you whether its key works.
+4. **Edit** a provider to change its model or key, or **remove** it.
+
+Each provider shows where its key comes from:
+
+| Badge | Meaning |
+| --- | --- |
+| **Key ••••1234** | A key saved in the dashboard |
+| **Key from .env** | No saved key; the provider's `.env` key is used |
+| **No key, skipped** | No key anywhere; agents skip this provider |
+
+If an account has no providers, or none of them has a key, its agents use the
+server default (`AI_PROVIDER` in `.env`).
 
 How keys are handled:
 
 - Keys are **encrypted at rest** and never shown again. The page only shows the
   last four characters.
-- A key belongs to its provider. Switching to a different provider removes the
-  saved key; add the new provider's key, or rely on `.env`.
-- **Remove saved key** returns that account to the `.env` key.
-- Each account's key is used only for that account's agents. It never replaces
-  the server's `.env` key for anyone else.
+- **Remove saved key and use .env** (in the edit dialog) returns a provider to
+  its `.env` key.
+- Each account's keys are used only for that account's agents. They never
+  replace the server's `.env` keys for anyone else.
 
 The same page shows how **PayPal MCP** is connected (see below).
 
@@ -75,7 +89,7 @@ cache configuration, run `php artisan config:cache` after editing `.env`.
 ## Create the conversation tables
 
 The AI features store conversations in two tables (`agent_conversations` and
-`agent_conversation_messages`), and dashboard settings in `ai_settings`. They're
+`agent_conversation_messages`), and each account's providers in `ai_credentials`. They're
 part of the normal migrations:
 
 ```bash
@@ -99,7 +113,7 @@ PayPal's MCP server with that provider's credentials:
   mid-use.
 - With several PayPal providers, the oldest active one is used.
 
-**Settings → AI & Agents** shows which provider and environment are in use.
+The **AI & Agents** page shows which PayPal provider and environment are in use.
 
 ### From `.env` (fallback)
 
@@ -138,7 +152,7 @@ Copy `access_token` from the response. For live, use
   manager), never in the repository.
 - `APP_KEY` is set and stable: dashboard keys are encrypted with it, and
   changing it makes saved keys unreadable.
-- **Test connection** succeeds for each account that uses AI.
+- **Test** succeeds for each AI provider an account relies on.
 - PayPal providers, `MCP_PAYPAL_URL` and `MCP_PAYPAL_TOKEN` use the same
   environment (`sandbox` or `live`).
 - A spending limit is set on each AI provider account.

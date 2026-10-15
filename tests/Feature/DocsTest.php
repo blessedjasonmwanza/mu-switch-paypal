@@ -94,7 +94,7 @@ test('the ai and mcp setup guide is reachable and unbranded', function () {
         ->assertSee('AI &amp; MCP Setup', false)
         ->assertSee('ANTHROPIC_API_KEY', false)
         ->assertSee('MCP_PAYPAL_TOKEN', false)
-        ->assertSee('Settings → AI &amp; Agents', false)
+        ->assertSee('fail over', false)
         ->getContent();
 
     expect(strtolower($html))->not->toContain('laravel');

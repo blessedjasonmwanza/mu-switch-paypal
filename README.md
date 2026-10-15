@@ -138,8 +138,8 @@ keys. These rules are enforced in code, not in the prompt:
 > **Sandbox only.** All payments run against the PayPal and provider sandboxes.
 > No real money moves.
 
-To run the AI features, each account can add its own AI key under **Settings →
-AI & Agents**, with the server's `.env` as the fallback. PayPal MCP connects
+To run the AI features, each account adds one or more AI providers on the **AI &
+Agents** page, in failover order, with the server's `.env` as the fallback. PayPal MCP connects
 automatically through the account's PayPal provider. See
 [AI & MCP Setup](prezet/content/ai-and-mcp.md).
 
