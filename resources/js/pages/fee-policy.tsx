@@ -1,11 +1,11 @@
 import { Head, useForm } from '@inertiajs/react';
+import { Button, RadioCards } from '@radix-ui/themes';
 import { Eye, Route as RouteIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, RadioCards } from '@radix-ui/themes';
 import { Card } from '@/components/ui/card';
 import { DisabledTooltip } from '@/components/ui/tooltip';
-import feePolicy from '@/routes/fee-policy';
 import { cn } from '@/lib/utils';
+import feePolicy from '@/routes/fee-policy';
 
 interface FeePolicyProps {
     policy: string;
@@ -72,6 +72,7 @@ export default function FeePolicyPage({ policy }: FeePolicyProps) {
                         {POLICIES.map((option) => {
                             const Icon = option.icon;
                             const active = data.policy === option.value;
+
                             return (
                                 <RadioCards.Item
                                     key={option.value}

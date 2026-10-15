@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import providersRoute from '@/routes/providers';
 import { cn } from '@/lib/utils';
+import providersRoute from '@/routes/providers';
 
 interface ProviderLogRow {
     id: number;
@@ -43,17 +43,35 @@ interface ProviderLogsProps {
 }
 
 function statusClasses(status: number | null, failed: boolean): string {
-    if (failed) return 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400';
+    if (failed) {
+return 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400';
+}
+
     // No response yet — the call was initiated but never completed (e.g. interrupted).
-    if (status === null) return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400';
-    if (status < 300) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400';
-    if (status < 400) return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400';
-    if (status < 500) return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400';
+    if (status === null) {
+return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400';
+}
+
+    if (status < 300) {
+return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400';
+}
+
+    if (status < 400) {
+return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400';
+}
+
+    if (status < 500) {
+return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400';
+}
+
     return 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400';
 }
 
 function statusLabel(status: number | null, failed: boolean): string {
-    if (status !== null) return String(status);
+    if (status !== null) {
+return String(status);
+}
+
     return failed ? 'ERR' : 'sent';
 }
 

@@ -1,4 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
+import { AlertDialog, Button, Flex, HoverCard } from '@radix-ui/themes';
 import {
     Plus,
     Settings,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { AlertDialog, Button, Flex, HoverCard } from '@radix-ui/themes';
+import { Badge } from '@/components/ui/badge';
 import {
     Card,
     CardContent,
@@ -26,8 +27,6 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
@@ -37,9 +36,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import providersRoute from '@/routes/providers';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import providersRoute from '@/routes/providers';
 
 interface AccountSummary {
     currency: string;
@@ -249,6 +249,7 @@ export default function Index({
         const driverOptions =
             availableDrivers.find((d) => d.class === provider.class)
                 ?.supported_country_options ?? [];
+
         return codes.map(
             (code) => driverOptions.find((o) => o.code === code)?.name ?? code,
         );
@@ -277,9 +278,6 @@ export default function Index({
     const [driverCountry, setDriverCountry] = useState('');
     const [driverCurrency, setDriverCurrency] = useState('');
     const driverQuery = driverSearch.trim().toLowerCase();
-    const hasDriverFilters = Boolean(
-        driverQuery || driverCountry || driverCurrency,
-    );
     const resetDriverFilters = () => {
         setDriverSearch('');
         setDriverCountry('');
@@ -349,7 +347,10 @@ export default function Index({
     };
 
     const saveExtraMarket = () => {
-        if (!extraMarket) return;
+        if (!extraMarket) {
+return;
+}
+
         setData('market_extra_values', {
             ...data.market_extra_values,
             [extraMarket.code]: extraDraft,
@@ -368,6 +369,7 @@ export default function Index({
                 ),
             );
         }
+
         setExtraMarket(null);
     };
 
@@ -458,6 +460,7 @@ export default function Index({
                         const checked = data.supported_countries.includes(
                             market.code,
                         );
+
                         return (
                             <div key={market.code} className="space-y-1">
                                 <label
@@ -473,6 +476,7 @@ export default function Index({
                                         onCheckedChange={() => {
                                             const willCheck = !checked;
                                             toggleCountry(market.code);
+
                                             // Markets needing extra integration
                                             // details open the dialog on tick.
                                             if (
@@ -643,7 +647,10 @@ export default function Index({
 
     const handleUpdate = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!editingProvider) return;
+
+        if (!editingProvider) {
+return;
+}
 
         put(providersRoute.update.url(editingProvider.id), {
             onSuccess: () => {
@@ -919,6 +926,7 @@ export default function Index({
                 open={isCreateOpen}
                 onOpenChange={(open) => {
                     setIsCreateOpen(open);
+
                     if (!open) {
                         setSelectedDriver(null);
                         resetDriverFilters();
@@ -1544,7 +1552,9 @@ export default function Index({
             <Dialog
                 open={!!extraMarket}
                 onOpenChange={(open) => {
-                    if (!open) cancelExtraMarket();
+                    if (!open) {
+cancelExtraMarket();
+}
                 }}
             >
                 <DialogContent className="sm:max-w-md">

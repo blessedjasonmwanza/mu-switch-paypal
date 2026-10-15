@@ -1,13 +1,14 @@
 import { Head, Link, router, usePoll } from '@inertiajs/react';
+import { Badge as RtBadge, Button, Select, Tabs, TextField } from '@radix-ui/themes';
 import { AlertTriangle, ChevronLeft, ChevronRight, Search, ScrollText } from 'lucide-react';
 import { useState } from 'react';
-import { Badge as RtBadge, Button, Select, Tabs, TextField } from '@radix-ui/themes';
+import { StatusAreaChart  } from '@/components/status-area-chart';
+import type {StatusPoint} from '@/components/status-area-chart';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { StatusAreaChart, type StatusPoint } from '@/components/status-area-chart';
-import logs from '@/routes/logs';
 import { cn } from '@/lib/utils';
+import logs from '@/routes/logs';
 
 interface MnoCall {
     id: number;
@@ -97,10 +98,22 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 function statusClasses(status: number | null): string {
-    if (status === null) return 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400';
-    if (status < 300) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400';
-    if (status < 400) return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400';
-    if (status < 500) return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400';
+    if (status === null) {
+return 'bg-neutral-100 text-neutral-600 dark:bg-neutral-500/15 dark:text-neutral-400';
+}
+
+    if (status < 300) {
+return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400';
+}
+
+    if (status < 400) {
+return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400';
+}
+
+    if (status < 500) {
+return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400';
+}
+
     return 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400';
 }
 
@@ -257,8 +270,11 @@ export default function Index({ logs: page, stats, chart, filters, fieldOptions,
     const urlWith = (overrides: Record<string, string | undefined>) => {
         const query = { ...baseQuery, ...overrides };
         Object.keys(query).forEach((k) => {
-            if (query[k] === undefined || query[k] === '') delete query[k];
+            if (query[k] === undefined || query[k] === '') {
+delete query[k];
+}
         });
+
         return logs.index.url({ query });
     };
 

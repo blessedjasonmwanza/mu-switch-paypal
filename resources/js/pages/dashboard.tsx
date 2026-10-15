@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import { Button, Select, TextField } from '@radix-ui/themes';
 import {
     Activity,
     ArrowDownLeft,
@@ -13,18 +14,18 @@ import {
     TrendingUp,
     XCircle,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState  } from 'react';
+import type {ReactNode} from 'react';
 import { toast } from 'sonner';
-import { Button, Select, TextField } from '@radix-ui/themes';
 import { ActivityAreaChart } from '@/components/activity-area-chart';
 import { TableFooter } from '@/components/table-footer';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import providersRoute from '@/routes/providers';
-import { cn } from '@/lib/utils';
 
 interface Paginated<T> {
     data: T[];
@@ -428,6 +429,7 @@ export default function Dashboard({
                                             totalStatus > 0
                                                 ? (count / totalStatus) * 100
                                                 : 0;
+
                                         return (
                                             <div key={status}>
                                                 <div className="mb-1 flex items-center justify-between text-sm">
@@ -720,6 +722,7 @@ export default function Dashboard({
                                                 STATUS_STYLES.draft;
                                             const isCredit =
                                                 tx.direction === 'credit';
+
                                             return (
                                                 <tr
                                                     key={tx.id}

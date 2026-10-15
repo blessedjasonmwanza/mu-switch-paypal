@@ -10,6 +10,7 @@ import {
     Percent,
     RefreshCw,
     Search,
+    X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -17,6 +18,12 @@ import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Popover,
+    PopoverClose,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import { DisabledTooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import ratesRoute from '@/routes/rates';
@@ -111,6 +118,7 @@ function flagEmoji(code: string): string {
     if (!code || code.length !== 2) {
         return '🌐';
     }
+
     return code
         .toUpperCase()
         .replace(/./g, (char) =>
@@ -122,6 +130,7 @@ function formatRate(value: number, decimals: number): string {
     if (decimals === 0) {
         return Math.round(value).toLocaleString();
     }
+
     const maxDigits = Math.max(2, Math.min(8, decimals));
 
     return value.toLocaleString(undefined, {
@@ -159,6 +168,336 @@ function StatCard({
     );
 }
 
+const QUOTE_STORAGE_KEY = 'moneyunify_active_fx_quote';
+
+/**
+ * The quote to show first: the server's active quote, else an unexpired one
+ * kept in this tab's session storage.
+ */
+function restoreQuote(serverQuote: QuoteData | null): QuoteData | null {
+    if (serverQuote && !serverQuote.is_expired) {
+        return serverQuote;
+    }
+
+    try {
+        const stored = sessionStorage.getItem(QUOTE_STORAGE_KEY);
+
+        if (stored) {
+            const parsed: QuoteData = JSON.parse(stored);
+
+            if (new Date(parsed.expires_at).getTime() > Date.now()) {
+                return parsed;
+            }
+        }
+    } catch {
+        // Ignore storage errors
+    }
+
+    return null;
+}
+
+function CorridorQuotePopover({
+    baseCurrency,
+    rate,
+    marginPercent,
+    quoteTtlMinutes,
+    defaultAmount,
+    onOpenInCalculator,
+}: {
+    baseCurrency: string;
+    rate: RateItem;
+    marginPercent: number;
+    quoteTtlMinutes: number;
+    defaultAmount: string;
+    onOpenInCalculator: (from: string, to: string, amount: string) => void;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [popAmount, setPopAmount] = useState(defaultAmount || '100');
+    const [lockedQuote, setLockedQuote] = useState<QuoteData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const [remainingSeconds, setRemainingSeconds] = useState(
+        quoteTtlMinutes * 60,
+    );
+
+    const countryInfo = CURRENCY_COUNTRY_MAP[rate.currency];
+    const countryCode =
+        rate.country_code || countryInfo?.code || rate.currency.slice(0, 2);
+    const baseCountryCode = CURRENCY_COUNTRY_MAP[baseCurrency]?.code || 'US';
+
+    useEffect(() => {
+        if (!isOpen) {
+            setPopAmount(defaultAmount || '100');
+        }
+    }, [defaultAmount, isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || !lockedQuote) {
+            return;
+        }
+
+        const tick = () => {
+            const exp = new Date(lockedQuote.expires_at).getTime();
+            const now = Date.now();
+            const diff = Math.max(0, Math.floor((exp - now) / 1000));
+            setRemainingSeconds(diff);
+        };
+
+        tick();
+        const interval = setInterval(tick, 1000);
+
+        return () => clearInterval(interval);
+    }, [isOpen, lockedQuote]);
+
+    const requestQuote = async (amt: string) => {
+        const num = parseFloat(amt);
+        if (isNaN(num) || num <= 0) {
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            const response = await fetch(ratesRoute.quote.url(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN':
+                        (
+                            document.querySelector(
+                                'meta[name="csrf-token"]',
+                            ) as HTMLMetaElement
+                        )?.content || '',
+                },
+                body: JSON.stringify({
+                    from_currency: baseCurrency,
+                    to_currency: rate.currency,
+                    amount: amt,
+                    mode: 'source',
+                }),
+            });
+
+            const json = await response.json();
+
+            if (response.ok && (json.status === 'success' || json.success)) {
+                setLockedQuote(json.data);
+            }
+        } catch {
+            // Keep instant calculation on failure
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            requestQuote(popAmount);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, baseCurrency, rate.currency]);
+
+    const numAmt = parseFloat(popAmount) || 0;
+    const estTarget = numAmt * rate.effective_rate;
+    const displayTarget = lockedQuote
+        ? lockedQuote.target_amount
+        : formatRate(estTarget, rate.decimals);
+    const displayBaseRate = lockedQuote
+        ? lockedQuote.base_rate
+        : formatRate(rate.base_rate, rate.decimals);
+    const displayEffectiveRate = lockedQuote
+        ? lockedQuote.effective_rate
+        : formatRate(rate.effective_rate, rate.decimals);
+    const spreadDeduction =
+        numAmt > 0 ? (numAmt * (marginPercent / 100)).toFixed(2) : '0.00';
+
+    const copyQuoteRef = (id: string) => {
+        navigator.clipboard.writeText(id);
+        setCopied(true);
+        toast.success('Quote reference copied');
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="soft"
+                    color="gray"
+                    size="1"
+                    className="cursor-pointer"
+                >
+                    Quote
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent
+                align="end"
+                sideOffset={8}
+                className="w-84 rounded-xl border border-sidebar-border/70 bg-popover p-4 text-xs shadow-2xl sm:w-92 dark:border-sidebar-border"
+            >
+                <div className="flex items-center justify-between border-b border-sidebar-border/50 pb-3 dark:border-sidebar-border/70">
+                    <div className="flex items-center gap-2">
+                        <span className="text-base leading-none">
+                            {flagEmoji(baseCountryCode)}
+                        </span>
+                        <ArrowRight className="h-3 w-3 text-neutral-400" />
+                        <span className="text-base leading-none">
+                            {flagEmoji(countryCode)}
+                        </span>
+                        <span className="font-semibold text-neutral-900 dark:text-neutral-100">
+                            {baseCurrency} → {rate.currency}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {lockedQuote && remainingSeconds > 0 ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                <span className="relative flex h-1.5 w-1.5">
+                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                </span>
+                                <span>
+                                    {Math.floor(remainingSeconds / 60)}:
+                                    {(remainingSeconds % 60)
+                                        .toString()
+                                        .padStart(2, '0')}
+                                </span>
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                Live Rate
+                            </span>
+                        )}
+                        <PopoverClose className="cursor-pointer rounded p-0.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+                            <X className="h-3.5 w-3.5" />
+                        </PopoverClose>
+                    </div>
+                </div>
+
+                <div className="mt-3">
+                    <div className="mb-1 flex items-center justify-between text-neutral-500 dark:text-neutral-400">
+                        <span>Send amount ({baseCurrency})</span>
+                        <span className="text-[10px] text-neutral-400">
+                            Guaranteed {quoteTtlMinutes} min
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <Input
+                            type="number"
+                            step="any"
+                            min="0.01"
+                            value={popAmount}
+                            onChange={(e) => setPopAmount(e.target.value)}
+                            onKeyDown={(e) =>
+                                e.key === 'Enter' && requestQuote(popAmount)
+                            }
+                            className="h-8 text-xs tabular-nums"
+                        />
+                        <Button
+                            size="1"
+                            variant="surface"
+                            onClick={() => requestQuote(popAmount)}
+                            disabled={loading}
+                            className="h-8 shrink-0 cursor-pointer gap-1"
+                        >
+                            <RefreshCw
+                                className={cn(
+                                    'h-3 w-3',
+                                    loading && 'animate-spin',
+                                )}
+                            />
+                            Refresh
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-sidebar-border/40 bg-neutral-50 p-3 dark:border-sidebar-border/60 dark:bg-neutral-900/60">
+                    <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                        Recipient receives
+                    </div>
+                    <div className="mt-0.5 flex items-baseline gap-1.5">
+                        <span className="text-xl font-bold tracking-tight text-neutral-900 tabular-nums dark:text-neutral-100">
+                            {displayTarget}
+                        </span>
+                        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                            {rate.currency}
+                        </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400">
+                        for {popAmount} {baseCurrency} at {displayEffectiveRate}
+                    </p>
+
+                    <dl className="mt-2.5 space-y-1 border-t border-sidebar-border/50 pt-2 text-[11px] dark:border-sidebar-border/70">
+                        <div className="flex items-center justify-between">
+                            <dt className="text-neutral-500 dark:text-neutral-400">
+                                Mid-market rate
+                            </dt>
+                            <dd className="text-neutral-700 tabular-nums dark:text-neutral-300">
+                                1 {baseCurrency} = {displayBaseRate}{' '}
+                                {rate.currency}
+                            </dd>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <dt className="text-neutral-500 dark:text-neutral-400">
+                                Spread ({marginPercent}%)
+                            </dt>
+                            <dd className="text-neutral-700 tabular-nums dark:text-neutral-300">
+                                −{' '}
+                                {lockedQuote
+                                    ? lockedQuote.margin_amount
+                                    : spreadDeduction}{' '}
+                                {baseCurrency}
+                            </dd>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-sidebar-border/40 pt-1 font-semibold text-neutral-900 dark:text-neutral-100">
+                            <dt>Effective rate</dt>
+                            <dd className="tabular-nums">
+                                1 {baseCurrency} = {displayEffectiveRate}{' '}
+                                {rate.currency}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between border-t border-sidebar-border/50 pt-2.5 text-[11px] text-neutral-500 dark:border-sidebar-border/70 dark:text-neutral-400">
+                    {lockedQuote ? (
+                        <button
+                            type="button"
+                            onClick={() => copyQuoteRef(lockedQuote.id)}
+                            className="flex cursor-pointer items-center gap-1 font-mono text-[11px] text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                        >
+                            {copied ? (
+                                <Check className="h-3 w-3 text-emerald-500" />
+                            ) : (
+                                <Copy className="h-3 w-3" />
+                            )}
+                            Ref: {lockedQuote.id.slice(0, 8)}…
+                        </button>
+                    ) : (
+                        <span className="text-neutral-400">
+                            Guaranteed {quoteTtlMinutes} min
+                        </span>
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsOpen(false);
+                            onOpenInCalculator(
+                                baseCurrency,
+                                rate.currency,
+                                popAmount,
+                            );
+                        }}
+                        className="flex cursor-pointer items-center gap-1 font-medium text-primary hover:underline"
+                    >
+                        Open in calculator
+                        <ArrowRight className="h-3 w-3" />
+                    </button>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+}
+
 export default function RatesIndexPage({
     baseCurrency,
     rates,
@@ -167,53 +506,35 @@ export default function RatesIndexPage({
     supportedCurrencies,
     activeQuote: serverActiveQuote,
 }: RatesPageProps) {
+    const [initialQuote] = useState(() =>
+        restoreQuote(serverActiveQuote ?? null),
+    );
     const [search, setSearch] = useState('');
     const [fromCurrency, setFromCurrency] = useState(
-        serverActiveQuote?.source_currency ?? baseCurrency,
+        initialQuote?.source_currency ?? baseCurrency,
     );
     const [toCurrency, setToCurrency] = useState(
-        serverActiveQuote?.target_currency ?? 'ZMW',
+        initialQuote?.target_currency ?? 'ZMW',
     );
-    const [amount, setAmount] = useState(
-        serverActiveQuote?.source_amount ?? '100',
-    );
+    const [amount, setAmount] = useState(initialQuote?.source_amount ?? '100');
     const [mode, setMode] = useState<'source' | 'target'>('source');
     const [activeQuote, setActiveQuote] = useState<QuoteData | null>(
-        serverActiveQuote ?? null,
+        initialQuote,
     );
     const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
     const [isQuoting, setIsQuoting] = useState(false);
     const [copiedId, setCopiedId] = useState(false);
 
-    // Table pagination
-    const [page, setPage] = useState(1);
+    // Table pagination: back to page 1 whenever the search or base changes.
+    const pageKey = `${search}|${baseCurrency}`;
+    const [pageState, setPageState] = useState({ key: pageKey, page: 1 });
+    const page = pageState.key === pageKey ? pageState.page : 1;
+    const setPage = (next: number | ((current: number) => number)) =>
+        setPageState({
+            key: pageKey,
+            page: typeof next === 'function' ? next(page) : next,
+        });
     const [perPage, setPerPage] = useState(10);
-
-    useEffect(() => {
-        // Only calculate on mount if no active, unexpired quote exists from server or sessionStorage
-        if (serverActiveQuote && !serverActiveQuote.is_expired) {
-            return;
-        }
-
-        try {
-            const stored = sessionStorage.getItem('moneyunify_active_fx_quote');
-            if (stored) {
-                const parsed: QuoteData = JSON.parse(stored);
-                const exp = new Date(parsed.expires_at).getTime();
-                if (exp > Date.now()) {
-                    setActiveQuote(parsed);
-                    setFromCurrency(parsed.source_currency);
-                    setToCurrency(parsed.target_currency);
-                    setAmount(parsed.source_amount);
-                    return;
-                }
-            }
-        } catch {
-            // Ignore storage errors
-        }
-
-        calculateQuote(fromCurrency, toCurrency, amount, mode);
-    }, []);
 
     useEffect(() => {
         if (!activeQuote) {
@@ -225,9 +546,10 @@ export default function RatesIndexPage({
             const now = Date.now();
             const diff = Math.max(0, Math.floor((exp - now) / 1000));
             setRemainingSeconds(diff);
+
             if (diff === 0) {
                 try {
-                    sessionStorage.removeItem('moneyunify_active_fx_quote');
+                    sessionStorage.removeItem(QUOTE_STORAGE_KEY);
                 } catch {
                     // Ignore storage errors
                 }
@@ -240,10 +562,6 @@ export default function RatesIndexPage({
         return () => clearInterval(interval);
     }, [activeQuote]);
 
-    useEffect(() => {
-        setPage(1);
-    }, [search, baseCurrency]);
-
     const calculateQuote = async (
         from: string,
         to: string,
@@ -251,11 +569,13 @@ export default function RatesIndexPage({
         quoteMode: 'source' | 'target',
     ) => {
         const numeric = parseFloat(amt);
+
         if (isNaN(numeric) || numeric <= 0) {
             return;
         }
 
         setIsQuoting(true);
+
         try {
             const response = await fetch(ratesRoute.quote.url(), {
                 method: 'POST',
@@ -278,11 +598,13 @@ export default function RatesIndexPage({
             });
 
             const json = await response.json();
+
             if (response.ok && (json.status === 'success' || json.success)) {
                 setActiveQuote(json.data);
+
                 try {
                     sessionStorage.setItem(
-                        'moneyunify_active_fx_quote',
+                        QUOTE_STORAGE_KEY,
                         JSON.stringify(json.data),
                     );
                 } catch {
@@ -315,6 +637,21 @@ export default function RatesIndexPage({
         calculateQuote(fromCurrency, toCurrency, amount, mode);
     };
 
+    // Quote once on first load when there's no quote to restore.
+    useEffect(() => {
+        if (initialQuote) {
+            return;
+        }
+
+        const timer = setTimeout(
+            () => calculateQuote(fromCurrency, toCurrency, amount, mode),
+            0,
+        );
+
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- first load only
+    }, []);
+
     const handleBaseChange = (base: string) => {
         router.get(
             ratesRoute.index.url(),
@@ -337,6 +674,7 @@ export default function RatesIndexPage({
             if (!q) {
                 return true;
             }
+
             const currencyMatch = item.currency.toLowerCase().includes(q);
             const countryMatch = item.country_name?.toLowerCase().includes(q);
             const detailsName = CURRENCY_DETAILS[item.currency]?.name
@@ -355,6 +693,7 @@ export default function RatesIndexPage({
     const to = Math.min(safePage * perPage, total);
     const pagedRates = useMemo(() => {
         const start = (safePage - 1) * perPage;
+
         return filteredRates.slice(start, start + perPage);
     }, [filteredRates, safePage, perPage]);
 
@@ -376,7 +715,9 @@ export default function RatesIndexPage({
                             Exchange Rates
                         </h1>
                         <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-                            Mid-market exchange rates and guaranteed {quoteTtlMinutes}-minute quotes across PayPal funding currencies and mobile money corridors.
+                            Mid-market exchange rates and guaranteed{' '}
+                            {quoteTtlMinutes}-minute quotes across PayPal
+                            funding currencies and mobile money corridors.
                         </p>
                     </div>
                 </div>
@@ -389,7 +730,8 @@ export default function RatesIndexPage({
                         icon={<Landmark className="h-4 w-4" />}
                         footer={
                             <span>
-                                Active mid-market rates against {supportedCurrencies.length} currencies
+                                Active mid-market rates against{' '}
+                                {supportedCurrencies.length} currencies
                             </span>
                         }
                     />
@@ -410,7 +752,8 @@ export default function RatesIndexPage({
                         icon={<Percent className="h-4 w-4" />}
                         footer={
                             <span>
-                                Transparent net margin applied across payout corridors
+                                Transparent net margin applied across payout
+                                corridors
                             </span>
                         }
                     />
@@ -420,18 +763,30 @@ export default function RatesIndexPage({
                 <Card className="gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border">
                     <div className="flex flex-col gap-3 border-b border-sidebar-border/50 pb-4 sm:flex-row sm:items-center sm:justify-between dark:border-sidebar-border/70">
                         <div>
-                            <h2 className="text-sm font-semibold">Corridor Calculator</h2>
+                            <h2 className="text-sm font-semibold">
+                                Corridor Calculator
+                            </h2>
                             <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                                Calculate an exact send or payout amount with locked rate pricing.
+                                Calculate an exact send or payout amount with
+                                locked rate pricing.
                             </p>
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <Select.Root value={mode} onValueChange={(val) => handleModeChange(val as 'source' | 'target')}>
+                            <Select.Root
+                                value={mode}
+                                onValueChange={(val) =>
+                                    handleModeChange(val as 'source' | 'target')
+                                }
+                            >
                                 <Select.Trigger variant="surface" />
                                 <Select.Content>
-                                    <Select.Item value="source">Quote mode: You send</Select.Item>
-                                    <Select.Item value="target">Quote mode: Recipient gets</Select.Item>
+                                    <Select.Item value="source">
+                                        Quote mode: You send
+                                    </Select.Item>
+                                    <Select.Item value="target">
+                                        Quote mode: Recipient gets
+                                    </Select.Item>
                                 </Select.Content>
                             </Select.Root>
                         </div>
@@ -453,8 +808,13 @@ export default function RatesIndexPage({
                                         step="any"
                                         min="0.01"
                                         value={amount}
-                                        onChange={(e) => setAmount(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleRecalculate()}
+                                        onChange={(e) =>
+                                            setAmount(e.target.value)
+                                        }
+                                        onKeyDown={(e) =>
+                                            e.key === 'Enter' &&
+                                            handleRecalculate()
+                                        }
                                         placeholder="100.00"
                                         className="tabular-nums"
                                     />
@@ -467,7 +827,12 @@ export default function RatesIndexPage({
                                             disabled={isQuoting}
                                             className="shrink-0 cursor-pointer gap-1.5"
                                         >
-                                            <RefreshCw className={cn('h-3.5 w-3.5', isQuoting && 'animate-spin')} />
+                                            <RefreshCw
+                                                className={cn(
+                                                    'h-3.5 w-3.5',
+                                                    isQuoting && 'animate-spin',
+                                                )}
+                                            />
                                             Quote
                                         </Button>
                                     </DisabledTooltip>
@@ -483,7 +848,12 @@ export default function RatesIndexPage({
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             setFromCurrency(val);
-                                            calculateQuote(val, toCurrency, amount, mode);
+                                            calculateQuote(
+                                                val,
+                                                toCurrency,
+                                                amount,
+                                                mode,
+                                            );
                                         }}
                                         className={selectClassName}
                                     >
@@ -491,26 +861,59 @@ export default function RatesIndexPage({
                                             {supportedCurrencies
                                                 .filter(
                                                     (c) =>
-                                                        CURRENCY_DETAILS[c]?.category === 'funding' ||
-                                                        ['USD', 'EUR', 'GBP', 'CAD', 'AUD'].includes(c),
+                                                        CURRENCY_DETAILS[c]
+                                                            ?.category ===
+                                                            'funding' ||
+                                                        [
+                                                            'USD',
+                                                            'EUR',
+                                                            'GBP',
+                                                            'CAD',
+                                                            'AUD',
+                                                        ].includes(c),
                                                 )
                                                 .map((c) => {
-                                                    const cc = CURRENCY_COUNTRY_MAP[c]?.code || c.slice(0, 2);
+                                                    const cc =
+                                                        CURRENCY_COUNTRY_MAP[c]
+                                                            ?.code ||
+                                                        c.slice(0, 2);
+
                                                     return (
-                                                        <option key={c} value={c}>
-                                                            {flagEmoji(cc)} {c} — {CURRENCY_DETAILS[c]?.name || c}
+                                                        <option
+                                                            key={c}
+                                                            value={c}
+                                                        >
+                                                            {flagEmoji(cc)} {c}{' '}
+                                                            —{' '}
+                                                            {CURRENCY_DETAILS[c]
+                                                                ?.name || c}
                                                         </option>
                                                     );
                                                 })}
                                         </optgroup>
                                         <optgroup label="Payout Currencies">
                                             {supportedCurrencies
-                                                .filter((c) => CURRENCY_DETAILS[c]?.category === 'payout')
+                                                .filter(
+                                                    (c) =>
+                                                        CURRENCY_DETAILS[c]
+                                                            ?.category ===
+                                                        'payout',
+                                                )
                                                 .map((c) => {
-                                                    const cc = CURRENCY_COUNTRY_MAP[c]?.code || c.slice(0, 2);
+                                                    const cc =
+                                                        CURRENCY_COUNTRY_MAP[c]
+                                                            ?.code ||
+                                                        c.slice(0, 2);
+
                                                     return (
-                                                        <option key={c} value={c}>
-                                                            {flagEmoji(cc)} {c} — {CURRENCY_DETAILS[c]?.name || c}
+                                                        <option
+                                                            key={c}
+                                                            value={c}
+                                                        >
+                                                            {flagEmoji(cc)} {c}{' '}
+                                                            —{' '}
+                                                            {CURRENCY_DETAILS[c]
+                                                                ?.name || c}
                                                         </option>
                                                     );
                                                 })}
@@ -540,18 +943,38 @@ export default function RatesIndexPage({
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             setToCurrency(val);
-                                            calculateQuote(fromCurrency, val, amount, mode);
+                                            calculateQuote(
+                                                fromCurrency,
+                                                val,
+                                                amount,
+                                                mode,
+                                            );
                                         }}
                                         className={selectClassName}
                                     >
                                         <optgroup label="Mobile Money Payouts">
                                             {supportedCurrencies
-                                                .filter((c) => CURRENCY_DETAILS[c]?.category === 'payout')
+                                                .filter(
+                                                    (c) =>
+                                                        CURRENCY_DETAILS[c]
+                                                            ?.category ===
+                                                        'payout',
+                                                )
                                                 .map((c) => {
-                                                    const cc = CURRENCY_COUNTRY_MAP[c]?.code || c.slice(0, 2);
+                                                    const cc =
+                                                        CURRENCY_COUNTRY_MAP[c]
+                                                            ?.code ||
+                                                        c.slice(0, 2);
+
                                                     return (
-                                                        <option key={c} value={c}>
-                                                            {flagEmoji(cc)} {c} — {CURRENCY_DETAILS[c]?.name || c}
+                                                        <option
+                                                            key={c}
+                                                            value={c}
+                                                        >
+                                                            {flagEmoji(cc)} {c}{' '}
+                                                            —{' '}
+                                                            {CURRENCY_DETAILS[c]
+                                                                ?.name || c}
                                                         </option>
                                                     );
                                                 })}
@@ -560,14 +983,30 @@ export default function RatesIndexPage({
                                             {supportedCurrencies
                                                 .filter(
                                                     (c) =>
-                                                        CURRENCY_DETAILS[c]?.category === 'funding' ||
-                                                        ['USD', 'EUR', 'GBP'].includes(c),
+                                                        CURRENCY_DETAILS[c]
+                                                            ?.category ===
+                                                            'funding' ||
+                                                        [
+                                                            'USD',
+                                                            'EUR',
+                                                            'GBP',
+                                                        ].includes(c),
                                                 )
                                                 .map((c) => {
-                                                    const cc = CURRENCY_COUNTRY_MAP[c]?.code || c.slice(0, 2);
+                                                    const cc =
+                                                        CURRENCY_COUNTRY_MAP[c]
+                                                            ?.code ||
+                                                        c.slice(0, 2);
+
                                                     return (
-                                                        <option key={c} value={c}>
-                                                            {flagEmoji(cc)} {c} — {CURRENCY_DETAILS[c]?.name || c}
+                                                        <option
+                                                            key={c}
+                                                            value={c}
+                                                        >
+                                                            {flagEmoji(cc)} {c}{' '}
+                                                            —{' '}
+                                                            {CURRENCY_DETAILS[c]
+                                                                ?.name || c}
                                                         </option>
                                                     );
                                                 })}
@@ -583,11 +1022,18 @@ export default function RatesIndexPage({
                                 <div className="flex items-center justify-between border-b border-sidebar-border/50 pb-3 dark:border-sidebar-border/70">
                                     <div className="flex items-center gap-2">
                                         <span className="text-base leading-none">
-                                            {flagEmoji(CURRENCY_COUNTRY_MAP[fromCurrency]?.code || 'US')}
+                                            {flagEmoji(
+                                                CURRENCY_COUNTRY_MAP[
+                                                    fromCurrency
+                                                ]?.code || 'US',
+                                            )}
                                         </span>
                                         <ArrowRight className="h-3.5 w-3.5 text-neutral-400" />
                                         <span className="text-base leading-none">
-                                            {flagEmoji(CURRENCY_COUNTRY_MAP[toCurrency]?.code || 'ZM')}
+                                            {flagEmoji(
+                                                CURRENCY_COUNTRY_MAP[toCurrency]
+                                                    ?.code || 'ZM',
+                                            )}
                                         </span>
                                         <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
                                             {fromCurrency} → {toCurrency}
@@ -600,12 +1046,20 @@ export default function RatesIndexPage({
                                                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                                                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                                             </span>
-                                            <span>Locked ({formatTimeRemaining(remainingSeconds)})</span>
+                                            <span>
+                                                Locked (
+                                                {formatTimeRemaining(
+                                                    remainingSeconds,
+                                                )}
+                                                )
+                                            </span>
                                         </span>
                                     ) : remainingSeconds > 0 ? (
                                         <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
                                             <span className="h-2 w-2 rounded-full bg-amber-500" />
-                                            <span>Expiring ({remainingSeconds}s)</span>
+                                            <span>
+                                                Expiring ({remainingSeconds}s)
+                                            </span>
                                         </span>
                                     ) : (
                                         <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300">
@@ -619,39 +1073,75 @@ export default function RatesIndexPage({
                                     <div className="mt-4">
                                         <div>
                                             <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                                                {mode === 'source' ? 'Recipient receives' : 'Total you pay'}
+                                                {mode === 'source'
+                                                    ? 'Recipient receives'
+                                                    : 'Total you pay'}
                                             </div>
                                             <div className="mt-1 flex items-baseline gap-2">
-                                                <span className="text-2xl font-bold tracking-tight tabular-nums text-neutral-900 dark:text-neutral-100">
-                                                    {mode === 'source' ? activeQuote.target_amount : activeQuote.source_amount}
+                                                <span className="text-2xl font-bold tracking-tight text-neutral-900 tabular-nums dark:text-neutral-100">
+                                                    {mode === 'source'
+                                                        ? activeQuote.target_amount
+                                                        : activeQuote.source_amount}
                                                 </span>
                                                 <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-                                                    {mode === 'source' ? activeQuote.target_currency : activeQuote.source_currency}
+                                                    {mode === 'source'
+                                                        ? activeQuote.target_currency
+                                                        : activeQuote.source_currency}
                                                 </span>
                                             </div>
                                             <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                                                for {mode === 'source' ? activeQuote.source_amount : activeQuote.target_amount}{' '}
-                                                {mode === 'source' ? activeQuote.source_currency : activeQuote.target_currency}
+                                                for{' '}
+                                                {mode === 'source'
+                                                    ? activeQuote.source_amount
+                                                    : activeQuote.target_amount}{' '}
+                                                {mode === 'source'
+                                                    ? activeQuote.source_currency
+                                                    : activeQuote.target_currency}
                                             </p>
                                         </div>
 
                                         <dl className="mt-4 space-y-1.5 border-t border-sidebar-border/50 pt-3 text-xs dark:border-sidebar-border/70">
                                             <div className="flex items-center justify-between">
-                                                <dt className="text-neutral-500 dark:text-neutral-400">Mid-market rate</dt>
-                                                <dd className="tabular-nums text-neutral-700 dark:text-neutral-300">
-                                                    1 {activeQuote.source_currency} = {activeQuote.base_rate} {activeQuote.target_currency}
+                                                <dt className="text-neutral-500 dark:text-neutral-400">
+                                                    Mid-market rate
+                                                </dt>
+                                                <dd className="text-neutral-700 tabular-nums dark:text-neutral-300">
+                                                    1{' '}
+                                                    {
+                                                        activeQuote.source_currency
+                                                    }{' '}
+                                                    = {activeQuote.base_rate}{' '}
+                                                    {
+                                                        activeQuote.target_currency
+                                                    }
                                                 </dd>
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <dt className="text-neutral-500 dark:text-neutral-400">Platform spread ({activeQuote.margin_percent}%)</dt>
-                                                <dd className="tabular-nums text-neutral-700 dark:text-neutral-300">
-                                                    − {activeQuote.margin_amount} {activeQuote.source_currency}
+                                                <dt className="text-neutral-500 dark:text-neutral-400">
+                                                    Platform spread (
+                                                    {activeQuote.margin_percent}
+                                                    %)
+                                                </dt>
+                                                <dd className="text-neutral-700 tabular-nums dark:text-neutral-300">
+                                                    −{' '}
+                                                    {activeQuote.margin_amount}{' '}
+                                                    {
+                                                        activeQuote.source_currency
+                                                    }
                                                 </dd>
                                             </div>
                                             <div className="flex items-center justify-between border-t border-sidebar-border/50 pt-2 font-semibold text-neutral-900 dark:border-sidebar-border/70 dark:text-neutral-100">
                                                 <dt>Effective rate</dt>
                                                 <dd className="tabular-nums">
-                                                    1 {activeQuote.source_currency} = {activeQuote.effective_rate} {activeQuote.target_currency}
+                                                    1{' '}
+                                                    {
+                                                        activeQuote.source_currency
+                                                    }{' '}
+                                                    ={' '}
+                                                    {activeQuote.effective_rate}{' '}
+                                                    {
+                                                        activeQuote.target_currency
+                                                    }
                                                 </dd>
                                             </div>
                                         </dl>
@@ -672,16 +1162,20 @@ export default function RatesIndexPage({
                                         variant="ghost"
                                         size="1"
                                         color="gray"
-                                        onClick={() => copyQuoteId(activeQuote.id)}
+                                        onClick={() =>
+                                            copyQuoteId(activeQuote.id)
+                                        }
                                         className="cursor-pointer gap-1"
                                     >
                                         {copiedId ? (
                                             <>
-                                                <Check className="h-3 w-3" /> Copied
+                                                <Check className="h-3 w-3" />{' '}
+                                                Copied
                                             </>
                                         ) : (
                                             <>
-                                                <Copy className="h-3 w-3" /> Copy ref
+                                                <Copy className="h-3 w-3" />{' '}
+                                                Copy ref
                                             </>
                                         )}
                                     </Button>
@@ -695,19 +1189,31 @@ export default function RatesIndexPage({
                 <Card className="gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border">
                     <div className="flex flex-col gap-3 border-b border-sidebar-border/50 pb-4 sm:flex-row sm:items-center sm:justify-between dark:border-sidebar-border/70">
                         <div>
-                            <h2 className="text-sm font-semibold">Corridor Exchange Rates</h2>
+                            <h2 className="text-sm font-semibold">
+                                Corridor Exchange Rates
+                            </h2>
                             <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                                Real-time mid-market pricing and guaranteed locked rates quoted against {baseCurrency}.
+                                Real-time mid-market pricing and guaranteed
+                                locked rates quoted against {baseCurrency}.
                             </p>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3">
-                            <Select.Root value={baseCurrency} onValueChange={handleBaseChange}>
+                            <Select.Root
+                                value={baseCurrency}
+                                onValueChange={handleBaseChange}
+                            >
                                 <Select.Trigger variant="surface" />
                                 <Select.Content>
-                                    <Select.Item value="USD">Base: 🇺🇸 USD ($)</Select.Item>
-                                    <Select.Item value="EUR">Base: 🇪🇺 EUR (€)</Select.Item>
-                                    <Select.Item value="GBP">Base: 🇬🇧 GBP (£)</Select.Item>
+                                    <Select.Item value="USD">
+                                        Base: 🇺🇸 USD ($)
+                                    </Select.Item>
+                                    <Select.Item value="EUR">
+                                        Base: 🇪🇺 EUR (€)
+                                    </Select.Item>
+                                    <Select.Item value="GBP">
+                                        Base: 🇬🇧 GBP (£)
+                                    </Select.Item>
                                 </Select.Content>
                             </Select.Root>
 
@@ -728,22 +1234,43 @@ export default function RatesIndexPage({
                         <table className="w-full text-left text-xs">
                             <thead>
                                 <tr className="border-b border-sidebar-border/50 font-medium text-neutral-500 dark:border-sidebar-border/70 dark:text-neutral-400">
-                                    <th className="pb-2 text-left font-medium">Currency</th>
-                                    <th className="pb-2 text-left font-medium">Market</th>
-                                    <th className="pb-2 text-left font-medium">Corridor Type</th>
-                                    <th className="pb-2 text-right font-medium">Mid-Market Rate</th>
-                                    <th className="pb-2 text-right font-medium">Effective Rate (-{marginPercent}%)</th>
-                                    <th className="pb-2 text-center font-medium">Decimals</th>
+                                    <th className="pb-2 text-left font-medium">
+                                        Currency
+                                    </th>
+                                    <th className="pb-2 text-left font-medium">
+                                        Market
+                                    </th>
+                                    <th className="pb-2 text-left font-medium">
+                                        Corridor Type
+                                    </th>
+                                    <th className="pb-2 text-right font-medium">
+                                        Mid-Market Rate
+                                    </th>
+                                    <th className="pb-2 text-right font-medium">
+                                        Effective Rate (-{marginPercent}%)
+                                    </th>
+                                    <th className="pb-2 text-center font-medium">
+                                        Decimals
+                                    </th>
                                     <th className="pb-2" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-sidebar-border/50 dark:divide-sidebar-border/70">
                                 {pagedRates.map((rate) => {
-                                    const meta = CURRENCY_DETAILS[rate.currency];
-                                    const countryInfo = CURRENCY_COUNTRY_MAP[rate.currency];
-                                    const countryCode = rate.country_code || countryInfo?.code || rate.currency.slice(0, 2);
-                                    const countryName = rate.country_name || countryInfo?.name || rate.currency;
-                                    const isPayout = meta?.category === 'payout';
+                                    const meta =
+                                        CURRENCY_DETAILS[rate.currency];
+                                    const countryInfo =
+                                        CURRENCY_COUNTRY_MAP[rate.currency];
+                                    const countryCode =
+                                        rate.country_code ||
+                                        countryInfo?.code ||
+                                        rate.currency.slice(0, 2);
+                                    const countryName =
+                                        rate.country_name ||
+                                        countryInfo?.name ||
+                                        rate.currency;
+                                    const isPayout =
+                                        meta?.category === 'payout';
 
                                     return (
                                         <tr
@@ -752,7 +1279,11 @@ export default function RatesIndexPage({
                                         >
                                             <td className="py-2.5 pr-4">
                                                 <div className="flex items-center gap-2.5">
-                                                    <span className="text-lg leading-none" role="img" aria-label={countryCode}>
+                                                    <span
+                                                        className="text-lg leading-none"
+                                                        role="img"
+                                                        aria-label={countryCode}
+                                                    >
                                                         {flagEmoji(countryCode)}
                                                     </span>
                                                     <div>
@@ -760,7 +1291,8 @@ export default function RatesIndexPage({
                                                             {rate.currency}
                                                         </div>
                                                         <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                                                            {meta?.name || rate.currency}
+                                                            {meta?.name ||
+                                                                rate.currency}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -768,7 +1300,9 @@ export default function RatesIndexPage({
                                             <td className="py-2.5 pr-4 text-neutral-600 dark:text-neutral-400">
                                                 <div className="flex items-center gap-1.5">
                                                     <span>{countryName}</span>
-                                                    <span className="text-[11px] text-neutral-400">({countryCode})</span>
+                                                    <span className="text-[11px] text-neutral-400">
+                                                        ({countryCode})
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td className="py-2.5 pr-4">
@@ -784,32 +1318,56 @@ export default function RatesIndexPage({
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="py-2.5 pr-4 text-right whitespace-nowrap tabular-nums text-neutral-600 dark:text-neutral-300">
-                                                {formatRate(rate.base_rate, rate.decimals)}
+                                            <td className="py-2.5 pr-4 text-right whitespace-nowrap text-neutral-600 tabular-nums dark:text-neutral-300">
+                                                {formatRate(
+                                                    rate.base_rate,
+                                                    rate.decimals,
+                                                )}
                                             </td>
-                                            <td className="py-2.5 pr-4 text-right font-semibold whitespace-nowrap tabular-nums text-neutral-900 dark:text-neutral-100">
-                                                {formatRate(rate.effective_rate, rate.decimals)}
+                                            <td className="py-2.5 pr-4 text-right font-semibold whitespace-nowrap text-neutral-900 tabular-nums dark:text-neutral-100">
+                                                {formatRate(
+                                                    rate.effective_rate,
+                                                    rate.decimals,
+                                                )}
                                             </td>
                                             <td className="py-2.5 pr-4 text-center">
                                                 <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                                                    {rate.decimals === 0 ? '0 (whole)' : `${rate.decimals} dec`}
+                                                    {rate.decimals === 0
+                                                        ? '0 (whole)'
+                                                        : `${rate.decimals} dec`}
                                                 </span>
                                             </td>
                                             <td className="py-2.5 text-right">
-                                                <Button
-                                                    variant="soft"
-                                                    color="gray"
-                                                    size="1"
-                                                    onClick={() => {
-                                                        setFromCurrency(baseCurrency);
-                                                        setToCurrency(rate.currency);
-                                                        calculateQuote(baseCurrency, rate.currency, amount, mode);
-                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                <CorridorQuotePopover
+                                                    baseCurrency={baseCurrency}
+                                                    rate={rate}
+                                                    marginPercent={
+                                                        marginPercent
+                                                    }
+                                                    quoteTtlMinutes={
+                                                        quoteTtlMinutes
+                                                    }
+                                                    defaultAmount={amount}
+                                                    onOpenInCalculator={(
+                                                        from,
+                                                        to,
+                                                        amt,
+                                                    ) => {
+                                                        setFromCurrency(from);
+                                                        setToCurrency(to);
+                                                        setAmount(amt);
+                                                        calculateQuote(
+                                                            from,
+                                                            to,
+                                                            amt,
+                                                            mode,
+                                                        );
+                                                        window.scrollTo({
+                                                            top: 0,
+                                                            behavior: 'smooth',
+                                                        });
                                                     }}
-                                                    className="cursor-pointer"
-                                                >
-                                                    Quote
-                                                </Button>
+                                                />
                                             </td>
                                         </tr>
                                     );
@@ -817,7 +1375,10 @@ export default function RatesIndexPage({
 
                                 {filteredRates.length === 0 && (
                                     <tr>
-                                        <td colSpan={7} className="py-8 text-center text-neutral-400">
+                                        <td
+                                            colSpan={7}
+                                            className="py-8 text-center text-neutral-400"
+                                        >
                                             No rates matching “{search}”.
                                         </td>
                                     </tr>
@@ -876,7 +1437,11 @@ export default function RatesIndexPage({
                                     >
                                         <button
                                             type="button"
-                                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                            onClick={() =>
+                                                setPage((p) =>
+                                                    Math.max(1, p - 1),
+                                                )
+                                            }
                                             disabled={safePage === 1}
                                             className={cn(
                                                 'min-w-8 rounded-md px-2.5 py-1 text-center text-xs transition-colors',
@@ -888,15 +1453,18 @@ export default function RatesIndexPage({
                                             Previous
                                         </button>
                                     </DisabledTooltip>
-                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                                    {Array.from(
+                                        { length: totalPages },
+                                        (_, i) => i + 1,
+                                    ).map((pageNum) => (
                                         <button
                                             key={pageNum}
                                             type="button"
                                             onClick={() => setPage(pageNum)}
                                             className={cn(
-                                                'min-w-8 rounded-md px-2.5 py-1 text-center text-xs transition-colors cursor-pointer',
+                                                'min-w-8 cursor-pointer rounded-md px-2.5 py-1 text-center text-xs transition-colors',
                                                 pageNum === safePage
-                                                    ? 'bg-primary text-primary-foreground font-medium'
+                                                    ? 'bg-primary font-medium text-primary-foreground'
                                                     : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                                             )}
                                         >
@@ -909,7 +1477,11 @@ export default function RatesIndexPage({
                                     >
                                         <button
                                             type="button"
-                                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                            onClick={() =>
+                                                setPage((p) =>
+                                                    Math.min(totalPages, p + 1),
+                                                )
+                                            }
                                             disabled={safePage === totalPages}
                                             className={cn(
                                                 'min-w-8 rounded-md px-2.5 py-1 text-center text-xs transition-colors',

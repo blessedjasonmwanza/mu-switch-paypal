@@ -33,8 +33,12 @@ function flagEmoji(code: string): string {
 
 /** Rotate an array so a copy can start at a different offset. */
 function rotate<T>(items: T[], by: number): T[] {
-    if (items.length === 0) return items;
+    if (items.length === 0) {
+return items;
+}
+
     const n = ((by % items.length) + items.length) % items.length;
+
     return [...items.slice(n), ...items.slice(0, n)];
 }
 

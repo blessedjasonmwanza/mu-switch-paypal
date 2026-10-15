@@ -1,11 +1,11 @@
 import { Head, Link, router, usePoll } from '@inertiajs/react';
+import { Button, Select, TextField } from '@radix-ui/themes';
 import { ChevronLeft, ChevronRight, Coins, Globe, Search, Wallet } from 'lucide-react';
 import { useState } from 'react';
-import { Button, Select, TextField } from '@radix-ui/themes';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import payments from '@/routes/payments';
 import { cn } from '@/lib/utils';
+import payments from '@/routes/payments';
 
 interface Tx {
     id: number;
@@ -332,8 +332,11 @@ export default function Index({ metrics, metricTrend, topCurrencies, topCountrie
     const urlWith = (overrides: Record<string, string | undefined>) => {
         const query = { ...baseQuery, ...overrides };
         Object.keys(query).forEach((k) => {
-            if (query[k] === undefined || query[k] === '') delete query[k];
+            if (query[k] === undefined || query[k] === '') {
+delete query[k];
+}
         });
+
         return payments.index.url({ query });
     };
 
