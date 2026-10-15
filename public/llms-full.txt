@@ -1,6 +1,6 @@
 # MoneyUnify Switch — Full Overview
 
-> MoneyUnify Switch is a source-available, self-hosted payment switch API that unifies mobile money and card providers across Africa behind one endpoint, with automatic sequential provider failover across 32 countries and 24 currencies.
+> MoneyUnify Switch is an open-source, self-hosted payment switch API that unifies mobile money and card providers across Africa behind one endpoint, with automatic sequential provider failover across 32 countries and 24 currencies.
 
 This document is a self-contained overview intended for large language models, AI
 assistants, and chatbots. It describes what MoneyUnify Switch is, who it is for,
@@ -17,7 +17,7 @@ customer. The switch decides which provider to use behind the scenes and, if one
 provider is down or declines, automatically tries the next until the payment goes
 through. One connection, all providers.
 
-It is **source-available** and **self-hosted**: it runs on the operator's own VPS
+It is **open source (Apache-2.0)** and **self-hosted**: it runs on the operator's own VPS
 or machine. There is no central hosted sign-up — each operator deploys their own
 instance and registers the first account on it. The reference deployment and
 documentation live at https://moneyunify.one and the source at
