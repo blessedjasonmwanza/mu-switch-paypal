@@ -4,12 +4,13 @@ namespace App\Support;
 
 use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
+use App\Contracts\PayoutProviderInterface;
 use App\Jobs\SendTransactionCallback;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Re-checks a transaction through the driver that processed it, and notifies
+ * Re-checks a transaction (payment or payout) through the driver that processed it, and notifies
  * the merchant once it settles. Shared by the verify API, hosted-checkout
  * returns and provider webhooks.
  */
@@ -27,8 +28,13 @@ class TransactionVerifier
         }
 
         $driver = app($provider->class);
+        $isPayout = $transaction->direction === 'debit';
 
-        if (! $driver instanceof PaymentProviderInterface) {
+        if ($isPayout && ! $driver instanceof PayoutProviderInterface) {
+            return ApiResponse::error('Payout driver must implement PayoutProviderInterface', 500);
+        }
+
+        if (! $isPayout && ! $driver instanceof PaymentProviderInterface) {
             return ApiResponse::error('Payment driver must implement PaymentProviderInterface', 500);
         }
 
@@ -40,7 +46,7 @@ class TransactionVerifier
                 return $configError;
             }
 
-            $response = $driver->verifyPayment($transaction);
+            $response = $isPayout ? $driver->verifyPayout($transaction) : $driver->verifyPayment($transaction);
         } finally {
             ProviderCallContext::clear();
         }

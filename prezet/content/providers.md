@@ -332,6 +332,26 @@ the country, phone number and amount.
 To enable it, add a provider in the dashboard, choose the **pawaPay** driver,
 paste your API token, and tick the markets you serve.
 
+pawaPay also sends **payouts** to mobile wallets. See
+[Send a Payout](/docs/api/payouts). Its **Environment** setting chooses `live`
+(the default) or `sandbox`. Use sandbox with a sandbox API token to test both
+collections and payouts.
+
+## Built-in driver: Simulated Payouts (sandbox only)
+
+A payout driver for demos and testing. It is never available in production and
+isn't counted in coverage. It needs no credentials. The recipient number decides
+the outcome:
+
+| Number ends in | Outcome |
+| --- | --- |
+| `0000` (or your **Refuse numbers ending in** setting) | Refused, so the switch tries the next payout provider |
+| `9999` | No definite answer, so the payout must be verified |
+| `1111` | Accepted, then fails on verification |
+| anything else | Accepted, then completed on verification |
+
+It charges an illustrative 1% payout fee, so fees and the ledger show up in demos.
+
 ## Built-in driver: DPO Pay
 
 The platform ships a **DPO Pay** driver (`DpoController`) for **direct

@@ -2,8 +2,6 @@
 
 namespace App\Support;
 
-use App\Contracts\PaymentProviderInterface;
-
 /**
  * Aggregates the markets the switch can serve across every built-in provider
  * driver — the single source of truth for "supported countries" surfaces such
@@ -65,22 +63,12 @@ class Coverage
     }
 
     /**
-     * The auto-discovered payment-provider driver classes.
+     * The real (non-sandbox) driver classes.
      *
-     * @return list<class-string<PaymentProviderInterface>>
+     * @return list<class-string>
      */
     private static function driverClasses(): array
     {
-        $classes = [];
-
-        foreach (glob(app_path('Http/Controllers/Providers/*.php')) ?: [] as $file) {
-            $class = 'App\\Http\\Controllers\\Providers\\'.basename($file, '.php');
-
-            if (class_exists($class) && is_subclass_of($class, PaymentProviderInterface::class)) {
-                $classes[] = $class;
-            }
-        }
-
-        return $classes;
+        return DriverRegistry::classes(includeSandboxOnly: false);
     }
 }

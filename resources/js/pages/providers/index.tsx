@@ -116,6 +116,7 @@ interface AvailableDriver {
     class: string;
     supported_country_options: MarketOption[];
     supported_currencies: string[];
+    capabilities: string[];
     default_countries: string[];
     default_logo: string | null;
     config_fields: ConfigField[];
@@ -1049,6 +1050,13 @@ export default function Index({
                                                     <FileCode className="h-4 w-4 text-neutral-500" />
                                                 )}
                                                 {driver.name}
+                                                {driver.capabilities.includes(
+                                                    'payouts',
+                                                ) && (
+                                                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                                        Payouts
+                                                    </span>
+                                                )}
                                             </div>
                                             <div
                                                 className="max-w-[200px] truncate font-mono text-xs text-neutral-500 dark:text-neutral-400"

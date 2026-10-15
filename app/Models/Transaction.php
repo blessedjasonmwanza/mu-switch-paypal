@@ -30,6 +30,7 @@ class Transaction extends Model
         'callback_url',
         'callback_notified_at',
         'return_url',
+        'idempotency_key',
     ];
 
     public function paymentProvider()

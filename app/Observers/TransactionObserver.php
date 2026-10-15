@@ -31,6 +31,13 @@ class TransactionObserver
 
         $currency = $transaction->currency;
         $schedule = ProviderFees::scheduleFor($provider);
+
+        if ($transaction->direction === 'debit') {
+            $this->priceDebit($transaction, $schedule, $amount);
+
+            return;
+        }
+
         $actual = ProviderFees::actualCollectionFee($provider->class, $transaction->provider_response, $currency);
 
         $collection = $actual ?? ($schedule ? ProviderFees::collectionFee($schedule, $amount, $currency) : null);
@@ -52,5 +59,23 @@ class TransactionObserver
             ->toFloat();
         // The collection fee is estimated unless the provider reported the actual.
         $transaction->fee_estimated = $actual === null;
+    }
+
+    /**
+     * A payout: the provider fee is charged on top, so `net_amount` is the
+     * total taken from the float (amount + fee) and the recipient gets the amount.
+     *
+     * @param  array<string, mixed>|null  $schedule
+     */
+    private function priceDebit(Transaction $transaction, ?array $schedule, float $amount): void
+    {
+        $fee = $schedule ? ProviderFees::payoutFee($schedule, $amount, $transaction->currency) : null;
+
+        $transaction->collection_fee = $fee;
+        $transaction->settlement_fee = null;
+        $transaction->net_amount = FeeCalculator::money($transaction->amount)
+            ->plus(FeeCalculator::money((float) $fee))
+            ->toFloat();
+        $transaction->fee_estimated = $fee !== null;
     }
 }

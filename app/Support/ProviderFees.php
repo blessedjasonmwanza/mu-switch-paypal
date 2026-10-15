@@ -74,6 +74,18 @@ class ProviderFees
     }
 
     /**
+     * The payout fee for an amount, or null when the schedule doesn't price payouts.
+     *
+     * @param  array<string, mixed>  $schedule
+     */
+    public static function payoutFee(array $schedule, float $amount, ?string $currency = null): ?float
+    {
+        $calculator = new FeeCalculator($schedule, $currency ?? self::DEFAULT_CURRENCY);
+
+        return $calculator->payoutFee(FeeCalculator::money($amount))?->toFloat();
+    }
+
+    /**
      * The actual collection fee a provider reported for a payment, or null when
      * it doesn't report one. Drivers may define a static
      * `actualCollectionFee(array $response, string $currency): ?string`;

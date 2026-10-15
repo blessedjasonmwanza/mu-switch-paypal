@@ -16,4 +16,5 @@
 - [Quote a Payment](content/api/quote-payment)
 - [Request a Payment](content/api/request-payment)
 - [Verify a Payment](content/api/verify-payment)
+- [Send a Payout](content/api/payouts)
 - [Responses & Errors](content/api/responses)

@@ -145,6 +145,7 @@ collecting via `POST /api/v1/payment/request`.
 - API — Request a payment: https://moneyunify.one/docs/api/request-payment
 - API — Quote a payment: https://moneyunify.one/docs/api/quote-payment
 - API — Verify a payment: https://moneyunify.one/docs/api/verify-payment
+- API — Send a payout: https://moneyunify.one/docs/api/payouts
 - API — Responses & errors: https://moneyunify.one/docs/api/responses
 - Coverage: https://moneyunify.one/docs/api/coverage
 - Providers: https://moneyunify.one/docs/providers

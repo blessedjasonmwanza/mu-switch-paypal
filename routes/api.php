@@ -1,6 +1,7 @@
 <?php
 
 use App\ApiResponse;
+use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PaypalWebhookController;
 use App\Http\Controllers\SwitchController;
 use App\Http\Middleware\VerifyApiAccess;
@@ -10,11 +11,16 @@ if (config('app.docs_only_routes')) {
     return;
 }
 
-Route::prefix('v1')->middleware(VerifyApiAccess::class)->controller(SwitchController::class)->group(function () {
-    Route::prefix('payment')->group(function () {
+Route::prefix('v1')->middleware(VerifyApiAccess::class)->group(function () {
+    Route::prefix('payment')->controller(SwitchController::class)->group(function () {
         Route::post('/quote', 'quotePayment');
         Route::post('/request', 'requestPayment');
         Route::post('/verify', 'verifyPayment');
+    });
+
+    Route::prefix('payout')->controller(PayoutController::class)->group(function () {
+        Route::post('/request', 'requestPayout');
+        Route::post('/verify', 'verifyPayout');
     });
 });
 

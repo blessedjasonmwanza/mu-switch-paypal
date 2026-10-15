@@ -2,6 +2,10 @@
 
 namespace App\Support;
 
+use App\Support\Fees\FeeCalculator;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
+
 /**
  * Resolves which currency a payment is charged in, and which drivers can
  * charge it. Drivers settle in their market's currency unless they declare a
@@ -38,6 +42,25 @@ class Currency
             in_array($currency, self::THREE_DECIMAL, true) => 3,
             default => 2,
         };
+    }
+
+    /**
+     * An amount in whole minor units (cents, ngwee, yen), rounded half-up.
+     */
+    public static function toMinorUnits(BigDecimal|int|float|string $amount, string $currency): int
+    {
+        return FeeCalculator::money($amount)
+            ->toScale(self::decimals($currency), RoundingMode::HalfUp)
+            ->withPointMovedRight(self::decimals($currency))
+            ->toInt();
+    }
+
+    /**
+     * Whole minor units back to an exact amount.
+     */
+    public static function fromMinorUnits(int $minorUnits, string $currency): BigDecimal
+    {
+        return BigDecimal::of($minorUnits)->withPointMovedLeft(self::decimals($currency));
     }
 
     /**

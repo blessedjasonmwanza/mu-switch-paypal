@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Contracts\PaymentProviderInterface;
+use App\Contracts\PayoutProviderInterface;
 use App\Exceptions\NoEligibleProviderException;
 use App\Models\PaymentProvider;
 use App\Models\User;
@@ -17,11 +19,12 @@ class ProviderRouter
     /**
      * The eligible providers, in the order they will be tried.
      *
+     * @param  class-string  $capability  The driver contract needed, e.g. collections or payouts.
      * @return Collection<int, PaymentProvider>
      *
      * @throws NoEligibleProviderException
      */
-    public static function route(?User $user, string $country, string $currency, float $amount): Collection
+    public static function route(?User $user, string $country, string $currency, float $amount, string $capability = PaymentProviderInterface::class): Collection
     {
         $providers = $user ? $user->paymentProviders : collect();
 
@@ -30,10 +33,14 @@ class ProviderRouter
         }
 
         $country = strtoupper($country);
-        $eligible = $providers->filter(fn (PaymentProvider $provider): bool => $provider->is_active && self::servesCountry($provider, $country));
+        $eligible = $providers->filter(fn (PaymentProvider $provider): bool => $provider->is_active
+            && self::supports($provider, $capability)
+            && self::servesCountry($provider, $country));
 
         if ($eligible->isEmpty()) {
-            throw new NoEligibleProviderException('No active providers support the requested country');
+            $kind = $capability === PayoutProviderInterface::class ? 'payout providers' : 'providers';
+
+            throw new NoEligibleProviderException("No active {$kind} support the requested country");
         }
 
         // Only providers that can charge the currency, so a fallback never
@@ -48,6 +55,21 @@ class ProviderRouter
         return $user?->feePolicy() === 'cost_aware'
             ? self::orderByCost($eligible, $amount, $currency)
             : $eligible->values();
+    }
+
+    /**
+     * Whether the provider's driver implements the needed contract. Unknown
+     * classes are kept so the caller can report the missing driver.
+     *
+     * @param  class-string  $capability
+     */
+    private static function supports(PaymentProvider $provider, string $capability): bool
+    {
+        if (! class_exists($provider->class)) {
+            return true;
+        }
+
+        return is_subclass_of($provider->class, $capability) && DriverRegistry::isAvailable($provider->class);
     }
 
     /**

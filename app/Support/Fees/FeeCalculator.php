@@ -18,6 +18,7 @@ use InvalidArgumentException;
  *   [
  *     'collection' => ['percent' => 3.49, 'flat' => 0.49 | ['USD' => 0.49, 'default' => 0.30], 'min' => 0, 'max' => null],
  *     'settlement' => ['tiers' => [['max' => 1000, 'fee' => 8.5]], 'default' => 8.5],
+ *     'payout' => ['percent' => 1.0, 'flat' => 0, 'min' => null, 'max' => null], // optional
  *   ]
  */
 final class FeeCalculator
@@ -92,22 +93,41 @@ final class FeeCalculator
     }
 
     /**
-     * The provider's percentage plus fixed fee, within its min and max, rounded.
+     * The provider's fee for collecting this amount, rounded.
      */
     public function collectionFee(BigDecimal $gross): BigDecimal
     {
-        $collection = $this->schedule['collection'] ?? [];
+        return $this->percentageFee($this->schedule['collection'] ?? [], $gross);
+    }
 
-        $fee = $gross
-            ->multipliedBy(self::money($collection['percent'] ?? 0))
+    /**
+     * The provider's fee for paying this amount out, or null when the
+     * schedule doesn't price payouts.
+     */
+    public function payoutFee(BigDecimal $amount): ?BigDecimal
+    {
+        $payout = $this->schedule['payout'] ?? null;
+
+        return is_array($payout) ? $this->percentageFee($payout, $amount) : null;
+    }
+
+    /**
+     * A percentage plus fixed fee, within its min and max, rounded.
+     *
+     * @param  array<string, mixed>  $section
+     */
+    private function percentageFee(array $section, BigDecimal $amount): BigDecimal
+    {
+        $fee = $amount
+            ->multipliedBy(self::money($section['percent'] ?? 0))
             ->dividedBy(100, self::WORKING_SCALE, RoundingMode::HalfUp)
-            ->plus($this->forCurrency($collection['flat'] ?? 0));
+            ->plus($this->forCurrency($section['flat'] ?? 0));
 
-        if (($min = $this->forCurrency($collection['min'] ?? null)) !== null && $fee->isLessThan($min)) {
+        if (($min = $this->forCurrency($section['min'] ?? null)) !== null && $fee->isLessThan($min)) {
             $fee = $min;
         }
 
-        if (($max = $this->forCurrency($collection['max'] ?? null)) !== null && $fee->isGreaterThan($max)) {
+        if (($max = $this->forCurrency($section['max'] ?? null)) !== null && $fee->isGreaterThan($max)) {
             $fee = $max;
         }
 

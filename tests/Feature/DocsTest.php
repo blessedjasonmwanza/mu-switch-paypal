@@ -114,3 +114,11 @@ test('the quote api is documented', function () {
         ->assertSee('/api/v1/payment/quote', false)
         ->assertSee('payer_pays_fees', false);
 });
+
+test('the payout api is documented', function () {
+    $this->get('/docs/api/payouts')
+        ->assertOk()
+        ->assertSee('Send a Payout', false)
+        ->assertSee('Idempotency-Key', false)
+        ->assertSee('/api/v1/payout/verify', false);
+});
