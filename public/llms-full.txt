@@ -41,7 +41,7 @@ for configuration and a single JSON API for collection.
 - **Multi-country and multi-currency by design.** Providers advertise the markets they serve; the switch routes each request to a provider that can settle it in the right country and currency. Coverage spans 32 countries and 24 currencies.
 - **First-class FX tracking.** Every transaction records whether it crossed currencies and the rate applied.
 - **Full auditability.** Every attempt is persisted and visible in one dashboard, with per-provider logs, for easy reconciliation.
-- **Extensible drivers.** Ships with 13 built-in provider drivers and a documented way to add your own.
+- **Extensible drivers.** Ships with 14 built-in provider drivers and a documented way to add your own.
 
 ## The single API endpoint
 
@@ -118,7 +118,7 @@ the right inputs per driver. Operators can also add custom drivers.
 
 - 32 countries supported across the built-in drivers.
 - 24 currencies.
-- 13 built-in providers, covering major mobile networks (e.g. MTN, Airtel Money, M-Pesa, TNM Mpamba, Zamtel) and card rails via aggregators.
+- 14 built-in providers, covering major mobile networks (e.g. MTN, Airtel Money, M-Pesa, TNM Mpamba, Zamtel), card rails via aggregators, and PayPal hosted checkout.
 
 See the live coverage matrix (country, code, currency, networks, providers) at
 https://moneyunify.one/docs/api/coverage.

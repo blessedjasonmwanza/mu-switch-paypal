@@ -461,6 +461,60 @@ To enable it, add a provider in the dashboard, choose the **Kazang** driver,
 paste your credentials, host and product IDs, tick the markets you serve, and
 complete the integration dialog for any non-Zambia market.
 
+## Built-in driver: PayPal
+
+The platform ships a **PayPal** driver (`PaypalController`) for **hosted
+checkout** through PayPal's Orders v2 API. The payer approves the payment on
+PayPal (wallet or card), so the switch returns a link instead of pushing a
+prompt to a phone. You provide:
+
+| Credential | Description |
+| --- | --- |
+| **Client ID** | Your PayPal REST app's client ID. |
+| **Client Secret** | The matching secret. |
+| **Environment** | `sandbox` for testing, `live` for real payments. |
+| **Webhook ID** *(optional)* | The ID of the webhook you registered in the PayPal app (see below). |
+
+Create the app at [developer.paypal.com](https://developer.paypal.com/dashboard/applications)
+to get the client ID and secret.
+
+**How a payment flows**
+
+1. Call [Request a Payment](/docs/api/request-payment) with a PayPal currency,
+   e.g. `"currency": "USD"`. PayPal only takes part when the request names a
+   currency it supports. Without one, the switch charges the country's own
+   currency, which PayPal can't settle.
+2. The response's `data.checkout_url` is where the payer approves the payment.
+   The transaction is **pending** until then.
+3. When the payer returns, the switch **captures** the order and sends them to
+   your `return_url` (or shows a confirmation page if you didn't pass one).
+   [Verifying](/docs/api/verify-payment) also captures an approved order, so
+   you never depend on the payer's browser coming back.
+
+Every call is idempotent (PayPal's `PayPal-Request-Id`), so a retry never
+charges twice. Orders the payer abandons or cancels end **failed**, and a
+cancelled order is never captured later.
+
+**Webhooks (recommended)**
+
+Register this URL in your PayPal app and paste the webhook's ID into the
+provider:
+
+```http
+POST https://your-domain.com/api/webhooks/paypal/{provider_id}
+```
+
+`{provider_id}` is the provider's ID, shown in its logs URL
+(`/providers/{provider_id}/logs`). Subscribe to `CHECKOUT.ORDER.APPROVED`,
+`PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.DENIED`. Each delivery's
+signature is checked with PayPal before anything happens, and duplicate
+deliveries are ignored. The switch then re-reads the order from PayPal, so the
+transaction settles even if neither the payer nor your app comes back.
+
+PayPal can charge AUD, BRL, CAD, CNY, CZK, DKK, EUR, GBP, HKD, HUF, ILS, JPY,
+MXN, MYR, NOK, NZD, PHP, PLN, SEK, SGD, CHF, THB, TWD and USD. HUF, JPY and TWD
+amounts must be whole numbers.
+
 ## Adding your own driver
 
 Drivers are plain classes in `app/Http/Controllers/Providers` that implement

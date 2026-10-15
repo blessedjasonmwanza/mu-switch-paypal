@@ -87,3 +87,10 @@ test('in-page links resolve to valid /docs urls, not /docs/content', function ()
     // ...and must never contain the broken content/ prefix.
     expect($response->getContent())->not->toContain('/docs/content/');
 });
+
+test('the providers guide documents the paypal driver and its webhook', function () {
+    $this->get('/docs/providers')
+        ->assertOk()
+        ->assertSee('Built-in driver: PayPal', false)
+        ->assertSee('/api/webhooks/paypal/{provider_id}', false);
+});

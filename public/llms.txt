@@ -18,7 +18,7 @@ MoneyUnify Switch removes single-gateway dependency: you integrate once against 
 - [Coverage](https://moneyunify.one/docs/api/coverage): supported countries, currencies, mobile networks, and the providers that reach each.
 
 ## Providers
-- [Payment Providers](https://moneyunify.one/docs/providers): how to configure gateways, plus the 13 built-in drivers — Lenco, Airtel Money, MTN MoMo, Lipila, M-Pesa (Kenya), M-Pesa (Vodacom), cGrate (Konse Konse 543), Ting by Cellulant, Flutterwave, pawaPay, DPO Pay, MobiPay, and Kazang — and a guide to writing your own.
+- [Payment Providers](https://moneyunify.one/docs/providers): how to configure gateways, plus the 14 built-in drivers — Lenco, Airtel Money, MTN MoMo, Lipila, M-Pesa (Kenya), M-Pesa (Vodacom), cGrate (Konse Konse 543), Ting by Cellulant, Flutterwave, pawaPay, DPO Pay, MobiPay, Kazang, and PayPal — and a guide to writing your own.
 
 ## Optional
 - [GitHub repository](https://github.com/MoneyUnify/mu-switch): source code, issues, and self-hosting instructions.
