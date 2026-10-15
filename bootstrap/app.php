@@ -31,8 +31,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // The API always answers in JSON; so do dashboard endpoints called with
+        // fetch (they ask for JSON), while Inertia page visits keep redirecting.
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
+            fn (Request $request) => $request->is('api/*') || ($request->expectsJson() && ! $request->header('X-Inertia')),
         );
 
         // Stash the throwable on the request so LogApiRequests can persist its

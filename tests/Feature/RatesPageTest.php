@@ -49,7 +49,8 @@ test('rates web quote rejects invalid amounts', function () {
             'to_currency' => 'ZMW',
             'amount' => -10,
         ])
-        ->assertSessionHasErrors('amount');
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('amount');
 });
 
 test('rates page retains active quote in session across subsequent page visits and reloads', function () {
