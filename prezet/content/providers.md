@@ -61,11 +61,9 @@ your Lenco API key, and set the supported countries to `ZM,MW`.
 Lenco also sends **payouts** to mobile wallets in Zambia (MTN, Airtel, Zamtel)
 and Malawi (Airtel, TNM), from one of your Lenco accounts. Payouts also power
 [cross-border transfers](/docs/api/cross-border-transfers), where the sender
-pays with PayPal and the recipient is paid through Lenco. To turn payouts on,
-set **Account ID (for payouts)** on the provider: the 36-character ID of the
-Lenco account to pay from (from your Lenco dashboard or `GET /accounts`).
-Without it, Lenco is used for collections only and isn't offered for payouts
-or cross-border transfers.
+Payouts work automatically with your Lenco API key: the switch automatically
+discovers your active Lenco funding account and silently registers recipient
+mobile-money numbers on the fly, requiring no manual account or recipient ID setup.
 
 | | |
 | --- | --- |

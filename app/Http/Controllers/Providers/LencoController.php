@@ -13,8 +13,10 @@ use App\Models\CustomerAccount;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Support\Market;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -42,16 +44,10 @@ class LencoController extends Controller implements PaymentProviderInterface, Pa
 
     /**
      * The credential fields the dashboard should collect for this driver.
+     * Payout debit accounts and transfer recipients are resolved automatedly.
      */
     public const CONFIG_FIELDS = [
         ['key' => 'api_key', 'label' => 'API Key / Token', 'type' => 'password'],
-        [
-            'key' => 'account_id',
-            'label' => 'Account ID (for payouts)',
-            'type' => 'text',
-            'required' => false,
-            'help' => 'The Lenco account payouts are paid from (a 36-character ID from your Lenco dashboard or GET /accounts). Leave blank to use Lenco for collections only.',
-        ],
     ];
 
     /**
@@ -79,7 +75,7 @@ class LencoController extends Controller implements PaymentProviderInterface, Pa
     public $provider;
 
     /**
-     * The Lenco account payouts are paid from.
+     * The Lenco account payouts are paid from (optional; auto-discovered if not set).
      */
     private ?string $account_id = null;
 
@@ -104,31 +100,39 @@ class LencoController extends Controller implements PaymentProviderInterface, Pa
             return ApiResponse::error('API key is required for Lenco provider', 400);
         }
         $this->api_key = $apiKey;
-        $this->account_id = isset($config['account_id']) ? trim((string) $config['account_id']) : null;
+        $this->account_id = isset($config['account_id']) && filled($config['account_id'])
+            ? trim((string) $config['account_id'])
+            : null;
         $this->provider = $provider;
 
         return null;
     }
 
     /**
-     * Payouts need the Lenco account to pay from; without it, Lenco only collects.
+     * Lenco is payout-ready when its API key is configured.
      *
      * @param  array<string, mixed>  $config
      */
     public static function payoutReady(array $config): bool
     {
-        return filled($config['account_id'] ?? null);
+        return filled($config['api_key'] ?? null);
     }
 
     /**
-     * Send a mobile-money transfer from the configured Lenco account.
+     * Send a mobile-money transfer from the configured or auto-discovered Lenco account.
      *
+     * Automatically registers the destination number as a transfer recipient
+     * (`POST /transfer-recipients/mobile-money`) to obtain the transfer recipient ID,
+     * then initiates the transfer (`POST /transfers/mobile-money`).
+     *
+     * @see https://lenco-api.readme.io/v2.0/reference/create-transfer-recipient-as-mobile-money
      * @see https://lenco-api.readme.io/v2.0/reference/initiate-transfer-to-mobile-money
      */
     public function requestPayout(Transaction $transaction, array $recipient): JsonResponse
     {
-        if (! $this->account_id) {
-            return $this->refusePayout($transaction, 'Set the Lenco account ID on this provider to send payouts');
+        $debitAccountId = $this->resolveDebitAccountId($transaction->currency);
+        if (! $debitAccountId) {
+            return $this->refusePayout($transaction, 'Unable to resolve an active Lenco account to fund the payout');
         }
 
         $country = strtoupper($transaction->country);
@@ -140,17 +144,44 @@ class LencoController extends Controller implements PaymentProviderInterface, Pa
             return $this->refusePayout($transaction, 'Lenco can\'t tell this number\'s mobile network in '.Market::name($country).'. Send `network` ('.implode(', ', self::PAYOUT_OPERATORS[$country] ?? []).').');
         }
 
+        $transferRecipientId = $recipient['transfer_recipient_id'] ?? $recipient['transferRecipientId'] ?? null;
+
+        if (! $transferRecipientId) {
+            $recipientResult = $this->resolveOrCreateTransferRecipient($phone, $operator, $country);
+
+            if ($recipientResult['serverError']) {
+                $transaction->update(['provider_response' => $recipientResult['response']?->json()]);
+
+                return ApiResponse::error($recipientResult['error'], 502);
+            }
+
+            if (! $recipientResult['id']) {
+                return $this->refusePayout(
+                    $transaction,
+                    $recipientResult['error'] ?? 'Lenco could not create the transfer recipient',
+                    $recipientResult['response']?->json()
+                );
+            }
+
+            $transferRecipientId = $recipientResult['id'];
+
+            $accountName = $recipientResult['response']?->json('data.details.accountName');
+            if ($accountName && $transaction->customer) {
+                if (! $transaction->customer->name || str_starts_with($transaction->customer->name, 'Customer ') || $transaction->customer->name === (string) $recipient['account_number']) {
+                    $transaction->customer->update(['name' => $accountName]);
+                }
+            }
+        }
+
         // A connection error is thrown on purpose: the outcome is unknown.
         $response = Http::withToken($this->api_key)
             ->acceptJson()
             ->post($this->baseUrl.'/transfers/mobile-money', array_filter([
-                'accountId' => $this->account_id,
+                'accountId' => $debitAccountId,
                 'amount' => (float) $transaction->amount,
                 'reference' => $transaction->transaction_id,
                 'narration' => $recipient['narration'] ?? null,
-                'phone' => $phone,
-                'operator' => $operator,
-                'country' => strtolower($country),
+                'transferRecipientId' => $transferRecipientId,
             ], fn ($value): bool => $value !== null));
 
         // Lenco has no definite answer (server error), or already has this
@@ -181,6 +212,95 @@ class LencoController extends Controller implements PaymentProviderInterface, Pa
             'reference' => $transaction->provider_transaction_id,
             'status' => $status->value,
         ]);
+    }
+
+    /**
+     * Resolve the Lenco debit account ID to pay from (configured or auto-discovered).
+     */
+    private function resolveDebitAccountId(string $currency): ?string
+    {
+        if (filled($this->account_id)) {
+            return $this->account_id;
+        }
+
+        $cacheKey = 'lenco:account_id:'.sha1($this->api_key).':'.strtoupper($currency);
+
+        return Cache::remember($cacheKey, 86400, function () use ($currency): ?string {
+            $response = Http::withToken($this->api_key)
+                ->acceptJson()
+                ->get($this->baseUrl.'/accounts');
+
+            if (! $response->successful() || ! $response->json('status')) {
+                return null;
+            }
+
+            $accounts = $response->json('data') ?? [];
+            if (! is_array($accounts) || empty($accounts)) {
+                return null;
+            }
+
+            $target = strtoupper($currency);
+            foreach ($accounts as $account) {
+                if (strtoupper((string) ($account['currency'] ?? '')) === $target) {
+                    return $account['id'] ?? null;
+                }
+            }
+
+            return $accounts[0]['id'] ?? null;
+        });
+    }
+
+    /**
+     * Resolve or silently create a transfer recipient with Lenco.
+     *
+     * @see https://lenco-api.readme.io/v2.0/reference/create-transfer-recipient-as-mobile-money
+     *
+     * @return array{id: ?string, response: ?Response, error: ?string, serverError: bool}
+     */
+    private function resolveOrCreateTransferRecipient(string $phone, string $operator, string $country): array
+    {
+        $response = Http::withToken($this->api_key)
+            ->acceptJson()
+            ->post($this->baseUrl.'/transfer-recipients/mobile-money', [
+                'phone' => $phone,
+                'operator' => $operator,
+                'country' => strtolower($country),
+            ]);
+
+        if ($response->serverError()) {
+            return [
+                'id' => null,
+                'response' => $response,
+                'error' => $response->json('message') ?: 'Lenco did not confirm the transfer recipient',
+                'serverError' => true,
+            ];
+        }
+
+        if (! $response->successful() || ! $response->json('status')) {
+            return [
+                'id' => null,
+                'response' => $response,
+                'error' => $response->json('message') ?: 'Lenco could not verify the recipient mobile-money details',
+                'serverError' => false,
+            ];
+        }
+
+        $recipientId = $response->json('data.id');
+        if (! $recipientId) {
+            return [
+                'id' => null,
+                'response' => $response,
+                'error' => 'Lenco did not return a transfer recipient ID',
+                'serverError' => false,
+            ];
+        }
+
+        return [
+            'id' => $recipientId,
+            'response' => $response,
+            'error' => null,
+            'serverError' => false,
+        ];
     }
 
     /**
