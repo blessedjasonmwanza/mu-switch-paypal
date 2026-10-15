@@ -5,6 +5,7 @@ use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FeePolicyController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PaypalCheckoutController;
 use App\Http\Controllers\ProviderController;
 use App\Support\Coverage;
 use Illuminate\Http\Request;
@@ -46,6 +47,15 @@ if (! config('app.docs_only_routes')) {
         Route::get('fee-policy', [FeePolicyController::class, 'show'])->name('fee-policy.show');
         Route::put('fee-policy', [FeePolicyController::class, 'update'])->name('fee-policy.update');
     });
+
+    // Where PayPal returns the payer after checkout (signed links).
+    Route::prefix('checkout/paypal/{transaction:transaction_id}')
+        ->controller(PaypalCheckoutController::class)
+        ->name('paypal.checkout.')
+        ->group(function () {
+            Route::get('return', 'approved')->name('return');
+            Route::get('cancel', 'cancelled')->name('cancel');
+        });
 
     require __DIR__.'/settings.php';
 }

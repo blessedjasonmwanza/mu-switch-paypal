@@ -1,0 +1,81 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Enums\TransactionStatus;
+use App\Http\Controllers\Providers\PaypalController;
+use App\Models\Transaction;
+use App\Support\TransactionVerifier;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Uri;
+
+/**
+ * Where PayPal sends the payer back after approving or cancelling checkout.
+ */
+class PaypalCheckoutController extends Controller
+{
+    /**
+     * PayPal appends these to our signed return URLs.
+     */
+    private const PAYPAL_QUERY_PARAMETERS = ['token', 'PayerID'];
+
+    /**
+     * The payer approved: capture the order and hand them back.
+     */
+    public function approved(Request $request, Transaction $transaction, TransactionVerifier $verifier): RedirectResponse|View
+    {
+        $this->authorizeReturn($request, $transaction);
+
+        $verifier->verify($transaction);
+
+        return $this->finish($transaction->refresh());
+    }
+
+    /**
+     * The payer cancelled: fail the transaction unless it was already paid.
+     */
+    public function cancelled(Request $request, Transaction $transaction, TransactionVerifier $verifier): RedirectResponse|View
+    {
+        $this->authorizeReturn($request, $transaction);
+
+        $verifier->verify($transaction);
+        $transaction->refresh();
+
+        if ($transaction->status === TransactionStatus::PENDING) {
+            $transaction->update([
+                'status' => TransactionStatus::FAILED,
+                'provider_response' => [...($transaction->provider_response ?? []), 'cancelled_by_payer' => true],
+            ]);
+
+            $verifier->notifyIfSettled($transaction);
+        }
+
+        return $this->finish($transaction);
+    }
+
+    /**
+     * Only signed links to PayPal transactions may be used.
+     */
+    private function authorizeReturn(Request $request, Transaction $transaction): void
+    {
+        abort_unless($request->hasValidSignatureWhileIgnoring(self::PAYPAL_QUERY_PARAMETERS), 403);
+        abort_unless($transaction->paymentProvider?->class === PaypalController::class, 404);
+    }
+
+    /**
+     * Redirect to the merchant's return URL, or show the outcome ourselves.
+     */
+    private function finish(Transaction $transaction): RedirectResponse|View
+    {
+        if ($transaction->return_url) {
+            return redirect()->away((string) Uri::of($transaction->return_url)->withQuery([
+                'transaction_id' => $transaction->transaction_id,
+                'status' => $transaction->status->value,
+            ]));
+        }
+
+        return view('checkout.result', ['transaction' => $transaction]);
+    }
+}

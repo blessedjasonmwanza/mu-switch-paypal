@@ -29,6 +29,7 @@ class Transaction extends Model
         'fee_estimated',
         'callback_url',
         'callback_notified_at',
+        'return_url',
     ];
 
     public function paymentProvider()

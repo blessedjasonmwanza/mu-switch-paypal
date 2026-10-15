@@ -30,6 +30,8 @@ class SwitchController extends Controller
             'callback_url' => 'nullable|url',
             // Optional: charge in this currency instead of the country's own (e.g. USD via PayPal).
             'currency' => 'nullable|string|size:3|alpha',
+            // Optional: where hosted checkouts (e.g. PayPal) send the payer back to.
+            'return_url' => 'nullable|url',
         ]);
         $user = $request->user();
         $providers = $user ? $user->paymentProviders : collect();
