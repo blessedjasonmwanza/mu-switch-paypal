@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
-use App\Jobs\SendTransactionCallback;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Support\Market;
 use App\Support\ProviderCallContext;
 use App\Support\ProviderFees;
+use App\Support\TransactionVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -170,7 +170,7 @@ class SwitchController extends Controller
      * for the latest status, persists it, and — once the transaction settles —
      * notifies the merchant's callback URL if one was supplied.
      */
-    public function verifyPayment(Request $request): JsonResponse
+    public function verifyPayment(Request $request, TransactionVerifier $verifier): JsonResponse
     {
         $validated = $request->validate([
             'transaction_id' => 'required|string',
@@ -190,45 +190,6 @@ class SwitchController extends Controller
             return ApiResponse::error('Transaction not found', 404);
         }
 
-        $provider = $transaction->paymentProvider;
-
-        if (! $provider || ! class_exists($provider->class)) {
-            return ApiResponse::error('The provider for this transaction is no longer available', 422);
-        }
-
-        $providerInstance = app($provider->class);
-
-        if (! $providerInstance instanceof PaymentProviderInterface) {
-            return ApiResponse::error('Payment driver must implement PaymentProviderInterface', 500);
-        }
-
-        // Attribute the verification's outgoing gateway calls to this provider.
-        ProviderCallContext::set($provider);
-
-        try {
-            if ($configError = $providerInstance->setProvider($provider)) {
-                return $configError;
-            }
-
-            // The provider re-checks the transaction and persists its latest status.
-            $response = $providerInstance->verifyPayment($transaction);
-        } finally {
-            ProviderCallContext::clear();
-        }
-
-        $this->notifyCallbackIfSettled($transaction->refresh());
-
-        return $response;
-    }
-
-    /**
-     * Dispatch a one-time callback to the merchant once a transaction has
-     * settled (succeeded or failed) and a callback URL was supplied.
-     */
-    private function notifyCallbackIfSettled(Transaction $transaction): void
-    {
-        if ($transaction->isFinal() && $transaction->callback_url && ! $transaction->callback_notified_at) {
-            SendTransactionCallback::dispatch($transaction);
-        }
+        return $verifier->verify($transaction);
     }
 }
