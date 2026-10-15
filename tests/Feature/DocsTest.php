@@ -122,3 +122,10 @@ test('the payout api is documented', function () {
         ->assertSee('Idempotency-Key', false)
         ->assertSee('/api/v1/payout/verify', false);
 });
+
+test('the treasury guide is documented', function () {
+    $this->get('/docs/treasury')
+        ->assertOk()
+        ->assertSee('Float rules and alerts', false)
+        ->assertSee('Confirm received', false);
+});

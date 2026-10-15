@@ -7,6 +7,7 @@ import {
     Wallet,
     Percent,
     Bot,
+    Landmark,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -27,6 +28,7 @@ import feePolicy from '@/routes/fee-policy';
 import logs from '@/routes/logs';
 import payments from '@/routes/payments';
 import providers from '@/routes/providers';
+import { index as treasuryIndex } from '@/routes/treasury';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -49,6 +51,11 @@ const mainNavItems: NavItem[] = [
         title: 'Logs',
         href: logs.index.url(),
         icon: ScrollText,
+    },
+    {
+        title: 'Treasury',
+        href: treasuryIndex.url(),
+        icon: Landmark,
     },
     {
         title: 'Fee Policy',

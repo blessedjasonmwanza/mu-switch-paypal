@@ -8,6 +8,7 @@
 - [Payment Providers](content/providers)
 - [API Tokens](content/api-tokens)
 - [AI & MCP Setup](content/ai-and-mcp)
+- [Treasury](content/treasury)
 
 ## 🔌 API Reference
 

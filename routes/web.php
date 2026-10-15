@@ -5,9 +5,12 @@ use App\Http\Controllers\ApiLogController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FeePolicyController;
+use App\Http\Controllers\FloatRuleController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaypalCheckoutController;
 use App\Http\Controllers\ProviderController;
+use App\Http\Controllers\TreasuryController;
+use App\Http\Controllers\TreasuryTransferController;
 use App\Support\Coverage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -47,6 +50,18 @@ if (! config('app.docs_only_routes')) {
 
         Route::get('fee-policy', [FeePolicyController::class, 'show'])->name('fee-policy.show');
         Route::put('fee-policy', [FeePolicyController::class, 'update'])->name('fee-policy.update');
+
+        Route::get('treasury', [TreasuryController::class, 'index'])->name('treasury.index');
+        Route::put('treasury/float-rules', [FloatRuleController::class, 'upsert'])->name('treasury.float-rules.upsert');
+        Route::delete('treasury/float-rules/{floatRule}', [FloatRuleController::class, 'destroy'])->name('treasury.float-rules.destroy');
+        Route::prefix('treasury/transfers')->name('treasury.transfers.')->controller(TreasuryTransferController::class)->group(function () {
+            Route::post('/', 'store')->name('store');
+            Route::post('{transfer}/approve', 'approve')->name('approve');
+            Route::post('{transfer}/send', 'send')->name('send');
+            Route::post('{transfer}/settle', 'settle')->name('settle');
+            Route::post('{transfer}/fail', 'fail')->name('fail');
+            Route::post('{transfer}/cancel', 'cancel')->name('cancel');
+        });
 
         Route::get('ai', [AiCredentialController::class, 'index'])->name('ai.index');
         Route::prefix('ai/credentials')->name('ai.credentials.')->controller(AiCredentialController::class)->group(function () {
