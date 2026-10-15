@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\AiSettingsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -24,4 +25,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+
+    Route::get('settings/ai', [AiSettingsController::class, 'edit'])->name('ai-settings.edit');
+    Route::put('settings/ai', [AiSettingsController::class, 'update'])->name('ai-settings.update');
+    Route::delete('settings/ai/key', [AiSettingsController::class, 'destroyKey'])->name('ai-settings.key.destroy');
+    Route::post('settings/ai/test', [AiSettingsController::class, 'test'])
+        ->middleware('throttle:6,1')
+        ->name('ai-settings.test');
 });

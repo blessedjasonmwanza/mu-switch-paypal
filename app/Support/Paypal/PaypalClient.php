@@ -41,6 +41,11 @@ class PaypalClient
         return new self($clientId, $clientSecret, $environment);
     }
 
+    public function environment(): PaypalEnvironment
+    {
+        return $this->environment;
+    }
+
     /**
      * Create a checkout order.
      *
@@ -133,7 +138,7 @@ class PaypalClient
     /**
      * An OAuth access token, cached until shortly before it expires.
      */
-    private function accessToken(): string
+    public function accessToken(): string
     {
         if ($cached = Cache::get($this->tokenCacheKey())) {
             return $cached;

@@ -18,4 +18,14 @@ enum PaypalEnvironment: string
         };
     }
 
+    /**
+     * PayPal's MCP server (Streamable HTTP) for this environment.
+     */
+    public function mcpUrl(): string
+    {
+        return match ($this) {
+            self::SANDBOX => 'https://mcp.sandbox.paypal.com/http',
+            self::LIVE => 'https://mcp.paypal.com/http',
+        };
+    }
 }
