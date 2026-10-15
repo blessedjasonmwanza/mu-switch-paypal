@@ -153,7 +153,7 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] Treasury: balances, float-low alerts, and tracked transfers between accounts
 - [x] Treasury agent: AI rebalancing suggestions, checked by guardrails and approved by a person
 - [x] FX quotes: exchange rates and conversions locked for 10 minutes, per account
-- [ ] PayPal transfers: all-in quotes, delivery, refund on failure
+- [x] Cross-border transfers: pay with PayPal, delivered to mobile money at a locked rate, refunded if delivery fails
 - [ ] AI agent with guardrails, and the transfer UI
 - [ ] MCP server
 - [ ] Hosted demo on Render

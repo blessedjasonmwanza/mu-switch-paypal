@@ -19,4 +19,5 @@
 - [Verify a Payment](content/api/verify-payment)
 - [Send a Payout](content/api/payouts)
 - [Exchange Rates & FX Quotes](content/api/fx)
+- [Cross-Border Transfers](content/api/cross-border-transfers)
 - [Responses & Errors](content/api/responses)

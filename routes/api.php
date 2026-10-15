@@ -1,6 +1,7 @@
 <?php
 
 use App\ApiResponse;
+use App\Http\Controllers\CrossBorderTransferController;
 use App\Http\Controllers\FxController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PaypalWebhookController;
@@ -22,6 +23,12 @@ Route::prefix('v1')->middleware(VerifyApiAccess::class)->group(function () {
     Route::prefix('payout')->controller(PayoutController::class)->group(function () {
         Route::post('/request', 'requestPayout');
         Route::post('/verify', 'verifyPayout');
+    });
+
+    Route::prefix('transfer')->controller(CrossBorderTransferController::class)->group(function () {
+        Route::post('/quote', 'quote');
+        Route::post('/request', 'request');
+        Route::post('/verify', 'verify');
     });
 
     Route::prefix('fx')->controller(FxController::class)->group(function () {

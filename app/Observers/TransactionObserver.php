@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Transaction;
+use App\Support\CrossBorder\CrossBorderTransferService;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Ledger\LedgerRecorder;
 use App\Support\ProviderFees;
@@ -64,11 +65,13 @@ class TransactionObserver
     }
 
     /**
-     * Keep the ledger in step with the transaction's settled state.
+     * Keep the ledger in step with the transaction's settled state, and move
+     * any cross-border transfer the transaction belongs to.
      */
     public function saved(Transaction $transaction): void
     {
         app(LedgerRecorder::class)->sync($transaction);
+        app(CrossBorderTransferService::class)->transactionChanged($transaction);
     }
 
     /**

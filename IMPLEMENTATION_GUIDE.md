@@ -40,7 +40,7 @@ flowchart LR
     A -.->|PayPal MCP tools<br/>invoices, orders| PPM[PayPal MCP server]
     PP -->|buyer approves| S
     PP -->|webhook PAYMENT.CAPTURE.COMPLETED| W[Webhook controller<br/>signature verified]
-    W --> J[DisbursePaypalTransfer job]
+    W --> J[DisburseCrossBorderTransfer job]
     J -->|requestPayout + fallback| SW[MoneyUnify Switch<br/>payout routing]
     SW --> P1[pawaPay] & P2[MTN MoMo] & P3[Airtel Money] & P4[Lenco ...]
     J -->|all providers failed| R[PayPal refund]
@@ -51,10 +51,10 @@ flowchart LR
 Three layers, each usable on its own:
 
 1. **Switch layer (existing, extended).** PayPal becomes a collection driver, and the switch gains **payouts** with the same fallback and cost-aware routing it already has for collections.
-2. **Transfer layer (new).** A `PaypalTransfer` links a PayPal funding leg to a mobile-money payout leg. It covers quotes, the state machine, webhooks and refunds.
+2. **Transfer layer (new).** A `CrossBorderTransfer` links a PayPal funding leg to a mobile-money payout leg. It covers quotes, the state machine, webhooks and refunds.
 3. **Agent layer (new).** A Laravel AI SDK agent whose tools sit behind server-side guardrails. It can also use PayPal's MCP tools. A MoneyUnify MCP server lets *any* agent use MoneyUnify alongside PayPal's own MCP server.
 
-All business logic lives in plain services (`TransferQuoter`, `PayoutRouter`, `PaypalTransferService`). AI tools and MCP tools are thin adapters over those services, so the agent, the MCP server, the HTTP API and the tests all exercise the same code.
+All business logic lives in plain services (`FxQuoter`, `ProviderRouter`, `PayoutDispatcher`, `CrossBorderTransferService`). AI tools and MCP tools are thin adapters over those services, so the agent, the MCP server, the HTTP API and the tests all exercise the same code.
 
 ---
 
@@ -115,36 +115,42 @@ Every driver today is collection-only (`direction = 'credit'`). The `transaction
 
 `SandboxPayoutController` implements `PayoutProviderInterface`. It succeeds or fails based on the MSISDN suffix (`...0000` fails, everything else succeeds after a short delay). It's labelled **"Simulated"** in the dashboard and only registers when `APP_ENV != production`. This makes the **fallback and refund** paths reproducible end to end, without depending on a third-party sandbox.
 
-### 4.5 PayPal transfers
+### 4.5 Cross-border transfers (PayPal → mobile money) ✅
 
-**Migration and model: `PaypalTransfer`** (`php artisan make:model PaypalTransfer -mf`)
+**How MoneyUnify does it.** The operator owns both accounts: a PayPal business account and a mobile-money payout account (e.g. pawaPay) that holds a float in the recipient's currency. No money crosses between providers during a transfer:
 
-| Column | Notes |
+1. The sender pays the operator's **PayPal** account (e.g. 92.30 USD) through a normal PayPal checkout.
+2. Once PayPal confirms the capture, the switch **pays the recipient's wallet from the operator's payout float** (e.g. 2,500.00 ZMW), at the FX rate locked when the transfer was quoted.
+3. If the payout can't be delivered, the switch **refunds the PayPal payment** in full.
+4. The operator rebalances the two accounts later (Treasury transfers, AI rebalancing suggestions).
+
+This is the prefunding model remittance companies use. The recipient is paid in seconds, and FX is recorded on both legs.
+
+```
+awaiting_payment → funded → paying_out → delivered
+                 ↘ payment_failed       ↘ payout_failed → refunding → refunded (or refund_failed, retryable)
+```
+
+**Built (2026-10-15).** The plan called this `PaypalTransfer`. It's built as `CrossBorderTransfer`, because the funding side isn't tied to PayPal: any driver that implements `RefundsPayments` can fund a transfer.
+
+| Piece | Where |
 |---|---|
-| `id` (uuid), `user_id` | Owner, the merchant/operator instance. |
-| `sender_email`, `sender_name` | PayPal payer. |
-| `recipient_name`, `recipient_msisdn`, `recipient_country`, `recipient_network` | Mobile-money recipient. |
-| `purpose` | Free text or enum: school fees, groceries, family support, invoice. |
-| `funding_amount`, `funding_currency` | PayPal leg, e.g. USD. |
-| `payout_amount`, `payout_currency` | Mobile-money leg, e.g. ZMW. |
-| `fx_rate`, `fee_total`, `quote_expires_at` | Locked quote. |
-| `status` | Enum `PaypalTransferStatus`: `quoted`, `awaiting_approval`, `funded`, `paying_out`, `delivered`, `refunding`, `refunded`, `failed`. |
-| `funding_transaction_id`, `payout_transaction_id` | FKs to `transactions`, with `direction` credit and debit. |
-| `conversation_id` | The Laravel AI SDK conversation (`agent_conversations.id`) that created the transfer, for audit. |
+| Model and timeline | `CrossBorderTransfer` (`cross_border_transfers`): funding and payout legs as FKs to `transactions`, amounts in minor units, recipient, the locked FX (`fx_quote_id`, `fx_base_rate`, `fx_rate`, `fx_margin_percent`, `fx_margin_minor`), refund leg, status, failure reason, idempotency key. Every step is written to `cross_border_transfer_events`. |
+| State machine | `App\Enums\CrossBorderStatus` (`canTransitionTo`, `isFinal`, `label`). Transitions take a row lock and only move from the expected status, so each step happens once. |
+| Quote | `CrossBorderTransferService::quote()`: locks FX with `FxQuoter` (recipient gets exactly the amount by default, or the sender pays exactly it), routes the funding account (`ProviderRouter` with the `RefundsPayments` capability) and the payout providers (`PayoutProviderInterface`), and estimates both providers' fees. Refused up front if nothing can deliver. |
+| Funding | `request()` creates the transfer, then a PayPal order through the PayPal driver. The funding transaction carries `is_fx` and `fx_rate`. |
+| Trigger | `TransactionObserver::saved()` → `transactionChanged()`. A captured funding payment (checkout return, webhook or verify) marks the transfer `funded` and queues `DisburseCrossBorderTransfer`. |
+| Payout | `disburse()` uses `App\Support\Payouts\PayoutDispatcher`, extracted from `PayoutController` so the API and transfers share one fallback: next provider only after a definite refusal, stop on an unknown outcome. The payout transaction carries `is_fx` and `fx_rate`. |
+| Refund | `RefundCrossBorderTransfer` → `RefundsPayments::refundPayment()`. PayPal: `POST /v2/payments/captures/{id}/refund` with a stable `PayPal-Request-Id`, so a retry never refunds twice. The refund is its own debit transaction (`refund_of_id`), recorded in the ledger as `refund`. |
+| API | `POST /api/v1/transfer/quote`, `/request` (with `Idempotency-Key`), `/verify`. Documented in `prezet/content/api/cross-border-transfers.md`. |
+| Tests | `tests/Feature/CrossBorderTransferTest.php`: delivery end to end, refused payout → refund, refused refund → retry, unfinished payment, single payout, idempotency, quote ownership, no route. |
 
-**State machine.** Allowed transitions live in the enum. Every transition is written to a `paypal_transfer_events` table, which drives the timeline UI.
+**Who pays the fees.** The sender pays exactly the quoted amount and the recipient gets exactly the quoted amount. Provider fees are paid by the operator and shown as `operator_fees`. The operator's income is the FX margin.
 
-```
-quoted → awaiting_approval → funded → paying_out → delivered
-                    ↘ failed (expired / cancelled)      ↘ refunding → refunded
-```
-
-**Services**
-
-- **`FxQuote`** 🟡: rates come from a configurable source. A static table in `config/moneyunify_paypal.php` for the sandbox, with an optional live API. The quote locks for 10 minutes and sets `is_fx` and `fx_rate` on both transactions.
-  _Built (2026-10-15):_ `App\Support\Fx\FxQuoter` and `FxQuote`, the static rate provider, quotes owned by the account that created them, and `GET /api/v1/fx/rates`, `POST /api/v1/fx/quote`, `GET /api/v1/fx/quote/{id}` (documented in `prezet/content/api/fx.md`). Not yet wired into transfers, so nothing sets `is_fx`/`fx_rate` yet. See TREASURY_MODULE.md §6.
-- **`TransferQuoter`**: combines the FX rate with the PayPal fee and the cheapest payout provider's fee (`ProviderFees`) to give an all-in quote. It returns "recipient gets X" and "you pay Y".
-- **`DisbursePaypalTransfer`** job: calls the `PayoutRouter`. If every provider fails, it refunds the PayPal capture (`POST /v2/payments/captures/{id}/refund`) and marks the transfer `refunded`. It notifies both parties.
+**Not done yet:**
+- Linking the transfer to the AI conversation that created it (`conversation_id`), which comes with the agent (§4.6).
+- Notifying the sender and the recipient.
+- A transfer UI with a live timeline (§4.8).
 
 ### 4.6 The AI agent (Laravel AI SDK)
 
@@ -238,7 +244,7 @@ Agents are tested with the SDK's fakes, so no real model calls happen in CI. Use
 | `tests/Feature/PaypalPaymentTest.php` | OAuth, order creation (with `Http::fake`), `checkout_url` in the response, capture on verify, idempotency header |
 | `tests/Feature/PaypalWebhookTest.php` | Signature verification pass and fail, duplicate events ignored, capture-completed dispatches the payout |
 | `tests/Feature/PayoutRouterTest.php` | Payout fallback, cost-aware ordering, `direction = debit` |
-| `tests/Feature/PaypalTransferTest.php` | State machine transitions, quote expiry, refund when every payout fails |
+| `tests/Feature/CrossBorderTransferTest.php` ✅ | State machine transitions, delivery, refund when the payout fails, idempotency, quote ownership |
 | `tests/Feature/MoneyUnifyPaypalAgentTest.php` | Pending approval on `CreateFundingOrder`, approve/reject decisions resume correctly, spending-cap refusal, new-recipient approval reason, each tool's output shape |
 | `tests/Feature/McpServerTest.php` | Tools listed and callable with a valid token, rejected without one |
 

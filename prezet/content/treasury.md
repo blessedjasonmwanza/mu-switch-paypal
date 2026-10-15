@@ -18,7 +18,12 @@ provider's **Accounts** dialog, is the ledger total for that provider and
 currency:
 
 - **Payments in** add to the provider's account.
-- **Payouts**, **fees** and **transfers out** take money out of it.
+- **Payouts**, **refunds**, **fees** and **transfers out** take money out of it.
+
+[Cross-border transfers](/docs/api/cross-border-transfers) use both sides: the
+sender's payment arrives in your PayPal account, and the recipient is paid from
+your payout float. Keep a float rule on payout accounts so you're alerted
+before one runs low.
 
 Balances marked **Est.** include fees estimated from a published schedule
 rather than reported by the provider.

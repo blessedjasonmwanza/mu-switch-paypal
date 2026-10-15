@@ -138,3 +138,11 @@ test('the fx api is documented', function () {
         ->assertSee('/api/v1/fx/quote', false)
         ->assertSee('account that created it', false);
 });
+
+test('cross-border transfers are documented', function () {
+    $this->get('/docs/api/cross-border-transfers')
+        ->assertOk()
+        ->assertSee('Cross-Border Transfers', false)
+        ->assertSee('/api/v1/transfer/request', false)
+        ->assertSee('refund_failed', false);
+});
