@@ -19,6 +19,11 @@ class PaypalMcp
 {
     public const SOURCE_DISABLED = 'disabled';
 
+    public static function enabledProviderFor(?User $user): ?PaymentProvider
+    {
+        return self::enabledProvider(self::activePaypalProviders($user));
+    }
+
     /**
      * The MCP client to use, or null when PayPal MCP is off or not set up.
      */

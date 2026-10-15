@@ -15,6 +15,7 @@ use App\Http\Controllers\SendMoneyAssistantController;
 use App\Http\Controllers\SendMoneyController;
 use App\Http\Controllers\TreasuryController;
 use App\Http\Controllers\TreasuryTransferController;
+use App\Http\Middleware\LogApiRequests;
 use App\Support\Coverage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -56,20 +57,20 @@ if (! config('app.docs_only_routes')) {
         Route::put('fee-policy', [FeePolicyController::class, 'update'])->name('fee-policy.update');
 
         Route::get('send', [SendMoneyController::class, 'index'])->name('send.index');
-        Route::post('send/quote', [SendMoneyController::class, 'quote'])->middleware('throttle:60,1')->name('send.quote');
-        Route::post('send', [SendMoneyController::class, 'store'])->name('send.store');
-        Route::post('send/{transfer:reference}/verify', [SendMoneyController::class, 'verify'])->name('send.verify');
-        Route::post('send/assistant', [SendMoneyAssistantController::class, 'message'])->middleware('throttle:20,1')->name('send.assistant.message');
-        Route::post('send/assistant/decide', [SendMoneyAssistantController::class, 'decide'])->middleware('throttle:20,1')->name('send.assistant.decide');
+        Route::post('send/quote', [SendMoneyController::class, 'quote'])->middleware(['throttle:60,1', LogApiRequests::class])->name('send.quote');
+        Route::post('send', [SendMoneyController::class, 'store'])->middleware(LogApiRequests::class)->name('send.store');
+        Route::post('send/{transfer:reference}/verify', [SendMoneyController::class, 'verify'])->middleware(LogApiRequests::class)->name('send.verify');
+        Route::post('send/assistant', [SendMoneyAssistantController::class, 'message'])->middleware(['throttle:20,1', LogApiRequests::class])->name('send.assistant.message');
+        Route::post('send/assistant/decide', [SendMoneyAssistantController::class, 'decide'])->middleware(['throttle:20,1', LogApiRequests::class])->name('send.assistant.decide');
 
         Route::get('rates', [RatesController::class, 'index'])->name('rates.index');
-        Route::post('rates/quote', [RatesController::class, 'quote'])->name('rates.quote');
+        Route::post('rates/quote', [RatesController::class, 'quote'])->middleware(LogApiRequests::class)->name('rates.quote');
 
         Route::get('treasury', [TreasuryController::class, 'index'])->name('treasury.index');
         Route::put('treasury/float-rules', [FloatRuleController::class, 'upsert'])->name('treasury.float-rules.upsert');
         Route::delete('treasury/float-rules/{floatRule}', [FloatRuleController::class, 'destroy'])->name('treasury.float-rules.destroy');
         Route::post('treasury/suggestions', [RebalanceSuggestionController::class, 'store'])->middleware('throttle:10,1')->name('treasury.suggestions.store');
-        Route::prefix('treasury/transfers')->name('treasury.transfers.')->controller(TreasuryTransferController::class)->group(function () {
+        Route::prefix('treasury/transfers')->name('treasury.transfers.')->controller(TreasuryTransferController::class)->middleware(LogApiRequests::class)->group(function () {
             Route::post('/', 'store')->name('store');
             Route::post('{transfer}/approve', 'approve')->name('approve');
             Route::post('{transfer}/send', 'send')->name('send');
@@ -93,6 +94,7 @@ if (! config('app.docs_only_routes')) {
     Route::prefix('checkout/paypal/{transaction:transaction_id}')
         ->controller(PaypalCheckoutController::class)
         ->name('paypal.checkout.')
+        ->middleware(LogApiRequests::class)
         ->group(function () {
             Route::get('return', 'approved')->name('return');
             Route::get('cancel', 'cancelled')->name('cancel');

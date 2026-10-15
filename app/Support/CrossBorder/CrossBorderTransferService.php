@@ -11,6 +11,7 @@ use App\Exceptions\CrossBorderException;
 use App\Exceptions\NoEligibleProviderException;
 use App\Jobs\DisburseCrossBorderTransfer;
 use App\Jobs\RefundCrossBorderTransfer;
+use App\Models\ApiLog;
 use App\Models\CrossBorderTransfer;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
@@ -24,6 +25,7 @@ use App\Support\Payouts\PayoutDispatcher;
 use App\Support\ProviderCallContext;
 use App\Support\ProviderFees;
 use App\Support\ProviderRouter;
+use App\Support\RequestContext;
 use App\Support\TransactionVerifier;
 use Brick\Math\BigDecimal;
 use Illuminate\Http\Request;
@@ -138,39 +140,83 @@ class CrossBorderTransferService
             return;
         }
 
-        $amount = (string) $transfer->targetAmount();
+        $ownsContext = false;
+        if (! RequestContext::id()) {
+            $ownsContext = true;
+            $requestId = (string) Str::uuid();
+            RequestContext::set($requestId);
+            $startedAt = microtime(true);
+        } else {
+            $requestId = RequestContext::id();
+        }
 
         try {
-            $route = ProviderRouter::route($transfer->user, $transfer->recipient_country, $transfer->target_currency, $transfer->targetAmount()->toFloat(), PayoutProviderInterface::class);
-        } catch (NoEligibleProviderException $e) {
-            $this->payoutFailed($transfer, $e->getMessage());
+            $amount = (string) $transfer->targetAmount();
 
-            return;
-        }
+            try {
+                $route = ProviderRouter::route($transfer->user, $transfer->recipient_country, $transfer->target_currency, $transfer->targetAmount()->toFloat(), PayoutProviderInterface::class);
+            } catch (NoEligibleProviderException $e) {
+                $this->payoutFailed($transfer, $e->getMessage());
 
-        $result = $this->payouts->send($route, [
-            'account_number' => $transfer->recipient_account,
-            'network' => $transfer->recipient_network,
-            'narration' => $transfer->narration,
-        ], $amount, $transfer->target_currency, $transfer->recipient_country, attributes: [
-            'is_fx' => $transfer->source_currency !== $transfer->target_currency,
-            'fx_rate' => $transfer->source_currency !== $transfer->target_currency ? (string) $transfer->fx_rate : null,
-        ]);
+                return;
+            }
 
-        if ($result->refused()) {
-            $this->payoutFailed($transfer, 'Every payout provider refused the payout: '.($result->response->getData(true)['message'] ?? 'no reason given'));
+            $result = $this->payouts->send($route, [
+                'account_number' => $transfer->recipient_account,
+                'network' => $transfer->recipient_network,
+                'narration' => $transfer->narration,
+            ], $amount, $transfer->target_currency, $transfer->recipient_country, attributes: [
+                'is_fx' => $transfer->source_currency !== $transfer->target_currency,
+                'fx_rate' => $transfer->source_currency !== $transfer->target_currency ? (string) $transfer->fx_rate : null,
+            ]);
 
-            return;
-        }
+            if ($result->refused()) {
+                $this->payoutFailed($transfer, 'Every payout provider refused the payout: '.($result->response->getData(true)['message'] ?? 'no reason given'));
 
-        // Accepted or unknown: the payout exists and is followed through its transaction.
-        $transfer->update([
-            'payout_transaction_id' => $result->transaction?->id,
-            'payout_provider_id' => $result->transaction?->payment_provider_id,
-        ]);
+                return;
+            }
 
-        if ($result->transaction) {
-            $this->advance($transfer->refresh(), $result->transaction->refresh());
+            // Accepted or unknown: the payout exists and is followed through its transaction.
+            $transfer->update([
+                'payout_transaction_id' => $result->transaction?->id,
+                'payout_provider_id' => $result->transaction?->payment_provider_id,
+            ]);
+
+            if ($result->transaction) {
+                $this->advance($transfer->refresh(), $result->transaction->refresh());
+            }
+        } finally {
+            if ($ownsContext) {
+                try {
+                    $transfer->refresh();
+                    $status = $transfer->status;
+                    $httpStatus = match ($status) {
+                        CrossBorderStatus::DELIVERED => 200,
+                        CrossBorderStatus::PAYOUT_FAILED => 422,
+                        default => 202,
+                    };
+
+                    ApiLog::create([
+                        'user_id' => $transfer->user_id,
+                        'request_id' => $requestId,
+                        'method' => 'POST',
+                        'url' => url("/transfers/{$transfer->reference}/disburse"),
+                        'route' => 'transfers.disburse',
+                        'response_status' => $httpStatus,
+                        'response_body' => json_encode([
+                            'reference' => $transfer->reference,
+                            'status' => $status->value,
+                            'failure_reason' => $transfer->failure_reason,
+                            'target_amount' => (string) $transfer->targetAmount(),
+                            'target_currency' => $transfer->target_currency,
+                        ]),
+                        'duration_ms' => isset($startedAt) ? (int) round((microtime(true) - $startedAt) * 1000) : 0,
+                    ]);
+                } catch (Throwable) {
+                    // Logging failures must never break the transfer
+                }
+                RequestContext::clear();
+            }
         }
     }
 
@@ -199,6 +245,16 @@ class CrossBorderTransferService
             return;
         }
 
+        $ownsContext = false;
+        if (! RequestContext::id()) {
+            $ownsContext = true;
+            $requestId = (string) Str::uuid();
+            RequestContext::set($requestId);
+            $startedAt = microtime(true);
+        } else {
+            $requestId = RequestContext::id();
+        }
+
         // The same refund record is reused on a retry, so PayPal never refunds twice.
         $refund = $transfer->refundTransaction ?? $this->newRefund($transfer, $payment);
         $transfer->update(['refund_transaction_id' => $refund->id]);
@@ -215,6 +271,38 @@ class CrossBorderTransferService
             report($e);
         } finally {
             ProviderCallContext::clear();
+
+            if ($ownsContext) {
+                try {
+                    $transfer->refresh();
+                    $status = $transfer->status;
+                    $httpStatus = match ($status) {
+                        CrossBorderStatus::REFUNDED => 200,
+                        CrossBorderStatus::REFUND_FAILED => 502,
+                        default => 202,
+                    };
+
+                    ApiLog::create([
+                        'user_id' => $transfer->user_id,
+                        'request_id' => $requestId,
+                        'method' => 'POST',
+                        'url' => url("/transfers/{$transfer->reference}/refund"),
+                        'route' => 'transfers.refund',
+                        'response_status' => $httpStatus,
+                        'response_body' => json_encode([
+                            'reference' => $transfer->reference,
+                            'status' => $status->value,
+                            'failure_reason' => $transfer->failure_reason,
+                            'source_amount' => (string) $transfer->sourceAmount(),
+                            'source_currency' => $transfer->source_currency,
+                        ]),
+                        'duration_ms' => isset($startedAt) ? (int) round((microtime(true) - $startedAt) * 1000) : 0,
+                    ]);
+                } catch (Throwable) {
+                    // Logging failures must never break the transfer
+                }
+                RequestContext::clear();
+            }
         }
 
         $this->advance($transfer->refresh(), $refund->refresh());

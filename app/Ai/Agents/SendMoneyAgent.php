@@ -9,6 +9,7 @@ use App\Ai\Tools\QuoteTransfer;
 use App\Ai\Tools\StartTransfer;
 use App\Models\User;
 use App\Support\Ai\PaypalMcp;
+use App\Support\ProviderCallContext;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Attributes\Temperature;
@@ -81,7 +82,19 @@ class SendMoneyAgent implements Agent, Conversational, HasTools
         // PayPal's own MCP tools (orders, invoices…). Each one needs approval
         // before it runs, and the agent works without them if PayPal is unreachable.
         try {
-            $paypal = PaypalMcp::clientFor($this->owner)?->withTimeout(10)->withCache()->tools(default: []);
+            $provider = PaypalMcp::enabledProviderFor($this->owner);
+            $client = PaypalMcp::clientFor($this->owner);
+
+            if ($provider && $client) {
+                ProviderCallContext::set($provider);
+                try {
+                    $paypal = $client->withTimeout(10)->withCache()->tools(default: []);
+                } finally {
+                    ProviderCallContext::clear();
+                }
+            } else {
+                $paypal = $client?->withTimeout(10)->withCache()->tools(default: []);
+            }
         } catch (Throwable $e) {
             report($e);
             $paypal = null;

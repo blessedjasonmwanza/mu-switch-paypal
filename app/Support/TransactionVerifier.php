@@ -6,8 +6,11 @@ use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
 use App\Contracts\PayoutProviderInterface;
 use App\Jobs\SendTransactionCallback;
+use App\Models\ApiLog;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Re-checks a transaction (payment or payout) through the driver that processed it, and notifies
@@ -38,6 +41,16 @@ class TransactionVerifier
             return ApiResponse::error('Payment driver must implement PaymentProviderInterface', 500);
         }
 
+        $ownsContext = false;
+        if (! RequestContext::id()) {
+            $ownsContext = true;
+            $requestId = (string) Str::uuid();
+            RequestContext::set($requestId);
+            $startedAt = microtime(true);
+        } else {
+            $requestId = RequestContext::id();
+        }
+
         // Attribute the verification's outgoing gateway calls to this provider.
         ProviderCallContext::set($provider);
 
@@ -49,6 +62,24 @@ class TransactionVerifier
             $response = $isPayout ? $driver->verifyPayout($transaction) : $driver->verifyPayment($transaction);
         } finally {
             ProviderCallContext::clear();
+
+            if ($ownsContext) {
+                try {
+                    ApiLog::create([
+                        'user_id' => $provider->user_id,
+                        'request_id' => $requestId,
+                        'method' => 'POST',
+                        'url' => url("/transactions/{$transaction->transaction_id}/verify"),
+                        'route' => 'transactions.verify',
+                        'response_status' => isset($response) ? $response->getStatusCode() : 500,
+                        'response_body' => isset($response) ? json_encode($response->getData(true)) : null,
+                        'duration_ms' => isset($startedAt) ? (int) round((microtime(true) - $startedAt) * 1000) : 0,
+                    ]);
+                } catch (Throwable) {
+                    // Logging failures must never break the verification
+                }
+                RequestContext::clear();
+            }
         }
 
         $this->notifyIfSettled($transaction->refresh());
