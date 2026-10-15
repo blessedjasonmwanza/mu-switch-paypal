@@ -3,6 +3,7 @@ import { Button } from '@radix-ui/themes';
 import {
     AlertTriangle,
     ArrowDown,
+    ArrowUpRight,
     CheckCircle2,
     Clock,
     Loader2,
@@ -22,12 +23,21 @@ import { TableFooter } from '@/components/table-footer';
 import type { PageMeta } from '@/components/table-footer';
 import { TableSearch } from '@/components/table-search';
 import { Card } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { countryFlag } from '@/lib/flags';
 import { cn } from '@/lib/utils';
 import providersRoute from '@/routes/providers';
 import { index as sendIndex } from '@/routes/send';
+import { index as transfersIndex } from '@/routes/transfers';
 
 type Status =
     | 'awaiting_payment'
@@ -232,7 +242,7 @@ export default function SendMoney({
     returned,
     aiReady,
 }: Props) {
-    const [tab, setTab] = useState<'form' | 'assistant'>('form');
+    const [tab, setTab] = useState<'assistant' | 'form'>('assistant');
     const ready = countries.length > 0 && sourceCurrencies.length > 0;
     const form = useForm({
         country: countries[0]?.code ?? '',
@@ -355,6 +365,24 @@ export default function SendMoney({
         [transfers.data, returned],
     );
 
+    const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(null);
+
+    // Keep the selected transfer updated if poll data changes
+    useEffect(() => {
+        if (!selectedTransfer) {
+            return;
+        }
+        const updated = transfers.data.find(
+            (t) => t.reference === selectedTransfer.reference,
+        );
+        if (updated) {
+            setSelectedTransfer(updated);
+        }
+    }, [transfers.data]);
+
+    const getCountryName = (code: string) =>
+        countries.find((c) => c.code === code)?.name ?? code;
+
     const submit = (event: FormEvent) => {
         event.preventDefault();
         form.post(SendMoneyController.store.url());
@@ -419,17 +447,17 @@ export default function SendMoney({
                     </div>
                 )}
 
-                <div className="grid gap-6 xl:grid-cols-12">
-                    <Card className="gap-0 border border-sidebar-border/70 p-5 xl:col-span-5 dark:border-sidebar-border">
+                <div className="grid items-start gap-6 xl:grid-cols-12">
+                    <Card className="gap-0 border border-sidebar-border/70 p-5 xl:col-span-5 xl:sticky xl:top-6 dark:border-sidebar-border">
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <h2 className="text-sm font-semibold">
                                     New transfer
                                 </h2>
                                 <p className="mt-0.5 text-xs text-neutral-500">
-                                    {tab === 'form'
-                                        ? 'Quotes are free and lock the rate for a few minutes.'
-                                        : 'Describe the transfer; you approve before anything starts.'}
+                                    {tab === 'assistant'
+                                        ? 'Describe the transfer; you approve before anything starts.'
+                                        : 'Quotes are free and lock the rate for a few minutes.'}
                                 </p>
                             </div>
                             <div
@@ -439,8 +467,8 @@ export default function SendMoney({
                             >
                                 {(
                                     [
-                                        ['form', 'Form'],
                                         ['assistant', 'Assistant'],
+                                        ['form', 'Form'],
                                     ] as const
                                 ).map(([value, label]) => (
                                     <button
@@ -865,7 +893,7 @@ export default function SendMoney({
                                     <li
                                         key={transfer.reference}
                                         className={cn(
-                                            'py-3',
+                                            'py-3.5 transition-colors',
                                             transfer.reference === returned &&
                                                 '-mx-2 rounded-lg bg-blue-50/60 px-2 dark:bg-blue-950/20',
                                         )}
@@ -873,13 +901,13 @@ export default function SendMoney({
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
                                                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                                                    <span aria-hidden>
+                                                    <span aria-hidden className="text-base">
                                                         {countryFlag(
                                                             transfer.recipient
                                                                 .country,
                                                         )}
                                                     </span>
-                                                    <span className="truncate font-medium">
+                                                    <span className="truncate font-medium text-neutral-900 dark:text-neutral-100">
                                                         {transfer.recipient
                                                             .name ??
                                                             transfer.recipient
@@ -915,7 +943,7 @@ export default function SendMoney({
                                                 </div>
                                             </div>
                                             <div className="shrink-0 text-right">
-                                                <div className="text-sm font-semibold tabular-nums">
+                                                <div className="text-sm font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
                                                     {formatMoney(
                                                         transfer.recipient_gets,
                                                     )}
@@ -932,71 +960,75 @@ export default function SendMoney({
                                             </div>
                                         </div>
 
-                                        <div className="mt-2.5 flex items-center gap-3">
-                                            <div className="flex-1">
+                                        <div className="mt-2.5 flex items-center justify-between gap-3">
+                                            <div className="flex-1 max-w-xs sm:max-w-sm">
                                                 <Progress
                                                     status={transfer.status}
                                                 />
                                             </div>
-                                            {!transfer.is_final && (
+                                            <div className="flex items-center gap-1.5 shrink-0">
                                                 <Button
                                                     size="1"
                                                     variant="soft"
                                                     color="gray"
                                                     onClick={() =>
-                                                        verify(
-                                                            transfer.reference,
+                                                        setSelectedTransfer(
+                                                            transfer,
                                                         )
                                                     }
-                                                    className="cursor-pointer gap-1"
+                                                    className="cursor-pointer gap-1 text-[11px]"
                                                 >
-                                                    <RefreshCw className="h-3 w-3" />
-                                                    Check now
+                                                    <Clock className="h-3 w-3 text-neutral-500" />
+                                                    <span>Timeline</span>
+                                                    <span className="text-[10px] text-neutral-400">
+                                                        ({transfer.timeline.length})
+                                                    </span>
                                                 </Button>
-                                            )}
+                                                {!transfer.is_final && (
+                                                    <Button
+                                                        size="1"
+                                                        variant="soft"
+                                                        color="gray"
+                                                        onClick={() =>
+                                                            verify(
+                                                                transfer.reference,
+                                                            )
+                                                        }
+                                                        className="cursor-pointer gap-1 text-[11px]"
+                                                    >
+                                                        <RefreshCw className="h-3 w-3" />
+                                                        Check now
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
 
                                         {transfer.failure_reason && (
-                                            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
-                                                {transfer.status ===
-                                                'refunded' ? (
-                                                    <Undo2 className="mt-0.5 h-3 w-3 shrink-0" />
-                                                ) : (
-                                                    <XCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                                                )}
-                                                {transfer.failure_reason}
-                                            </p>
+                                            <div className="mt-2 flex items-start justify-between gap-2 rounded-md bg-amber-50/70 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                                                <div className="flex items-start gap-1.5 min-w-0">
+                                                    {transfer.status ===
+                                                    'refunded' ? (
+                                                        <Undo2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                                    ) : (
+                                                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                                    )}
+                                                    <span className="line-clamp-1">
+                                                        {transfer.failure_reason}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setSelectedTransfer(
+                                                            transfer,
+                                                        )
+                                                    }
+                                                    className="shrink-0 cursor-pointer text-[11px] font-medium underline underline-offset-2 hover:text-amber-950 dark:hover:text-amber-100"
+                                                >
+                                                    Details
+                                                </button>
+                                            </div>
                                         )}
-
-                                        <details className="mt-1.5 text-xs text-neutral-500">
-                                            <summary className="w-fit cursor-pointer select-none hover:text-neutral-700 dark:hover:text-neutral-300">
-                                                Timeline
-                                            </summary>
-                                            <ol className="mt-1.5 space-y-1 border-l border-neutral-200 pl-3 dark:border-neutral-800">
-                                                {transfer.timeline.map(
-                                                    (event, index) => (
-                                                        <li
-                                                            key={index}
-                                                            className="flex gap-2"
-                                                        >
-                                                            <Clock className="mt-0.5 h-3 w-3 shrink-0 text-neutral-400" />
-                                                            <span>
-                                                                {event.note ??
-                                                                    event.status}
-                                                                {event.at && (
-                                                                    <span className="text-neutral-400">
-                                                                        {' · '}
-                                                                        {new Date(
-                                                                            event.at,
-                                                                        ).toLocaleTimeString()}
-                                                                    </span>
-                                                                )}
-                                                            </span>
-                                                        </li>
-                                                    ),
-                                                )}
-                                            </ol>
-                                        </details>
                                     </li>
                                 ))}
                             </ul>
@@ -1012,6 +1044,313 @@ export default function SendMoney({
                     </Card>
                 </div>
             </div>
+
+            {/* Transfer Timeline & Details Dialog */}
+            <Dialog
+                open={!!selectedTransfer}
+                onOpenChange={(open) => !open && setSelectedTransfer(null)}
+            >
+                <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+                    <DialogHeader className="shrink-0 border-b border-sidebar-border/70 px-6 py-4 pr-12 text-left">
+                        <DialogTitle className="flex flex-wrap items-center gap-2">
+                            {selectedTransfer && (
+                                <>
+                                    <span aria-hidden className="text-base">
+                                        {countryFlag(
+                                            selectedTransfer.recipient.country,
+                                        )}
+                                    </span>
+                                    <span className="font-semibold">
+                                        {selectedTransfer.recipient.name ??
+                                            selectedTransfer.recipient
+                                                .account_number}
+                                    </span>
+                                    <span
+                                        className={cn(
+                                            'rounded-md px-2 py-0.5 text-xs font-medium',
+                                            statusTone[
+                                                selectedTransfer.status
+                                            ],
+                                        )}
+                                    >
+                                        {selectedTransfer.status_label}
+                                    </span>
+                                </>
+                            )}
+                        </DialogTitle>
+                        <DialogDescription className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                            <span className="font-mono text-neutral-700 dark:text-neutral-300">
+                                {selectedTransfer?.reference}
+                            </span>
+                            {selectedTransfer?.created_at && (
+                                <>
+                                    <span>•</span>
+                                    <span>
+                                        {new Date(
+                                            selectedTransfer.created_at,
+                                        ).toLocaleString()}
+                                    </span>
+                                    <span>
+                                        ({timeAgo(selectedTransfer.created_at)})
+                                    </span>
+                                </>
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex-1 min-h-0 space-y-4 overflow-y-auto px-6 py-4">
+                        {selectedTransfer && (
+                            <>
+                                {/* Visual Progress Stepper */}
+                                <div className="rounded-lg border border-sidebar-border/70 bg-neutral-50/70 p-3.5 dark:bg-neutral-900/40">
+                                    <div className="mb-2 flex items-center justify-between text-xs">
+                                        <span className="font-medium text-neutral-700 dark:text-neutral-300">
+                                            Transfer Progress
+                                        </span>
+                                        <span className="text-[11px] text-neutral-500">
+                                            {selectedTransfer.status_label}
+                                        </span>
+                                    </div>
+                                    <Progress status={selectedTransfer.status} />
+                                </div>
+
+                                {/* Failure or Refund Alert if present */}
+                                {selectedTransfer.failure_reason && (
+                                    <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                                        <div className="flex items-start gap-2">
+                                            {selectedTransfer.status ===
+                                            'refunded' ? (
+                                                <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                                            ) : (
+                                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                                            )}
+                                            <div>
+                                                <span className="font-semibold">
+                                                    {selectedTransfer.status ===
+                                                    'refunded'
+                                                        ? 'Refund Resolution'
+                                                        : 'Transfer Issue'}
+                                                    :
+                                                </span>{' '}
+                                                {selectedTransfer.failure_reason}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Financial & Delivery Details */}
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-sidebar-border/60 p-3 text-xs">
+                                    <div>
+                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                            Sender pays
+                                        </div>
+                                        <div className="mt-0.5 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                                            {formatMoney(
+                                                selectedTransfer.sender_pays,
+                                            )}
+                                        </div>
+                                        <span className="text-[11px] text-neutral-500">
+                                            via{' '}
+                                            {selectedTransfer.funding.provider ??
+                                                'PayPal'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                            Recipient receives
+                                        </div>
+                                        <div className="mt-0.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                                            {formatMoney(
+                                                selectedTransfer.recipient_gets,
+                                            )}
+                                        </div>
+                                        <span className="text-[11px] text-neutral-500">
+                                            {selectedTransfer.payout?.provider
+                                                ? `via ${selectedTransfer.payout.provider}`
+                                                : 'mobile money'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                            Effective rate
+                                        </div>
+                                        <div className="mt-0.5 font-mono text-neutral-800 dark:text-neutral-200">
+                                            1{' '}
+                                            {
+                                                selectedTransfer.sender_pays
+                                                    .currency
+                                            }{' '}
+                                            ={' '}
+                                            {Number(
+                                                selectedTransfer.fx
+                                                    .effective_rate,
+                                            ).toLocaleString('en-US', {
+                                                maximumFractionDigits: 4,
+                                            })}{' '}
+                                            {
+                                                selectedTransfer.recipient_gets
+                                                    .currency
+                                            }
+                                        </div>
+                                        <span className="text-[11px] text-neutral-500">
+                                            Margin:{' '}
+                                            {Number(
+                                                selectedTransfer.fx
+                                                    .margin_percent,
+                                            )}
+                                            %
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                            Recipient account
+                                        </div>
+                                        <div className="mt-0.5 font-medium text-neutral-800 dark:text-neutral-200">
+                                            {
+                                                selectedTransfer.recipient
+                                                    .account_number
+                                            }
+                                        </div>
+                                        <span className="text-[11px] text-neutral-500">
+                                            {getCountryName(
+                                                selectedTransfer.recipient
+                                                    .country,
+                                            )}{' '}
+                                            (
+                                            {
+                                                selectedTransfer.recipient
+                                                    .country
+                                            }
+                                            )
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Timeline Stepper */}
+                                <div className="border-t border-sidebar-border/70 pt-4">
+                                    <div className="mb-3 flex items-center justify-between">
+                                        <span className="text-xs font-semibold tracking-wide text-neutral-700 dark:text-neutral-300">
+                                            Timeline Events (
+                                            {selectedTransfer.timeline.length})
+                                        </span>
+                                        <span className="text-[11px] text-neutral-400">
+                                            Chronological history
+                                        </span>
+                                    </div>
+
+                                    <ol className="relative ml-2.5 space-y-4 border-l-2 border-neutral-200 pl-4 dark:border-neutral-800">
+                                        {selectedTransfer.timeline.map(
+                                            (event, index) => {
+                                                const isRefund =
+                                                    event.status.includes('refund');
+                                                const isFail =
+                                                    event.status.includes('failed');
+                                                const isSuccess =
+                                                    event.status === 'delivered';
+
+                                                return (
+                                                    <li
+                                                        key={index}
+                                                        className="relative text-xs"
+                                                    >
+                                                        <span
+                                                            className={cn(
+                                                                'absolute -left-[23px] top-1 h-3 w-3 rounded-full border-2 border-background',
+                                                                isSuccess
+                                                                    ? 'bg-emerald-500'
+                                                                    : isRefund
+                                                                      ? 'bg-violet-500'
+                                                                      : isFail
+                                                                        ? 'bg-red-500'
+                                                                        : 'bg-blue-500',
+                                                            )}
+                                                        />
+                                                        <div className="flex flex-wrap items-baseline justify-between gap-1">
+                                                            <span className="font-semibold text-neutral-800 dark:text-neutral-200">
+                                                                {event.note ??
+                                                                    event.status}
+                                                            </span>
+                                                            {event.at && (
+                                                                <span className="shrink-0 text-[11px] text-neutral-400">
+                                                                    {new Date(
+                                                                        event.at,
+                                                                    ).toLocaleTimeString(
+                                                                        [],
+                                                                        {
+                                                                            hour: '2-digit',
+                                                                            minute: '2-digit',
+                                                                            second: '2-digit',
+                                                                        },
+                                                                    )}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {event.at && (
+                                                            <p className="mt-0.5 text-[11px] text-neutral-400">
+                                                                {new Date(
+                                                                    event.at,
+                                                                ).toLocaleDateString(
+                                                                    [],
+                                                                    {
+                                                                        month: 'short',
+                                                                        day: 'numeric',
+                                                                        year: 'numeric',
+                                                                    },
+                                                                )}
+                                                            </p>
+                                                        )}
+                                                    </li>
+                                                );
+                                            },
+                                        )}
+                                    </ol>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <DialogFooter className="shrink-0 border-t border-sidebar-border/70 bg-neutral-50/60 px-6 py-3.5 dark:bg-neutral-900/40 flex flex-row items-center justify-between sm:justify-between">
+                        <Button
+                            variant="ghost"
+                            size="2"
+                            onClick={() => setSelectedTransfer(null)}
+                            className="cursor-pointer"
+                        >
+                            Close
+                        </Button>
+                        <div className="flex items-center gap-2">
+                            {selectedTransfer &&
+                                !selectedTransfer.is_final && (
+                                    <Button
+                                        size="2"
+                                        variant="soft"
+                                        color="blue"
+                                        onClick={() => {
+                                            verify(
+                                                selectedTransfer.reference,
+                                            );
+                                        }}
+                                        className="cursor-pointer gap-1.5"
+                                    >
+                                        <RefreshCw className="h-3.5 w-3.5" />
+                                        Check status now
+                                    </Button>
+                                )}
+                            <Button
+                                size="2"
+                                variant="soft"
+                                color="gray"
+                                asChild
+                            >
+                                <Link href={transfersIndex.url()}>
+                                    All Transfers{' '}
+                                    <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                                </Link>
+                            </Button>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
