@@ -149,8 +149,12 @@ class LedgerRecorder
             ->plus(FeeCalculator::money((string) ($transaction->settlement_fee ?? 0)));
         $estimated = (bool) $transaction->fee_estimated;
 
-        // A collection adds money to the provider account; a payout takes it out.
-        $type = $transaction->direction === 'debit' ? LedgerEntryType::PAYOUT : LedgerEntryType::COLLECTION;
+        // A collection adds money to the provider account; a payout or a refund takes it out.
+        $type = match (true) {
+            $transaction->direction !== 'debit' => LedgerEntryType::COLLECTION,
+            $transaction->refund_of_id !== null => LedgerEntryType::REFUND,
+            default => LedgerEntryType::PAYOUT,
+        };
         $into = $type === LedgerEntryType::COLLECTION ? $amount : $amount->negated();
 
         $entries = [

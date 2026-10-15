@@ -93,6 +93,30 @@ class PaypalClient
     }
 
     /**
+     * Refund a captured payment, in full or in part. The request id makes
+     * retries safe: PayPal returns the same refund instead of a second one.
+     *
+     * @return array<string, mixed>
+     */
+    public function refundCapture(string $captureId, string $amount, string $currency, string $requestId, ?string $note = null): array
+    {
+        return $this->send('POST', '/v2/payments/captures/'.rawurlencode($captureId).'/refund', array_filter([
+            'amount' => ['value' => $amount, 'currency_code' => strtoupper($currency)],
+            'note_to_payer' => $note,
+        ]), $requestId);
+    }
+
+    /**
+     * Fetch a refund's current state.
+     *
+     * @return array<string, mixed>
+     */
+    public function showRefund(string $refundId): array
+    {
+        return $this->send('GET', '/v2/payments/refunds/'.rawurlencode($refundId));
+    }
+
+    /**
      * Ask PayPal whether a webhook delivery is genuine.
      *
      * The raw event body is forwarded untouched, since re-encoding it can

@@ -21,6 +21,7 @@ class Transaction extends Model
         'status',
         'provider_response',
         'direction',
+        'refund_of_id',
         'is_fx',
         'fx_rate',
         'collection_fee',

@@ -189,6 +189,7 @@ const statusLabels: Record<TransferStatus, string> = {
 const entryLabels: Record<string, string> = {
     collection: 'Payment in',
     payout: 'Payout',
+    refund: 'Refund',
     fee: 'Fee',
     transfer_out: 'Transfer out',
     transfer_in: 'Transfer in',

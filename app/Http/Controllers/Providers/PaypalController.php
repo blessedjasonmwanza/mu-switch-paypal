@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Providers;
 
 use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
+use App\Contracts\RefundsPayments;
 use App\Enums\TransactionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
@@ -29,7 +30,7 @@ use Illuminate\Support\Str;
  *
  * @see https://developer.paypal.com/docs/api/orders/v2/
  */
-class PaypalController extends Controller implements PaymentProviderInterface
+class PaypalController extends Controller implements PaymentProviderInterface, RefundsPayments
 {
     public const PROVIDER_NAME = 'PayPal';
 
@@ -273,6 +274,62 @@ class PaypalController extends Controller implements PaymentProviderInterface
     }
 
     /**
+     * Refund a captured PayPal payment in full through the Refunds API.
+     */
+    public function refundPayment(Transaction $payment, Transaction $refund, ?string $note = null): TransactionStatus
+    {
+        $captureId = data_get($payment->provider_response, 'order.purchase_units.0.payments.captures.0.id');
+
+        if (! is_string($captureId) || $captureId === '') {
+            $refund->update(['status' => TransactionStatus::FAILED, 'provider_response' => ['error' => 'The payment has no PayPal capture to refund']]);
+
+            return TransactionStatus::FAILED;
+        }
+
+        $amount = $this->formatAmount((float) $refund->amount, $refund->currency) ?? (string) $refund->amount;
+
+        try {
+            $result = $this->client->refundCapture($captureId, $amount, $refund->currency, 'refund-'.$refund->transaction_id, $note);
+        } catch (PaypalException $e) {
+            // A definite refusal is final; otherwise the outcome is unknown, so check again later.
+            $status = $e->isUnprocessable() || $e->isNotFound() ? TransactionStatus::FAILED : TransactionStatus::PENDING;
+            $refund->update(['status' => $status, 'provider_response' => ['error' => ['issue' => $e->issue, 'message' => $e->getMessage()]]]);
+
+            return $status;
+        }
+
+        $status = self::refundStatus($result);
+        $refund->update([
+            'status' => $status,
+            'provider_transaction_id' => $result['id'] ?? $refund->provider_transaction_id,
+            'provider_response' => ['refund' => $result],
+        ]);
+
+        return $status;
+    }
+
+    /**
+     * Re-check a pending PayPal refund.
+     */
+    public function verifyRefund(Transaction $refund): TransactionStatus
+    {
+        if ($refund->provider_transaction_id === $refund->transaction_id) {
+            return $refund->status;
+        }
+
+        try {
+            $result = $this->client->showRefund($refund->provider_transaction_id);
+        } catch (PaypalException $e) {
+            return $refund->status;
+        }
+
+        $status = self::refundStatus($result);
+        $refund->update(['status' => $status, 'provider_response' => ['refund' => $result]]);
+
+        return $status;
+    }
+
+    /**
      * The fee PayPal actually charged, from the captured order, in the
      * transaction's currency.
      *
@@ -427,6 +484,20 @@ class PaypalController extends Controller implements PaymentProviderInterface
     private static function captureStatus(array $order): ?string
     {
         return $order['purchase_units'][0]['payments']['captures'][0]['status'] ?? null;
+    }
+
+    /**
+     * Map a PayPal refund onto our TransactionStatus.
+     *
+     * @param  array<string, mixed>  $refund
+     */
+    private static function refundStatus(array $refund): TransactionStatus
+    {
+        return match ($refund['status'] ?? null) {
+            'COMPLETED' => TransactionStatus::SUCCESS,
+            'CANCELLED', 'FAILED' => TransactionStatus::FAILED,
+            default => TransactionStatus::PENDING,
+        };
     }
 
     /**
