@@ -47,6 +47,7 @@ class CrossBorderTransferService
         private readonly FxQuoter $fx,
         private readonly PayoutDispatcher $payouts,
         private readonly TransactionVerifier $verifier,
+        private readonly TransferLimits $limits,
     ) {}
 
     /**
@@ -95,10 +96,12 @@ class CrossBorderTransferService
      *
      * @throws CrossBorderException
      */
-    public function request(User $user, array $input, ?string $idempotencyKey = null): array
+    public function request(User $user, array $input, ?string $idempotencyKey = null, string $origin = 'api', ?string $conversationId = null): array
     {
         $quote = $this->quote($user, $input);
-        $transfer = $this->create($user, $quote, $input, $idempotencyKey);
+        $this->limits->check($user, $quote->fx);
+
+        $transfer = $this->create($user, $quote, $input, $idempotencyKey, $origin, $conversationId);
         $checkoutUrl = $this->openCheckout($transfer, $quote, $input);
 
         return [$transfer->refresh(), $checkoutUrl];
@@ -342,15 +345,17 @@ class CrossBorderTransferService
      *
      * @param  array<string, mixed>  $input
      */
-    private function create(User $user, CrossBorderQuote $quote, array $input, ?string $idempotencyKey): CrossBorderTransfer
+    private function create(User $user, CrossBorderQuote $quote, array $input, ?string $idempotencyKey, string $origin, ?string $conversationId): CrossBorderTransfer
     {
         $fx = $quote->fx;
 
-        return DB::transaction(function () use ($user, $quote, $fx, $input, $idempotencyKey): CrossBorderTransfer {
+        return DB::transaction(function () use ($user, $quote, $fx, $input, $idempotencyKey, $origin, $conversationId): CrossBorderTransfer {
             $transfer = CrossBorderTransfer::create([
                 'reference' => (string) Str::uuid(),
                 'user_id' => $user->id,
                 'idempotency_key' => $idempotencyKey,
+                'origin' => $origin,
+                'conversation_id' => $conversationId,
                 'funding_provider_id' => $quote->funding->id,
                 'source_currency' => $fx->sourceCurrency,
                 'source_amount_minor' => Currency::toMinorUnits($fx->sourceAmount, $fx->sourceCurrency),

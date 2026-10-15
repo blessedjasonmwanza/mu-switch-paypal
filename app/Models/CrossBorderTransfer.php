@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class CrossBorderTransfer extends Model
 {
     protected $fillable = [
-        'reference', 'user_id', 'idempotency_key',
+        'reference', 'user_id', 'idempotency_key', 'origin', 'conversation_id',
         'funding_provider_id', 'funding_transaction_id', 'source_currency', 'source_amount_minor',
         'payout_provider_id', 'payout_transaction_id', 'target_currency', 'target_amount_minor',
         'recipient_country', 'recipient_account', 'recipient_name', 'recipient_network', 'narration',

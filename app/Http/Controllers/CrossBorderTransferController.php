@@ -5,9 +5,8 @@ namespace App\Http\Controllers;
 use App\ApiResponse;
 use App\Exceptions\CrossBorderException;
 use App\Models\CrossBorderTransfer;
-use App\Models\CrossBorderTransferEvent;
+use App\Support\CrossBorder\CrossBorderTransferPresenter;
 use App\Support\CrossBorder\CrossBorderTransferService;
-use App\Support\Currency;
 use App\Support\Market;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -127,49 +126,18 @@ class CrossBorderTransferController extends Controller
 
     private function respond(CrossBorderTransfer $transfer, string $message, ?string $checkoutUrl = null, bool $replayed = false): JsonResponse
     {
-        $transfer->loadMissing(['fundingTransaction', 'payoutTransaction', 'refundTransaction', 'fundingProvider', 'payoutProvider', 'events']);
-        $money = fn (int $minor, string $currency): string => (string) Currency::fromMinorUnits($minor, $currency);
+        $data = CrossBorderTransferPresenter::toArray($transfer);
+        unset($data['is_final'], $data['created_at']);
 
-        return ApiResponse::status($transfer->status->value, $message, array_filter([
-            'reference' => $transfer->reference,
-            'status' => $transfer->status->value,
-            'status_label' => $transfer->status->label(),
+        $data = [
+            'reference' => $data['reference'],
+            'status' => $data['status'],
+            'status_label' => $data['status_label'],
             'checkout_url' => $checkoutUrl,
             'replayed' => $replayed ?: null,
-            'sender_pays' => ['amount' => $money($transfer->source_amount_minor, $transfer->source_currency), 'currency' => $transfer->source_currency],
-            'recipient_gets' => ['amount' => $money($transfer->target_amount_minor, $transfer->target_currency), 'currency' => $transfer->target_currency],
-            'recipient' => [
-                'account_number' => $transfer->recipient_account,
-                'country' => $transfer->recipient_country,
-                'name' => $transfer->recipient_name,
-            ],
-            'fx' => [
-                'quote_id' => $transfer->fx_quote_id,
-                'base_rate' => (string) $transfer->fx_base_rate,
-                'effective_rate' => (string) $transfer->fx_rate,
-                'margin_percent' => (string) $transfer->fx_margin_percent,
-                'margin_amount' => $money($transfer->fx_margin_minor, $transfer->source_currency),
-            ],
-            'funding' => [
-                'provider' => $transfer->fundingProvider?->name,
-                'transaction_id' => $transfer->fundingTransaction?->transaction_id,
-                'status' => $transfer->fundingTransaction?->status->value,
-            ],
-            'payout' => $transfer->payoutTransaction ? [
-                'provider' => $transfer->payoutProvider?->name,
-                'transaction_id' => $transfer->payoutTransaction->transaction_id,
-                'status' => $transfer->payoutTransaction->status->value,
-            ] : null,
-            'refund' => $transfer->refundTransaction ? [
-                'transaction_id' => $transfer->refundTransaction->transaction_id,
-                'status' => $transfer->refundTransaction->status->value,
-            ] : null,
-            'failure_reason' => $transfer->failure_reason,
-            'timeline' => $transfer->events->map(fn (CrossBorderTransferEvent $event): array => [
-                'status' => $event->to_status->value,
-                'note' => $event->note,
-                'at' => $event->created_at?->toIso8601String(),
-            ])->all(),
-        ], fn ($value): bool => $value !== null), 200);
+            ...$data,
+        ];
+
+        return ApiResponse::status($transfer->status->value, $message, array_filter($data, fn ($value): bool => $value !== null));
     }
 }
