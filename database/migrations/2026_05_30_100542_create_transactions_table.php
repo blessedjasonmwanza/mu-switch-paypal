@@ -1,11 +1,11 @@
 <?php
 
+use App\Enums\TransactionStatus;
+use App\Models\Customer;
+use App\Models\PaymentProvider;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use App\Models\PaymentProvider;
-use App\Enums\TransactionStatus;
-use App\Models\Customer;
 
 return new class extends Migration
 {

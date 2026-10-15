@@ -64,19 +64,23 @@ class PayoutDispatcher
             }
 
             $code = $response->getStatusCode();
+            $responseData = is_array($response->getData(true)) ? $response->getData(true) : null;
 
             if ($code < 300) {
                 return new PayoutResult(PayoutResult::ACCEPTED, $transaction->refresh(), $response);
             }
 
             if ($code >= 500) {
+                $transaction->update(['provider_response' => $responseData ?? $transaction->provider_response]);
+
                 return $this->unknown($transaction);
             }
 
             // A definite refusal: safe to try the next provider.
-            if ($transaction->refresh()->status !== TransactionStatus::FAILED) {
-                $transaction->update(['status' => TransactionStatus::FAILED]);
-            }
+            $transaction->update([
+                'status' => TransactionStatus::FAILED,
+                'provider_response' => $responseData ?? $transaction->provider_response,
+            ]);
 
             $lastError = new PayoutResult(PayoutResult::REFUSED, $transaction, $response);
         }

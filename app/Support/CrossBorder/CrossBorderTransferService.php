@@ -170,17 +170,21 @@ class CrossBorderTransferService
                 'fx_rate' => $transfer->source_currency !== $transfer->target_currency ? (string) $transfer->fx_rate : null,
             ]);
 
+            // Accepted, unknown or refused: link the payout transaction and provider so the outcome is traceable.
+            if ($result->transaction) {
+                $transfer->update([
+                    'payout_transaction_id' => $result->transaction->id,
+                    'payout_provider_id' => $result->transaction->payment_provider_id,
+                ]);
+            }
+
             if ($result->refused()) {
-                $this->payoutFailed($transfer, 'Every payout provider refused the payout: '.($result->response->getData(true)['message'] ?? 'no reason given'));
+                $data = $result->response->getData(true);
+                $message = is_array($data) ? ($data['message'] ?? $data['error'] ?? 'no reason given') : 'no reason given';
+                $this->payoutFailed($transfer, 'Every payout provider refused the payout: '.$message);
 
                 return;
             }
-
-            // Accepted or unknown: the payout exists and is followed through its transaction.
-            $transfer->update([
-                'payout_transaction_id' => $result->transaction?->id,
-                'payout_provider_id' => $result->transaction?->payment_provider_id,
-            ]);
 
             if ($result->transaction) {
                 $this->advance($transfer->refresh(), $result->transaction->refresh());
@@ -209,6 +213,10 @@ class CrossBorderTransferService
                             'failure_reason' => $transfer->failure_reason,
                             'target_amount' => (string) $transfer->targetAmount(),
                             'target_currency' => $transfer->target_currency,
+                            'payout_provider' => $transfer->payoutProvider?->name,
+                            'payout_transaction_id' => $transfer->payoutTransaction?->transaction_id,
+                            'payout_provider_reference' => $transfer->payoutTransaction?->provider_transaction_id,
+                            'provider_response' => $transfer->payoutTransaction?->provider_response,
                         ]),
                         'duration_ms' => isset($startedAt) ? (int) round((microtime(true) - $startedAt) * 1000) : 0,
                     ]);
@@ -267,6 +275,8 @@ class CrossBorderTransferService
             } else {
                 $driver->refundPayment($payment, $refund, 'Refund: the transfer could not be delivered');
             }
+
+            $this->advance($transfer->refresh(), $refund->refresh());
         } catch (Throwable $e) {
             report($e);
         } finally {
@@ -275,6 +285,7 @@ class CrossBorderTransferService
             if ($ownsContext) {
                 try {
                     $transfer->refresh();
+                    $refund->refresh();
                     $status = $transfer->status;
                     $httpStatus = match ($status) {
                         CrossBorderStatus::REFUNDED => 200,
@@ -295,6 +306,9 @@ class CrossBorderTransferService
                             'failure_reason' => $transfer->failure_reason,
                             'source_amount' => (string) $transfer->sourceAmount(),
                             'source_currency' => $transfer->source_currency,
+                            'refund_transaction_id' => $refund->transaction_id,
+                            'refund_provider_reference' => $refund->provider_transaction_id,
+                            'provider_response' => $refund->provider_response,
                         ]),
                         'duration_ms' => isset($startedAt) ? (int) round((microtime(true) - $startedAt) * 1000) : 0,
                     ]);
@@ -304,8 +318,6 @@ class CrossBorderTransferService
                 RequestContext::clear();
             }
         }
-
-        $this->advance($transfer->refresh(), $refund->refresh());
     }
 
     /**
@@ -346,7 +358,12 @@ class CrossBorderTransferService
             if ($status === TransactionStatus::SUCCESS) {
                 $this->transition($transfer, CrossBorderStatus::PAYING_OUT, CrossBorderStatus::DELIVERED, 'Delivered to the recipient', ['delivered_at' => now()]);
             } elseif ($status === TransactionStatus::FAILED) {
-                $this->payoutFailed($transfer, 'The payout provider reported the payout as failed');
+                $error = data_get($leg->provider_response, 'message')
+                    ?? data_get($leg->provider_response, 'error')
+                    ?? data_get($leg->provider_response, 'rejectionReason')
+                    ?? $leg->failure_reason;
+                $reason = is_string($error) ? 'The payout provider reported the payout as failed: '.$error : 'The payout provider reported the payout as failed';
+                $this->payoutFailed($transfer, $reason);
             }
 
             return;
@@ -356,7 +373,12 @@ class CrossBorderTransferService
             if ($status === TransactionStatus::SUCCESS) {
                 $this->transition($transfer, CrossBorderStatus::REFUNDING, CrossBorderStatus::REFUNDED, 'Refunded to the sender', ['refunded_at' => now()]);
             } elseif ($status === TransactionStatus::FAILED) {
-                $this->transition($transfer, CrossBorderStatus::REFUNDING, CrossBorderStatus::REFUND_FAILED, 'PayPal refused the refund');
+                $error = data_get($leg->provider_response, 'error.message')
+                    ?? data_get($leg->provider_response, 'error')
+                    ?? $leg->failure_reason
+                    ?? 'PayPal refused the refund';
+                $reason = is_string($error) ? 'PayPal refused the refund: '.$error : 'PayPal refused the refund';
+                $this->transition($transfer, CrossBorderStatus::REFUNDING, CrossBorderStatus::REFUND_FAILED, $reason, ['failure_reason' => $reason]);
             }
         }
     }
