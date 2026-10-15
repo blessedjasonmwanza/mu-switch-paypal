@@ -14,6 +14,17 @@ return [
     |
     */
 
+    /*
+     * Outgoing calls to payment gateways. Connecting fails fast so the switch
+     * can fall back to another provider; once connected, we wait up to
+     * `timeout` seconds for an answer, because the gateway may already be
+     * moving the money. Both are in seconds and overridable from .env.
+     */
+    'gateways' => [
+        'connect_timeout' => (int) env('GATEWAY_CONNECT_TIMEOUT', 8),
+        'timeout' => (int) env('GATEWAY_TIMEOUT', 180),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

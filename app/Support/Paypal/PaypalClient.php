@@ -5,18 +5,33 @@ namespace App\Support\Paypal;
 use App\Enums\PaypalEnvironment;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Thin client for the PayPal REST API: OAuth, Orders v2 and webhook
  * verification. Every call throws {@see PaypalException} on failure.
  *
+ * Every call is safe to repeat (reads, or writes carrying a PayPal-Request-Id),
+ * so a stalled or 5xx call is retried within the gateway wait budget instead
+ * of failing on PayPal's first hiccup.
+ *
  * @see https://developer.paypal.com/docs/api/orders/v2/
  */
 class PaypalClient
 {
+    /**
+     * Pause before each retry, in milliseconds: one entry per retry, so three
+     * tries in all.
+     *
+     * @var list<int>
+     */
+    private const RETRY_DELAYS = [500, 1500];
+
     public function __construct(
         private readonly string $clientId,
         private readonly string $clientSecret,
@@ -126,11 +141,36 @@ class PaypalClient
     }
 
     /**
+     * Seconds each try may wait for an answer, so all tries fit the gateway timeout.
+     */
+    public static function attemptTimeout(): int
+    {
+        $attempts = count(self::RETRY_DELAYS) + 1;
+
+        return max(10, intdiv((int) config('services.gateways.timeout'), $attempts));
+    }
+
+    /**
+     * A JSON request that retries stalls and PayPal server errors.
+     */
+    private function request(): PendingRequest
+    {
+        return Http::acceptJson()
+            ->timeout(self::attemptTimeout())
+            ->retry(
+                [...self::RETRY_DELAYS],
+                when: fn (Throwable $e): bool => $e instanceof ConnectionException
+                    || ($e instanceof RequestException && $e->response->serverError()),
+                throw: false,
+            );
+    }
+
+    /**
      * A request carrying the bearer token (and an idempotency key, if given).
      */
     private function authorised(?string $requestId = null): PendingRequest
     {
-        $request = Http::acceptJson()->withToken($this->accessToken());
+        $request = $this->request()->withToken($this->accessToken());
 
         return $requestId ? $request->withHeaders(['PayPal-Request-Id' => $requestId]) : $request;
     }
@@ -144,8 +184,8 @@ class PaypalClient
             return $cached;
         }
 
-        $response = $this->call(fn (): Response => Http::asForm()
-            ->acceptJson()
+        $response = $this->call(fn (): Response => $this->request()
+            ->asForm()
             ->withBasicAuth($this->clientId, $this->clientSecret)
             ->post($this->url('/v1/oauth2/token'), ['grant_type' => 'client_credentials']));
 
@@ -170,7 +210,13 @@ class PaypalClient
     {
         try {
             return $request();
-        } catch (ConnectionException) {
+        } catch (ConnectionException $e) {
+            // Keep the underlying cause (timeout, reset, DNS); the caller only sees "unreachable".
+            Log::warning('PayPal could not be reached', [
+                'environment' => $this->environment->value,
+                'error' => $e->getMessage(),
+            ]);
+
             throw PaypalException::unreachable();
         }
     }

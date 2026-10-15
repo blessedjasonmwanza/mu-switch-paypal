@@ -124,6 +124,22 @@ Then open the app in your browser:
 In production, serve the app with your usual PHP stack (Nginx or Apache with
 PHP-FPM, or a managed PHP host) and run `npm run build` to compile assets.
 
+### Gateway wait times
+
+Some gateways hold the connection open while they move the money, so the
+switch waits for them rather than cutting them off and risking a double charge:
+
+| `.env` setting | Default | Meaning |
+| --- | --- | --- |
+| `GATEWAY_CONNECT_TIMEOUT` | `8` | Seconds to open a connection. Fails fast so the switch can try the next provider. |
+| `GATEWAY_TIMEOUT` | `180` | Seconds to wait for an answer once connected (3 minutes). |
+
+The app raises PHP's own time limit to cover that wait, but your **web server
+cuts requests first** unless you raise its limits too. Nginx's
+`fastcgi_read_timeout` and PHP-FPM's `request_terminate_timeout` default to 60
+seconds. Set both a little above `GATEWAY_CONNECT_TIMEOUT + GATEWAY_TIMEOUT`,
+for example 210 seconds, or long gateway calls will be cut off mid-payment.
+
 ## Create your first account
 
 1. Visit the app and register an account.

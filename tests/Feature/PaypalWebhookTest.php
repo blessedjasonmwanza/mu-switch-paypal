@@ -7,6 +7,10 @@ use App\Models\ProviderWebhookEvent;
 use App\Models\User;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
+
+// PayPal calls retry with a pause; don't actually wait in tests.
+beforeEach(fn () => Sleep::fake());
 
 /**
  * A PAYMENT.CAPTURE.COMPLETED event for ORDER-1.

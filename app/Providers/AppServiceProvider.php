@@ -41,21 +41,24 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Bound only how long we wait to *establish a connection* to a gateway, so
-     * an unreachable host (DNS failure, refused, dead endpoint) fails fast and
-     * the switch can safely fall back — a connection that never opened means the
-     * customer was never charged.
+     * Connecting to a gateway fails fast, so an unreachable host (DNS failure,
+     * refused, dead endpoint) lets the switch fall back safely: a connection
+     * that never opened means the customer was never charged.
      *
-     * We intentionally do NOT cap the response (read) time: once a request has
-     * reached a gateway it may already have initiated the collection, so cutting
-     * it off and re-routing could bill the customer twice. A slow-but-connected
-     * provider is waited on; the verify endpoint reconciles the final outcome.
+     * Once connected, we wait generously (3 minutes by default) for an answer:
+     * the gateway may already have initiated the collection, so cutting it off
+     * early and re-routing could bill the customer twice. The wait is still
+     * bounded, so a gateway that never answers can't hold a worker forever;
+     * the verify endpoint reconciles whatever is left unresolved.
      */
     protected function configureHttpTimeouts(): void
     {
+        $connectTimeout = (int) config('services.gateways.connect_timeout');
+        $timeout = (int) config('services.gateways.timeout');
+
         $options = [
-            'connect_timeout' => 8,
-            'timeout' => 0,
+            'connect_timeout' => $connectTimeout,
+            'timeout' => $timeout,
         ];
 
         if (env('HTTP_VERIFY_SSL') !== null) {
@@ -65,6 +68,20 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Http::globalOptions($options);
+
+        // PHP's own execution limit would otherwise expire first and kill a web
+        // request mid-call, leaving the payment's outcome unknown. Give every
+        // outgoing call room for the whole wait. Console processes (queue
+        // workers) have no limit and must not be given one.
+        if (! $this->app->runningInConsole()) {
+            Http::globalRequestMiddleware(function ($request) use ($connectTimeout, $timeout) {
+                if (function_exists('set_time_limit')) {
+                    @set_time_limit($connectTimeout + $timeout + 30);
+                }
+
+                return $request;
+            });
+        }
     }
 
     /**

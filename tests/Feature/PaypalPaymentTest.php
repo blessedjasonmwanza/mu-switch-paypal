@@ -6,9 +6,15 @@ use App\Jobs\SendTransactionCallback;
 use App\Models\PaymentProvider;
 use App\Models\ProviderLog;
 use App\Models\User;
+use App\Support\Paypal\PaypalClient;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
+
+// PayPal calls retry with a pause; don't actually wait in tests.
+beforeEach(fn () => Sleep::fake());
 
 function fakePaypal(array $responses = []): void
 {
@@ -337,4 +343,74 @@ test('a settled payment is never downgraded by a missing order', function () {
         ->assertJsonPath('status', 'success');
 
     expect($transaction->refresh()->status)->toBe(TransactionStatus::SUCCESS);
+});
+
+test('a stalled paypal call is retried instead of failing', function () {
+    $user = User::factory()->create(['api_token' => 'pp-stall']);
+    $transaction = pendingPaypalTransaction(paypalProvider($user));
+
+    fakePaypal(['*/v2/checkout/orders/ORDER-1' => Http::sequence()
+        ->pushFailedConnection('Operation timed out')
+        ->push(paypalOrder('ORDER-1', 'PAYER_ACTION_REQUIRED'))]);
+
+    $this->withToken('pp-stall')
+        ->postJson('/api/v1/payment/verify', ['transaction_id' => $transaction->transaction_id])
+        ->assertOk()
+        ->assertJsonPath('status', 'pending');
+
+    Sleep::assertSleptTimes(1);
+});
+
+test('a paypal server error is retried with the same idempotency key', function () {
+    $user = User::factory()->create(['api_token' => 'pp-5xx']);
+    paypalProvider($user);
+
+    fakePaypal(['*/v2/checkout/orders' => Http::sequence()
+        ->push(['name' => 'INTERNAL_SERVER_ERROR'], 500)
+        ->push(paypalOrder(), 201)]);
+
+    $response = $this->withToken('pp-5xx')
+        ->postJson('/api/v1/payment/request', ['amount' => 25, 'account_number' => 'payer@example.com', 'country' => 'ZM', 'currency' => 'USD'])
+        ->assertOk()
+        ->assertJsonPath('data.reference', 'ORDER-1');
+
+    $requestIds = Http::recorded(fn ($request) => str_ends_with($request->url(), '/v2/checkout/orders'))
+        ->map(fn ($pair) => $pair[0]->header('PayPal-Request-Id')[0]);
+
+    // Both tries were sent, with one idempotency key, so PayPal creates one order.
+    expect($requestIds->count())->toBe(2)
+        ->and($requestIds->unique()->values()->all())->toBe([$response->json('data.transaction_id')]);
+});
+
+test('paypal is reported unreachable, with the cause logged, only after every try fails', function () {
+    Log::spy();
+
+    $user = User::factory()->create(['api_token' => 'pp-down']);
+    $transaction = pendingPaypalTransaction(paypalProvider($user));
+
+    fakePaypal(['*/v2/checkout/orders/ORDER-1' => Http::failedConnection('Connection reset by peer')]);
+
+    $this->withToken('pp-down')
+        ->postJson('/api/v1/payment/verify', ['transaction_id' => $transaction->transaction_id])
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'PayPal could not be reached');
+
+    Sleep::assertSleptTimes(2);
+    Log::shouldHaveReceived('warning')->with('PayPal could not be reached', Mockery::on(
+        fn (array $context): bool => str_contains($context['error'], 'Connection reset by peer'),
+    ));
+    expect($transaction->refresh()->status)->toBe(TransactionStatus::PENDING);
+});
+
+test('paypal tries share the gateway wait budget', function () {
+    config(['services.gateways.timeout' => 180]);
+    expect(PaypalClient::attemptTimeout())->toBe(60);
+
+    config(['services.gateways.timeout' => 15]);
+    expect(PaypalClient::attemptTimeout())->toBe(10);
+});
+
+test('gateway calls connect fast and wait up to three minutes by default', function () {
+    expect(config('services.gateways.connect_timeout'))->toBe(8)
+        ->and(config('services.gateways.timeout'))->toBe(180);
 });

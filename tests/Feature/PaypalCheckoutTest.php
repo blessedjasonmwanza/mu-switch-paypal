@@ -7,6 +7,10 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Sleep;
+
+// PayPal calls retry with a pause; don't actually wait in tests.
+beforeEach(fn () => Sleep::fake());
 
 function paypalReturnUrl(Transaction $transaction, string $action = 'return'): string
 {
