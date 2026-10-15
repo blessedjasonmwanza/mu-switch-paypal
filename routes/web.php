@@ -9,6 +9,7 @@ use App\Http\Controllers\FloatRuleController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaypalCheckoutController;
 use App\Http\Controllers\ProviderController;
+use App\Http\Controllers\RatesController;
 use App\Http\Controllers\RebalanceSuggestionController;
 use App\Http\Controllers\TreasuryController;
 use App\Http\Controllers\TreasuryTransferController;
@@ -51,6 +52,9 @@ if (! config('app.docs_only_routes')) {
 
         Route::get('fee-policy', [FeePolicyController::class, 'show'])->name('fee-policy.show');
         Route::put('fee-policy', [FeePolicyController::class, 'update'])->name('fee-policy.update');
+
+        Route::get('rates', [RatesController::class, 'index'])->name('rates.index');
+        Route::post('rates/quote', [RatesController::class, 'quote'])->name('rates.quote');
 
         Route::get('treasury', [TreasuryController::class, 'index'])->name('treasury.index');
         Route::put('treasury/float-rules', [FloatRuleController::class, 'upsert'])->name('treasury.float-rules.upsert');

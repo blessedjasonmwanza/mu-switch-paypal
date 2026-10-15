@@ -1,6 +1,7 @@
 <?php
 
 use App\ApiResponse;
+use App\Http\Controllers\FxController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PaypalWebhookController;
 use App\Http\Controllers\SwitchController;
@@ -21,6 +22,12 @@ Route::prefix('v1')->middleware(VerifyApiAccess::class)->group(function () {
     Route::prefix('payout')->controller(PayoutController::class)->group(function () {
         Route::post('/request', 'requestPayout');
         Route::post('/verify', 'verifyPayout');
+    });
+
+    Route::prefix('fx')->controller(FxController::class)->group(function () {
+        Route::get('/rates', 'rates');
+        Route::post('/quote', 'quote');
+        Route::get('/quote/{id}', 'show');
     });
 });
 
