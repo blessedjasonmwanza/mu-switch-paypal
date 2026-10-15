@@ -21,8 +21,18 @@ interface Tx {
     countryName: string | null;
     status: string;
     isFx: boolean;
+    fees: TxFees | null;
     createdAtHuman: string | null;
     createdAt: string | null;
+}
+
+/** Exact decimal strings in the transaction's currency. */
+interface TxFees {
+    collection: string;
+    settlement: string;
+    total: string;
+    net: string;
+    estimated: boolean;
 }
 
 interface Paginated<T> {
@@ -99,6 +109,15 @@ function formatMoney(amount: number, currency: string): string {
         }).format(amount);
     } catch {
         return `${currency} ${amount.toLocaleString()}`;
+    }
+}
+
+/** An exact amount in the currency's own precision (no rounding to whole units). */
+function formatExact(amount: string, currency: string): string {
+    try {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(amount));
+    } catch {
+        return `${currency} ${amount}`;
     }
 }
 
@@ -571,9 +590,58 @@ export default function Index({ metrics, metricTrend, topCurrencies, topCountrie
                             <Detail label="Created" value={selected.createdAtHuman ?? '—'} />
                         </dl>
                     )}
+
+                    {selected && <FeeBreakdown tx={selected} />}
                 </DialogContent>
             </Dialog>
         </>
+    );
+}
+
+function FeeBreakdown({ tx }: { tx: Tx }) {
+    if (!tx.fees) {
+        return (
+            <p className="border-t pt-4 text-xs text-neutral-500 dark:text-neutral-400">
+                Fees: this provider publishes no fee schedule, so the amount less fees isn&apos;t known.
+            </p>
+        );
+    }
+
+    const rows: Array<[string, string]> = [
+        ['Payer paid', formatExact(String(tx.amount), tx.currency)],
+        ['Provider fee', `− ${formatExact(tx.fees.collection, tx.currency)}`],
+        ['Settlement fee', `− ${formatExact(tx.fees.settlement, tx.currency)}`],
+    ];
+
+    return (
+        <div className="border-t pt-4">
+            <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">Fees</span>
+                <span
+                    className={cn(
+                        'rounded-md px-2 py-0.5 text-[11px] font-medium',
+                        tx.fees.estimated
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+                    )}
+                    title={tx.fees.estimated ? 'From the provider’s published fee schedule' : 'Reported by the provider for this payment'}
+                >
+                    {tx.fees.estimated ? 'Estimated' : 'Actual'}
+                </span>
+            </div>
+            <dl className="space-y-1.5 text-sm">
+                {rows.map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between">
+                        <dt className="text-neutral-500 dark:text-neutral-400">{label}</dt>
+                        <dd className="tabular-nums">{value}</dd>
+                    </div>
+                ))}
+                <div className="flex items-center justify-between border-t pt-1.5 font-semibold">
+                    <dt>You receive</dt>
+                    <dd className="tabular-nums">{formatExact(tx.fees.net, tx.currency)}</dd>
+                </div>
+            </dl>
+        </div>
     );
 }
 

@@ -47,6 +47,7 @@ interface AccountSummary {
     inflow: number;
     outflow: number;
     net: number;
+    estimated: boolean;
 }
 
 interface PaymentProvider {
@@ -1450,8 +1451,8 @@ export default function Index({
                             {accountsProvider?.name} · Accounts
                         </DialogTitle>
                         <DialogDescription>
-                            Total successfully transacted amounts, grouped by
-                            currency.
+                            Successful payments by currency: what payers paid,
+                            the provider fees, and what you receive.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1504,6 +1505,14 @@ export default function Index({
                                         <div className="flex items-center justify-between border-t border-sidebar-border/50 pt-1.5 dark:border-sidebar-border/70">
                                             <span className="font-medium text-neutral-700 dark:text-neutral-300">
                                                 Net
+                                                {account.estimated && (
+                                                    <span
+                                                        className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                                        title="Includes fees estimated from the provider’s published schedule"
+                                                    >
+                                                        Est.
+                                                    </span>
+                                                )}
                                             </span>
                                             <span className="font-semibold tabular-nums">
                                                 {formatMoney(

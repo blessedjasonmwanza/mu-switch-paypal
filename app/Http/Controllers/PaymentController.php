@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transaction;
+use App\Support\Currency;
+use App\Support\Fees\FeeCalculator;
 use App\Support\Market;
+use Brick\Math\RoundingMode;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -256,9 +259,37 @@ class PaymentController extends Controller
                 'countryName' => $transaction->country ? Market::name($transaction->country) : null,
                 'status' => $transaction->status->value,
                 'isFx' => (bool) $transaction->is_fx,
+                'fees' => $this->feeBreakdown($transaction),
                 'createdAtHuman' => $transaction->created_at?->diffForHumans(),
                 'createdAt' => $transaction->created_at?->format('Y-m-d H:i:s T'),
             ]);
+    }
+
+    /**
+     * The transaction's fees and what the merchant nets, as exact strings in
+     * the currency's precision, or null when the provider has no fee data.
+     *
+     * @return array{collection: string, settlement: string, total: string, net: string, estimated: bool}|null
+     */
+    private function feeBreakdown(Transaction $transaction): ?array
+    {
+        if ($transaction->collection_fee === null && $transaction->settlement_fee === null) {
+            return null;
+        }
+
+        $decimals = Currency::decimals((string) $transaction->currency);
+        $format = fn (mixed $value): string => (string) FeeCalculator::money((string) ($value ?? 0))->toScale($decimals, RoundingMode::HalfUp);
+
+        $collection = FeeCalculator::money((string) ($transaction->collection_fee ?? 0));
+        $settlement = FeeCalculator::money((string) ($transaction->settlement_fee ?? 0));
+
+        return [
+            'collection' => $format($collection),
+            'settlement' => $format($settlement),
+            'total' => $format($collection->plus($settlement)),
+            'net' => $format($transaction->net_amount),
+            'estimated' => (bool) $transaction->fee_estimated,
+        ];
     }
 
     /**

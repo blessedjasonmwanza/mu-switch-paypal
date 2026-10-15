@@ -7,6 +7,7 @@ use App\Enums\TransactionStatus;
 use App\Models\PaymentProvider;
 use App\Models\ProviderLog;
 use App\Models\Transaction;
+use App\Support\Currency;
 use App\Support\Market;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -76,7 +77,7 @@ class ProviderController extends Controller
      * Per-provider, per-currency money summary of successful transactions:
      * inflow (collected), outflow (fees) and net.
      *
-     * @return Collection<int, list<array{currency: string, count: int, inflow: float, outflow: float, net: float}>>
+     * @return Collection<int, list<array{currency: string, count: int, inflow: float, outflow: float, net: float, estimated: bool}>>
      */
     private function accountSummaries(Collection $providerIds): Collection
     {
@@ -88,17 +89,24 @@ class ProviderController extends Controller
             ->selectRaw('coalesce(sum(amount), 0) as inflow')
             ->selectRaw('coalesce(sum(coalesce(collection_fee, 0) + coalesce(settlement_fee, 0)), 0) as outflow')
             ->selectRaw('coalesce(sum(coalesce(net_amount, amount)), 0) as net')
+            ->selectRaw('max(case when fee_estimated then 1 else 0 end) as estimated')
             ->groupBy('payment_provider_id', 'currency')
             ->orderByDesc('inflow')
             ->get()
             ->groupBy('payment_provider_id')
-            ->map(fn (Collection $rows): array => $rows->map(fn ($row): array => [
-                'currency' => (string) $row->currency,
-                'count' => (int) $row->count,
-                'inflow' => round((float) $row->inflow, 2),
-                'outflow' => round((float) $row->outflow, 2),
-                'net' => round((float) $row->net, 2),
-            ])->values()->all());
+            ->map(fn (Collection $rows): array => $rows->map(function ($row): array {
+                $decimals = Currency::decimals((string) $row->currency);
+
+                return [
+                    'currency' => (string) $row->currency,
+                    'count' => (int) $row->count,
+                    'inflow' => round((float) $row->inflow, $decimals),
+                    'outflow' => round((float) $row->outflow, $decimals),
+                    'net' => round((float) $row->net, $decimals),
+                    // True when any fee in the total is a schedule estimate, not the provider's actual.
+                    'estimated' => (bool) $row->estimated,
+                ];
+            })->values()->all());
     }
 
     /**
