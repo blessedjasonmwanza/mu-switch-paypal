@@ -83,10 +83,23 @@ class PaypalController extends Controller implements PaymentProviderInterface
     ];
 
     /**
-     * PayPal's standard checkout rate. Override per provider via `fee_schedule`.
+     * PayPal Checkout's published rate: 3.49% plus a fixed fee in the charged
+     * currency. Used to estimate before capture; once captured, PayPal's
+     * reported fee replaces it. Override per provider via `fee_schedule`.
+     *
+     * @see https://www.paypal.com/us/business/paypal-business-fees
      */
     public const FEE_SCHEDULE = [
-        'collection' => ['percent' => 3.49, 'flat' => 0.49],
+        'collection' => [
+            'percent' => 3.49,
+            'flat' => [
+                'AUD' => 0.59, 'BRL' => 2.90, 'CAD' => 0.59, 'CHF' => 0.49, 'CNY' => 2.99,
+                'CZK' => 12.00, 'DKK' => 3.40, 'EUR' => 0.39, 'GBP' => 0.39, 'HKD' => 3.79,
+                'HUF' => 149, 'ILS' => 1.60, 'JPY' => 49, 'MXN' => 9.00, 'MYR' => 2.00,
+                'NOK' => 4.70, 'NZD' => 0.69, 'PHP' => 25.00, 'PLN' => 1.89, 'SEK' => 4.70,
+                'SGD' => 0.69, 'THB' => 18.00, 'TWD' => 15, 'USD' => 0.49,
+            ],
+        ],
     ];
 
     private PaypalClient $client;
@@ -211,6 +224,27 @@ class PaypalController extends Controller implements PaymentProviderInterface
             'amount' => (float) $transaction->amount,
             'currency' => $transaction->currency,
         ]);
+    }
+
+    /**
+     * The fee PayPal actually charged, from the captured order, in the
+     * transaction's currency.
+     *
+     * @param  array<string, mixed>  $response
+     */
+    public static function actualCollectionFee(array $response, string $currency): ?string
+    {
+        $fee = data_get($response, 'order.purchase_units.0.payments.captures.0.seller_receivable_breakdown.paypal_fee');
+
+        if (! is_array($fee) || ! is_numeric($fee['value'] ?? null)) {
+            return null;
+        }
+
+        if ($currency !== '' && strtoupper((string) ($fee['currency_code'] ?? '')) !== strtoupper($currency)) {
+            return null;
+        }
+
+        return (string) $fee['value'];
     }
 
     /**
