@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\Transaction;
 use App\Support\Fees\FeeCalculator;
+use App\Support\Ledger\LedgerRecorder;
 use App\Support\ProviderFees;
 
 /**
@@ -11,6 +12,7 @@ use App\Support\ProviderFees;
  * amount) in sync so payments are auditable end-to-end regardless of which
  * provider handled them. The collection fee uses the provider's ACTUAL figure
  * when it returns one in the charge response, otherwise the schedule estimate.
+ * Once saved, the transaction's ledger entries are synced to its state.
  */
 class TransactionObserver
 {
@@ -59,6 +61,14 @@ class TransactionObserver
             ->toFloat();
         // The collection fee is estimated unless the provider reported the actual.
         $transaction->fee_estimated = $actual === null;
+    }
+
+    /**
+     * Keep the ledger in step with the transaction's settled state.
+     */
+    public function saved(Transaction $transaction): void
+    {
+        app(LedgerRecorder::class)->sync($transaction);
     }
 
     /**

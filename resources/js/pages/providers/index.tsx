@@ -814,7 +814,7 @@ export default function Index({
                                         <div>
                                             <div className="flex items-center gap-1 text-[11px] text-neutral-400">
                                                 <ArrowUpRight className="h-3 w-3 text-red-500" />{' '}
-                                                Outflows (fees)
+                                                Outflows (fees & payouts)
                                             </div>
                                             <div className="text-sm font-semibold tabular-nums">
                                                 {provider.accounts.length > 0
@@ -1459,8 +1459,8 @@ export default function Index({
                             {accountsProvider?.name} · Accounts
                         </DialogTitle>
                         <DialogDescription>
-                            Successful payments by currency: what payers paid,
-                            the provider fees, and what you receive.
+                            Your balance at this provider by currency, from the
+                            ledger: payments in, fees and payouts out.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1501,7 +1501,7 @@ export default function Index({
                                         <div className="flex items-center justify-between">
                                             <span className="flex items-center gap-1 text-neutral-500 dark:text-neutral-400">
                                                 <ArrowUpRight className="h-3 w-3 text-red-500" />{' '}
-                                                Outflows (fees)
+                                                Outflows (fees & payouts)
                                             </span>
                                             <span className="font-medium tabular-nums">
                                                 {formatMoney(

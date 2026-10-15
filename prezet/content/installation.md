@@ -140,6 +140,25 @@ cuts requests first** unless you raise its limits too. Nginx's
 seconds. Set both a little above `GATEWAY_CONNECT_TIMEOUT + GATEWAY_TIMEOUT`,
 for example 210 seconds, or long gateway calls will be cut off mid-payment.
 
+### Ledger
+
+Every settled payment and payout is recorded in a double-entry ledger, which
+the provider **Accounts** balances are read from. After upgrading from a version
+without the ledger, build it once from your existing transactions. The command
+is safe to run again at any time:
+
+```bash
+php artisan migrate
+php artisan ledger:rebuild
+```
+
+If a provider account already held money before you started using the switch,
+record it so the ledger matches the real account:
+
+```bash
+php artisan ledger:opening-balance {provider_id} ZMW 5000 --note="Float on go-live"
+```
+
 ## Create your first account
 
 1. Visit the app and register an account.
