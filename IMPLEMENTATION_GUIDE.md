@@ -85,7 +85,15 @@ All business logic lives in plain services (`TransferQuoter`, `PayoutRouter`, `P
 - **Handling:** every genuine event re-verifies the order it refers to (`resource.supplementary_data.related_ids.order_id`, or the order itself for `checkout-order` events). State therefore always comes from PayPal, never from the event body.
 - **Idempotency:** deliveries are stored in `provider_webhook_events` (unique per provider and event id). A processed event is acknowledged without reprocessing. If PayPal is unreachable, the response is 503 and the event stays unprocessed, so PayPal redelivers it.
 
-### 4.3 Payouts in the switch (new capability)
+### 4.3 Payouts in the switch (new capability) ✅
+
+_Also step 1 of [TREASURY_MODULE.md](TREASURY_MODULE.md), which tracks the wider treasury plan (ledger, balances, floats, transfers)._
+
+**Built (2026-10-15):** see TREASURY_MODULE.md step 1 "Done" for the full list. Two differences from the plan below:
+- Routing reuses `ProviderRouter` with a capability filter instead of a separate `PayoutRouter`.
+- The payout API lives in `PayoutController`.
+
+A double-entry ledger (TREASURY_MODULE.md step 2) records every settled payment and payout.
 
 Every driver today is collection-only (`direction = 'credit'`). The `transactions.direction` column already allows `debit`.
 
@@ -103,7 +111,7 @@ Every driver today is collection-only (`direction = 'credit'`). The `transaction
 - New public API: `POST /api/v1/payout/request` and `POST /api/v1/payout/verify`, with docs in `prezet/content/api/`.
 - **Coverage.** `Coverage` reports payout-capable providers separately, so the landing page shows "collect in X / pay out in Y".
 
-### 4.4 Simulated payout driver
+### 4.4 Simulated payout driver ✅
 
 `SandboxPayoutController` implements `PayoutProviderInterface`. It succeeds or fails based on the MSISDN suffix (`...0000` fails, everything else succeeds after a short delay). It's labelled **"Simulated"** in the dashboard and only registers when `APP_ENV != production`. This makes the **fallback and refund** paths reproducible end to end, without depending on a third-party sandbox.
 
