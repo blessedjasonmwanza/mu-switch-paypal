@@ -13,6 +13,8 @@ use App\Jobs\DisburseCrossBorderTransfer;
 use App\Jobs\RefundCrossBorderTransfer;
 use App\Models\ApiLog;
 use App\Models\CrossBorderTransfer;
+use App\Models\Merchant;
+use App\Models\PaymentLink;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Models\User;
@@ -28,6 +30,7 @@ use App\Support\ProviderRouter;
 use App\Support\RequestContext;
 use App\Support\TransactionVerifier;
 use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -105,6 +108,82 @@ class CrossBorderTransferService
 
         $transfer = $this->create($user, $quote, $input, $idempotencyKey, $origin, $conversationId);
         $checkoutUrl = $this->openCheckout($transfer, $quote, $input);
+
+        return [$transfer->refresh(), $checkoutUrl];
+    }
+
+    /**
+     * Price a payment to a merchant: what the customer pays with PayPal, the
+     * aggregator's commission, and what the merchant receives in its wallet.
+     *
+     * @param  array{amount: string, mode?: ?string, source_currency?: ?string}  $input  target mode: the amount is the merchant's price, in its currency
+     * @return array{quote: CrossBorderQuote, commission_minor: int, net_minor: int}
+     *
+     * @throws CrossBorderException
+     */
+    public function quoteForMerchant(Merchant $merchant, array $input): array
+    {
+        if (! $merchant->is_active) {
+            throw new CrossBorderException('This merchant is not accepting payments.', 404);
+        }
+
+        $quote = $this->quote($merchant->user, [
+            'amount' => $input['amount'],
+            'mode' => $input['mode'] ?? 'target',
+            'source_currency' => $input['source_currency'] ?? null,
+            'country' => $merchant->country,
+            'currency' => $input['settle_currency'] ?? $merchant->currency,
+        ]);
+
+        $gross = Currency::toMinorUnits($quote->fx->targetAmount, $quote->fx->targetCurrency);
+        // Rounded down for the aggregator, so the merchant is never short-changed by rounding.
+        $commission = BigDecimal::of($gross)
+            ->multipliedBy((string) $merchant->commission_percent)
+            ->dividedBy(100, 0, RoundingMode::Down)
+            ->toInt();
+
+        return ['quote' => $quote, 'commission_minor' => $commission, 'net_minor' => $gross - $commission];
+    }
+
+    /**
+     * Collect a payment for a merchant through PayPal and settle it to the
+     * merchant's mobile-money wallet once PayPal confirms it.
+     *
+     * @param  array{amount: string, mode?: ?string, source_currency?: ?string, payer_email?: ?string, narration?: ?string, return_url?: ?string}  $input
+     * @param  (callable(CrossBorderTransfer): string)|null  $returnUrl  where PayPal sends the customer back, built from the new transfer
+     * @return array{0: CrossBorderTransfer, 1: ?string}
+     *
+     * @throws CrossBorderException
+     */
+    public function collectForMerchant(Merchant $merchant, array $input, string $origin = 'pay_link', ?callable $returnUrl = null, ?string $idempotencyKey = null, ?PaymentLink $link = null): array
+    {
+        ['quote' => $quote, 'commission_minor' => $commission, 'net_minor' => $net] = $this->quoteForMerchant($merchant, $input);
+
+        if ($net <= 0) {
+            throw new CrossBorderException('The amount is too small to settle after commission.');
+        }
+
+        // Customers aren't the account holder, so only the per-payment cap applies.
+        $this->limits->check($merchant->user, $quote->fx, daily: false);
+
+        $transfer = $this->create($merchant->user, $quote, [
+            'account_number' => $merchant->wallet_number,
+            'recipient_name' => $merchant->wallet_name ?? $merchant->name,
+            'network' => $merchant->network,
+            'narration' => $input['narration'] ?? "Payment via {$merchant->name}",
+            'payer_email' => $input['payer_email'] ?? null,
+        ], $idempotencyKey, $origin, null, [
+            'merchant_id' => $merchant->id,
+            'payment_link_id' => $link?->id,
+            'commission_minor' => $commission,
+            'target_amount_minor' => $net,
+        ]);
+
+        $checkoutUrl = $this->openCheckout($transfer, $quote, [
+            'brand_name' => $merchant->name,
+            'payer_email' => $input['payer_email'] ?? null,
+            'return_url' => $returnUrl ? $returnUrl($transfer) : ($input['return_url'] ?? null),
+        ]);
 
         return [$transfer->refresh(), $checkoutUrl];
     }
@@ -455,11 +534,11 @@ class CrossBorderTransferService
      *
      * @param  array<string, mixed>  $input
      */
-    private function create(User $user, CrossBorderQuote $quote, array $input, ?string $idempotencyKey, string $origin, ?string $conversationId): CrossBorderTransfer
+    private function create(User $user, CrossBorderQuote $quote, array $input, ?string $idempotencyKey, string $origin, ?string $conversationId, array $overrides = []): CrossBorderTransfer
     {
         $fx = $quote->fx;
 
-        return DB::transaction(function () use ($user, $quote, $fx, $input, $idempotencyKey, $origin, $conversationId): CrossBorderTransfer {
+        return DB::transaction(function () use ($user, $quote, $fx, $input, $idempotencyKey, $origin, $conversationId, $overrides): CrossBorderTransfer {
             $transfer = CrossBorderTransfer::create([
                 'reference' => (string) Str::uuid(),
                 'user_id' => $user->id,
@@ -481,7 +560,9 @@ class CrossBorderTransferService
                 'fx_rate' => (string) $fx->effectiveRate,
                 'fx_margin_percent' => (string) $fx->marginPercent,
                 'fx_margin_minor' => Currency::toMinorUnits($fx->marginAmount, $fx->sourceCurrency),
+                'payer_email' => $input['payer_email'] ?? null,
                 'status' => CrossBorderStatus::AWAITING_PAYMENT,
+                ...$overrides,
             ]);
 
             $transfer->events()->create(['from_status' => null, 'to_status' => CrossBorderStatus::AWAITING_PAYMENT, 'note' => 'Quoted at '.$fx->summary(), 'created_at' => now()]);
@@ -509,6 +590,7 @@ class CrossBorderTransferService
             'account_number' => $payer ?: 'transfer-'.$transfer->reference,
             'email' => $payer,
             'return_url' => $input['return_url'] ?? null,
+            'brand_name' => $input['brand_name'] ?? null,
         ]));
         $payment->setUserResolver(fn () => $transfer->user);
 

@@ -26,7 +26,7 @@ class TransferLimits
      *
      * @throws CrossBorderException
      */
-    public function check(User $user, FxQuote $fx): void
+    public function check(User $user, FxQuote $fx, bool $daily = true): void
     {
         $perTransfer = BigDecimal::of((string) config('moneyunify_paypal.limits.per_transaction_max_usd', 2000));
         $perDay = BigDecimal::of((string) config('moneyunify_paypal.limits.daily_max_usd', 5000));
@@ -34,6 +34,10 @@ class TransferLimits
 
         if ($amount->isGreaterThan($perTransfer)) {
             throw new CrossBorderException("This transfer is about USD {$amount}, over the USD {$perTransfer} limit per transfer.");
+        }
+
+        if (! $daily) {
+            return;
         }
 
         $today = $this->sentToday($user);
@@ -53,6 +57,8 @@ class TransferLimits
     {
         return CrossBorderTransfer::query()
             ->where('user_id', $user->id)
+            // Customers paying the account's merchants aren't the account sending money.
+            ->whereNull('merchant_id')
             ->where('created_at', '>=', now()->startOfDay())
             ->where('status', '!=', CrossBorderStatus::PAYMENT_FAILED->value)
             ->get(['source_amount_minor', 'source_currency'])

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\ApiLog;
 use App\Models\CrossBorderTransfer;
+use App\Models\Merchant;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Support\RequestContext;
@@ -146,6 +147,12 @@ class LogApiRequests
             if ($id) {
                 return (int) $id;
             }
+        }
+
+        // A merchant's public pay page belongs to the merchant's aggregator.
+        $merchant = $request->route('merchant');
+        if ($merchant instanceof Merchant) {
+            return $merchant->user_id;
         }
 
         $provider = $request->route('provider');

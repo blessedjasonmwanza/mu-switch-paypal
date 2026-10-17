@@ -10,6 +10,7 @@ import {
     ScrollText,
     Send,
     Sliders,
+    Store,
     Wallet,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
@@ -29,6 +30,7 @@ import { dashboard } from '@/routes';
 import { index as aiIndex } from '@/routes/ai';
 import feePolicy from '@/routes/fee-policy';
 import logs from '@/routes/logs';
+import merchantsRoute from '@/routes/merchants';
 import payments from '@/routes/payments';
 import providers from '@/routes/providers';
 import rates from '@/routes/rates';
@@ -66,6 +68,11 @@ const navGroups: NavGroup[] = [
                 href: sendIndex.url(),
                 icon: Send,
             },
+    {
+        title: 'Merchants',
+        href: merchantsRoute.index.url(),
+        icon: Store,
+    },
         ],
     },
     {

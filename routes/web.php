@@ -6,7 +6,10 @@ use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FeePolicyController;
 use App\Http\Controllers\FloatRuleController;
+use App\Http\Controllers\MerchantController;
+use App\Http\Controllers\MerchantPayController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PaypalCheckoutController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\RatesController;
@@ -54,6 +57,15 @@ if (! config('app.docs_only_routes')) {
 
         Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
 
+        Route::get('merchants', [MerchantController::class, 'index'])->name('merchants.index');
+        Route::post('merchants', [MerchantController::class, 'store'])->name('merchants.store');
+        Route::put('merchants/{merchant:id}', [MerchantController::class, 'update'])->name('merchants.update');
+        Route::prefix('merchants/{merchant}/links')->name('merchants.links.')->controller(PaymentLinkController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::patch('{link}', 'update')->name('update');
+            Route::delete('{link}', 'destroy')->name('destroy');
+        });
         Route::post('payments/{transaction:transaction_id}/refund', [PaymentController::class, 'refund'])->middleware('throttle:20,1')->name('payments.refund');
         Route::get('transfers', [TransferController::class, 'index'])->name('transfers.index');
         Route::post('transfers/transactions/{transaction:transaction_id}/verify', [TransferController::class, 'verifyTransaction'])->middleware(LogApiRequests::class)->name('transfers.transactions.verify');
@@ -94,6 +106,16 @@ if (! config('app.docs_only_routes')) {
             Route::post('{credential}/test', 'test')->middleware('throttle:6,1')->name('test');
         });
     });
+
+    // A merchant's public pay page: customers pay with PayPal, the merchant is
+    // settled to mobile money. Receipts are found by their unguessable reference.
+    Route::get('pay/receipt/{transfer:reference}', [MerchantPayController::class, 'receipt'])->name('pay.receipt');
+    Route::get('pay/l/{link}', [MerchantPayController::class, 'showLink'])->name('pay.link');
+    Route::post('pay/l/{link}/quote', [MerchantPayController::class, 'quoteLink'])->middleware('throttle:60,1')->name('pay.link.quote');
+    Route::post('pay/l/{link}', [MerchantPayController::class, 'storeLink'])->middleware(['throttle:10,1', LogApiRequests::class])->name('pay.link.store');
+    Route::get('pay/{merchant}', [MerchantPayController::class, 'show'])->name('pay.show');
+    Route::post('pay/{merchant}/quote', [MerchantPayController::class, 'quote'])->middleware('throttle:60,1')->name('pay.quote');
+    Route::post('pay/{merchant}', [MerchantPayController::class, 'store'])->middleware(['throttle:10,1', LogApiRequests::class])->name('pay.store');
 
     // Where PayPal returns the payer after checkout (signed links).
     Route::prefix('checkout/paypal/{transaction:transaction_id}')

@@ -64,6 +64,21 @@ return [
     | agent transfers or excessive unauthorized sends.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Impact
+    |--------------------------------------------------------------------------
+    |
+    | The average all-in cost of sending money to your corridors today (e.g.
+    | the World Bank Remittance Prices Worldwide figure for your region), in
+    | percent. When set, the Merchants page compares your merchants' cost with
+    | it. Leave unset to show your own cost only.
+    |
+    */
+    'impact' => [
+        'benchmark_cost_percent' => env('IMPACT_BENCHMARK_COST_PERCENT'),
+    ],
+
     'limits' => [
         'per_transaction_max_usd' => (float) env('TRANSFER_MAX_PER_TRANSACTION_USD', 2000.00),
         'daily_max_usd' => (float) env('TRANSFER_MAX_DAILY_USD', 5000.00),

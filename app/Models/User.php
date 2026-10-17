@@ -100,4 +100,9 @@ class User extends Authenticatable implements PasskeyUser
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
+
+    public function merchants(): HasMany
+    {
+        return $this->hasMany(Merchant::class);
+    }
 }

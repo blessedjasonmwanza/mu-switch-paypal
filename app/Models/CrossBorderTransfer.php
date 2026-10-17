@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class CrossBorderTransfer extends Model
 {
     protected $fillable = [
-        'reference', 'user_id', 'idempotency_key', 'origin', 'conversation_id',
+        'reference', 'user_id', 'merchant_id', 'payment_link_id', 'idempotency_key', 'origin', 'conversation_id', 'commission_minor', 'payer_email',
         'funding_provider_id', 'funding_transaction_id', 'source_currency', 'source_amount_minor',
         'payout_provider_id', 'payout_transaction_id', 'target_currency', 'target_amount_minor',
         'recipient_country', 'recipient_account', 'recipient_name', 'recipient_network', 'narration',
@@ -28,6 +28,16 @@ class CrossBorderTransfer extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function merchant(): BelongsTo
+    {
+        return $this->belongsTo(Merchant::class);
+    }
+
+    public function paymentLink(): BelongsTo
+    {
+        return $this->belongsTo(PaymentLink::class)->withTrashed();
     }
 
     public function fundingProvider(): BelongsTo
@@ -77,6 +87,7 @@ class CrossBorderTransfer extends Model
             'source_amount_minor' => 'integer',
             'target_amount_minor' => 'integer',
             'fx_margin_minor' => 'integer',
+            'commission_minor' => 'integer',
             'funded_at' => 'datetime',
             'delivered_at' => 'datetime',
             'refunded_at' => 'datetime',
