@@ -14,7 +14,7 @@ import {
     X,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SendMoneyAssistantController from '@/actions/App/Http/Controllers/SendMoneyAssistantController';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -103,11 +103,14 @@ function parseAssistantText(text: string): ParsedMessage {
         const spMatch = line.match(
             /(?:sender pays|you pay):\s*\*?\*?\s*([^\n\r*]+)/i,
         );
+
         if (spMatch) {
             senderPays = spMatch[1].replace(/[*_]/g, '').trim();
+
             if (quoteStart === -1) {
                 quoteStart = i;
             }
+
             quoteEnd = i;
             continue;
         }
@@ -115,11 +118,14 @@ function parseAssistantText(text: string): ParsedMessage {
         const rgMatch = line.match(
             /(?:recipient gets|they receive|recipient receives):\s*\*?\*?\s*([^\n\r*]+)/i,
         );
+
         if (rgMatch) {
             recipientGets = rgMatch[1].replace(/[*_]/g, '').trim();
+
             if (quoteStart === -1) {
                 quoteStart = i;
             }
+
             quoteEnd = i;
             continue;
         }
@@ -127,11 +133,14 @@ function parseAssistantText(text: string): ParsedMessage {
         const erMatch = line.match(
             /(?:exchange rate|rate):\s*\*?\*?\s*([^\n\r*]+)/i,
         );
+
         if (erMatch) {
             exchangeRate = erMatch[1].replace(/[*_]/g, '').trim();
+
             if (quoteStart === -1) {
                 quoteStart = i;
             }
+
             quoteEnd = i;
             continue;
         }
@@ -139,11 +148,14 @@ function parseAssistantText(text: string): ParsedMessage {
         const delMatch = line.match(
             /(?:delivery|delivery method|delivered via):\s*\*?\*?\s*([^\n\r*]+)/i,
         );
+
         if (delMatch) {
             delivery = delMatch[1].replace(/[*_]/g, '').trim();
+
             if (quoteStart === -1) {
                 quoteStart = i;
             }
+
             quoteEnd = i;
             continue;
         }
@@ -179,10 +191,13 @@ function parseAssistantText(text: string): ParsedMessage {
 
     if (intro) {
         const phoneMatch = intro.match(/(?:to\s+)?(\+?\d{8,15})/i);
+
         if (phoneMatch) {
             account = phoneMatch[1];
         }
+
         const countryMatch = intro.match(/(?:in\s+)([A-Za-z\s]+)(?:[:.,]|$)/i);
+
         if (countryMatch) {
             country = countryMatch[1].trim();
         }
@@ -223,7 +238,7 @@ function FormattedText({ text }: { text: string }) {
                 }
 
                 // Strip leading markdown bullets if present for cleaner prose
-                const cleanLine = line.replace(/^\s*[\*\-]\s+/, '');
+                const cleanLine = line.replace(/^\s*[*-]\s+/, '');
                 const regex = /(https?:\/\/[^\s<]+|\*\*[^*]+\*\*)/g;
                 const parts = cleanLine.split(regex);
                 const isSingleUrlLine =
@@ -233,7 +248,9 @@ function FormattedText({ text }: { text: string }) {
                 return (
                     <div key={i} className="leading-relaxed break-words">
                         {parts.map((part, j) => {
-                            if (!part) return null;
+                            if (!part) {
+return null;
+}
 
                             if (
                                 part.startsWith('http://') ||
@@ -369,7 +386,10 @@ function PaymentActionCard({ started }: { started: StartedTransfer }) {
     }
 
     const copyLink = async () => {
-        if (!started.checkout_url) return;
+        if (!started.checkout_url) {
+return;
+}
+
         try {
             await navigator.clipboard.writeText(started.checkout_url);
             setCopied(true);
@@ -642,6 +662,7 @@ export function SendMoneyAssistant({
             current.map((m) => ({ ...m, answered: true })).concat({
                 id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                 role: 'user',
+                answered: false,
                 text,
                 timestamp: nowTime(),
             }),

@@ -365,20 +365,16 @@ export default function SendMoney({
         [transfers.data, returned],
     );
 
-    const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(null);
+    const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(
+        null,
+    );
 
-    // Keep the selected transfer updated if poll data changes
-    useEffect(() => {
-        if (!selectedTransfer) {
-            return;
-        }
-        const updated = transfers.data.find(
-            (t) => t.reference === selectedTransfer.reference,
-        );
-        if (updated) {
-            setSelectedTransfer(updated);
-        }
-    }, [transfers.data]);
+    // The open transfer, kept in step with the latest poll data.
+    const shownTransfer = selectedTransfer
+        ? (transfers.data.find(
+              (t) => t.reference === selectedTransfer.reference,
+          ) ?? selectedTransfer)
+        : null;
 
     const getCountryName = (code: string) =>
         countries.find((c) => c.code === code)?.name ?? code;
@@ -448,7 +444,7 @@ export default function SendMoney({
                 )}
 
                 <div className="grid items-start gap-6 xl:grid-cols-12">
-                    <Card className="gap-0 border border-sidebar-border/70 p-5 xl:col-span-5 xl:sticky xl:top-6 dark:border-sidebar-border">
+                    <Card className="gap-0 border border-sidebar-border/70 p-5 xl:sticky xl:top-6 xl:col-span-5 dark:border-sidebar-border">
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <h2 className="text-sm font-semibold">
@@ -901,7 +897,10 @@ export default function SendMoney({
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
                                                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                                                    <span aria-hidden className="text-base">
+                                                    <span
+                                                        aria-hidden
+                                                        className="text-base"
+                                                    >
                                                         {countryFlag(
                                                             transfer.recipient
                                                                 .country,
@@ -943,7 +942,7 @@ export default function SendMoney({
                                                 </div>
                                             </div>
                                             <div className="shrink-0 text-right">
-                                                <div className="text-sm font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+                                                <div className="text-sm font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
                                                     {formatMoney(
                                                         transfer.recipient_gets,
                                                     )}
@@ -961,12 +960,12 @@ export default function SendMoney({
                                         </div>
 
                                         <div className="mt-2.5 flex items-center justify-between gap-3">
-                                            <div className="flex-1 max-w-xs sm:max-w-sm">
+                                            <div className="max-w-xs flex-1 sm:max-w-sm">
                                                 <Progress
                                                     status={transfer.status}
                                                 />
                                             </div>
-                                            <div className="flex items-center gap-1.5 shrink-0">
+                                            <div className="flex shrink-0 items-center gap-1.5">
                                                 <Button
                                                     size="1"
                                                     variant="soft"
@@ -981,7 +980,12 @@ export default function SendMoney({
                                                     <Clock className="h-3 w-3 text-neutral-500" />
                                                     <span>Timeline</span>
                                                     <span className="text-[10px] text-neutral-400">
-                                                        ({transfer.timeline.length})
+                                                        (
+                                                        {
+                                                            transfer.timeline
+                                                                .length
+                                                        }
+                                                        )
                                                     </span>
                                                 </Button>
                                                 {!transfer.is_final && (
@@ -1005,7 +1009,7 @@ export default function SendMoney({
 
                                         {transfer.failure_reason && (
                                             <div className="mt-2 flex items-start justify-between gap-2 rounded-md bg-amber-50/70 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                                                <div className="flex items-start gap-1.5 min-w-0">
+                                                <div className="flex min-w-0 items-start gap-1.5">
                                                     {transfer.status ===
                                                     'refunded' ? (
                                                         <Undo2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -1013,7 +1017,9 @@ export default function SendMoney({
                                                         <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
                                                     )}
                                                     <span className="line-clamp-1">
-                                                        {transfer.failure_reason}
+                                                        {
+                                                            transfer.failure_reason
+                                                        }
                                                     </span>
                                                 </div>
                                                 <button
@@ -1047,59 +1053,57 @@ export default function SendMoney({
 
             {/* Transfer Timeline & Details Dialog */}
             <Dialog
-                open={!!selectedTransfer}
+                open={!!shownTransfer}
                 onOpenChange={(open) => !open && setSelectedTransfer(null)}
             >
                 <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
                     <DialogHeader className="shrink-0 border-b border-sidebar-border/70 px-6 py-4 pr-12 text-left">
                         <DialogTitle className="flex flex-wrap items-center gap-2">
-                            {selectedTransfer && (
+                            {shownTransfer && (
                                 <>
                                     <span aria-hidden className="text-base">
                                         {countryFlag(
-                                            selectedTransfer.recipient.country,
+                                            shownTransfer.recipient.country,
                                         )}
                                     </span>
                                     <span className="font-semibold">
-                                        {selectedTransfer.recipient.name ??
-                                            selectedTransfer.recipient
+                                        {shownTransfer.recipient.name ??
+                                            shownTransfer.recipient
                                                 .account_number}
                                     </span>
                                     <span
                                         className={cn(
                                             'rounded-md px-2 py-0.5 text-xs font-medium',
-                                            statusTone[
-                                                selectedTransfer.status
-                                            ],
+                                            statusTone[shownTransfer.status],
                                         )}
                                     >
-                                        {selectedTransfer.status_label}
+                                        {shownTransfer.status_label}
                                     </span>
                                 </>
                             )}
                         </DialogTitle>
                         <DialogDescription className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
                             <span className="font-mono text-neutral-700 dark:text-neutral-300">
-                                {selectedTransfer?.reference}
+                                {shownTransfer?.reference}
                             </span>
-                            {selectedTransfer?.created_at && (
+                            {shownTransfer?.created_at && (
                                 <>
                                     <span>•</span>
                                     <span>
                                         {new Date(
-                                            selectedTransfer.created_at,
+                                            shownTransfer.created_at,
                                         ).toLocaleString()}
                                     </span>
                                     <span>
-                                        ({timeAgo(selectedTransfer.created_at)})
+                                        ({timeAgo(shownTransfer.created_at)})
                                     </span>
                                 </>
                             )}
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 min-h-0 space-y-4 overflow-y-auto px-6 py-4">
-                        {selectedTransfer && (
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                        {shownTransfer && (
                             <>
                                 {/* Visual Progress Stepper */}
                                 <div className="rounded-lg border border-sidebar-border/70 bg-neutral-50/70 p-3.5 dark:bg-neutral-900/40">
@@ -1108,17 +1112,17 @@ export default function SendMoney({
                                             Transfer Progress
                                         </span>
                                         <span className="text-[11px] text-neutral-500">
-                                            {selectedTransfer.status_label}
+                                            {shownTransfer.status_label}
                                         </span>
                                     </div>
-                                    <Progress status={selectedTransfer.status} />
+                                    <Progress status={shownTransfer.status} />
                                 </div>
 
                                 {/* Failure or Refund Alert if present */}
-                                {selectedTransfer.failure_reason && (
+                                {shownTransfer.failure_reason && (
                                     <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
                                         <div className="flex items-start gap-2">
-                                            {selectedTransfer.status ===
+                                            {shownTransfer.status ===
                                             'refunded' ? (
                                                 <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                                             ) : (
@@ -1126,13 +1130,13 @@ export default function SendMoney({
                                             )}
                                             <div>
                                                 <span className="font-semibold">
-                                                    {selectedTransfer.status ===
+                                                    {shownTransfer.status ===
                                                     'refunded'
                                                         ? 'Refund Resolution'
                                                         : 'Transfer Issue'}
                                                     :
                                                 </span>{' '}
-                                                {selectedTransfer.failure_reason}
+                                                {shownTransfer.failure_reason}
                                             </div>
                                         </div>
                                     </div>
@@ -1141,87 +1145,76 @@ export default function SendMoney({
                                 {/* Financial & Delivery Details */}
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-sidebar-border/60 p-3 text-xs">
                                     <div>
-                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                        <div className="text-[10px] font-medium tracking-wide text-neutral-400 uppercase">
                                             Sender pays
                                         </div>
                                         <div className="mt-0.5 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
                                             {formatMoney(
-                                                selectedTransfer.sender_pays,
+                                                shownTransfer.sender_pays,
                                             )}
                                         </div>
                                         <span className="text-[11px] text-neutral-500">
                                             via{' '}
-                                            {selectedTransfer.funding.provider ??
+                                            {shownTransfer.funding.provider ??
                                                 'PayPal'}
                                         </span>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                        <div className="text-[10px] font-medium tracking-wide text-neutral-400 uppercase">
                                             Recipient receives
                                         </div>
                                         <div className="mt-0.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                                             {formatMoney(
-                                                selectedTransfer.recipient_gets,
+                                                shownTransfer.recipient_gets,
                                             )}
                                         </div>
                                         <span className="text-[11px] text-neutral-500">
-                                            {selectedTransfer.payout?.provider
-                                                ? `via ${selectedTransfer.payout.provider}`
+                                            {shownTransfer.payout?.provider
+                                                ? `via ${shownTransfer.payout.provider}`
                                                 : 'mobile money'}
                                         </span>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                        <div className="text-[10px] font-medium tracking-wide text-neutral-400 uppercase">
                                             Effective rate
                                         </div>
                                         <div className="mt-0.5 font-mono text-neutral-800 dark:text-neutral-200">
                                             1{' '}
-                                            {
-                                                selectedTransfer.sender_pays
-                                                    .currency
-                                            }{' '}
+                                            {shownTransfer.sender_pays.currency}{' '}
                                             ={' '}
                                             {Number(
-                                                selectedTransfer.fx
-                                                    .effective_rate,
+                                                shownTransfer.fx.effective_rate,
                                             ).toLocaleString('en-US', {
                                                 maximumFractionDigits: 4,
                                             })}{' '}
                                             {
-                                                selectedTransfer.recipient_gets
+                                                shownTransfer.recipient_gets
                                                     .currency
                                             }
                                         </div>
                                         <span className="text-[11px] text-neutral-500">
                                             Margin:{' '}
                                             {Number(
-                                                selectedTransfer.fx
-                                                    .margin_percent,
+                                                shownTransfer.fx.margin_percent,
                                             )}
                                             %
                                         </span>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+                                        <div className="text-[10px] font-medium tracking-wide text-neutral-400 uppercase">
                                             Recipient account
                                         </div>
                                         <div className="mt-0.5 font-medium text-neutral-800 dark:text-neutral-200">
                                             {
-                                                selectedTransfer.recipient
+                                                shownTransfer.recipient
                                                     .account_number
                                             }
                                         </div>
                                         <span className="text-[11px] text-neutral-500">
                                             {getCountryName(
-                                                selectedTransfer.recipient
-                                                    .country,
+                                                shownTransfer.recipient.country,
                                             )}{' '}
-                                            (
-                                            {
-                                                selectedTransfer.recipient
-                                                    .country
-                                            }
-                                            )
+                                            ({shownTransfer.recipient.country})
                                         </span>
                                     </div>
                                 </div>
@@ -1231,7 +1224,7 @@ export default function SendMoney({
                                     <div className="mb-3 flex items-center justify-between">
                                         <span className="text-xs font-semibold tracking-wide text-neutral-700 dark:text-neutral-300">
                                             Timeline Events (
-                                            {selectedTransfer.timeline.length})
+                                            {shownTransfer.timeline.length})
                                         </span>
                                         <span className="text-[11px] text-neutral-400">
                                             Chronological history
@@ -1239,14 +1232,19 @@ export default function SendMoney({
                                     </div>
 
                                     <ol className="relative ml-2.5 space-y-4 border-l-2 border-neutral-200 pl-4 dark:border-neutral-800">
-                                        {selectedTransfer.timeline.map(
+                                        {shownTransfer.timeline.map(
                                             (event, index) => {
                                                 const isRefund =
-                                                    event.status.includes('refund');
+                                                    event.status.includes(
+                                                        'refund',
+                                                    );
                                                 const isFail =
-                                                    event.status.includes('failed');
+                                                    event.status.includes(
+                                                        'failed',
+                                                    );
                                                 const isSuccess =
-                                                    event.status === 'delivered';
+                                                    event.status ===
+                                                    'delivered';
 
                                                 return (
                                                     <li
@@ -1255,7 +1253,7 @@ export default function SendMoney({
                                                     >
                                                         <span
                                                             className={cn(
-                                                                'absolute -left-[23px] top-1 h-3 w-3 rounded-full border-2 border-background',
+                                                                'absolute top-1 -left-[23px] h-3 w-3 rounded-full border-2 border-background',
                                                                 isSuccess
                                                                     ? 'bg-emerald-500'
                                                                     : isRefund
@@ -1309,7 +1307,7 @@ export default function SendMoney({
                         )}
                     </div>
 
-                    <DialogFooter className="shrink-0 border-t border-sidebar-border/70 bg-neutral-50/60 px-6 py-3.5 dark:bg-neutral-900/40 flex flex-row items-center justify-between sm:justify-between">
+                    <DialogFooter className="flex shrink-0 flex-row items-center justify-between border-t border-sidebar-border/70 bg-neutral-50/60 px-6 py-3.5 sm:justify-between dark:bg-neutral-900/40">
                         <Button
                             variant="ghost"
                             size="2"
@@ -1319,23 +1317,20 @@ export default function SendMoney({
                             Close
                         </Button>
                         <div className="flex items-center gap-2">
-                            {selectedTransfer &&
-                                !selectedTransfer.is_final && (
-                                    <Button
-                                        size="2"
-                                        variant="soft"
-                                        color="blue"
-                                        onClick={() => {
-                                            verify(
-                                                selectedTransfer.reference,
-                                            );
-                                        }}
-                                        className="cursor-pointer gap-1.5"
-                                    >
-                                        <RefreshCw className="h-3.5 w-3.5" />
-                                        Check status now
-                                    </Button>
-                                )}
+                            {shownTransfer && !shownTransfer.is_final && (
+                                <Button
+                                    size="2"
+                                    variant="soft"
+                                    color="blue"
+                                    onClick={() => {
+                                        verify(shownTransfer.reference);
+                                    }}
+                                    className="cursor-pointer gap-1.5"
+                                >
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                    Check status now
+                                </Button>
+                            )}
                             <Button
                                 size="2"
                                 variant="soft"
