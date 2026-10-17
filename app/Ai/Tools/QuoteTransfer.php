@@ -5,6 +5,7 @@ namespace App\Ai\Tools;
 use App\Exceptions\CrossBorderException;
 use App\Models\User;
 use App\Support\CrossBorder\CrossBorderTransferService;
+use App\Support\CrossBorder\TransferIntent;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -15,7 +16,7 @@ use Stringable;
  */
 class QuoteTransfer implements Tool
 {
-    public function __construct(private readonly User $user) {}
+    public function __construct(private readonly User $user, private readonly ?TransferIntent $intent = null) {}
 
     public function description(): Stringable|string
     {
@@ -30,6 +31,11 @@ class QuoteTransfer implements Tool
             'country' => 'required|string|size:2',
             'source_currency' => 'nullable|string|size:3',
         ]);
+
+        // Only what the person asked for: never an amount from an earlier transfer.
+        if ($reason = $this->intent?->mismatch($input['amount'], $input['mode'], $input['country'], $input['source_currency'] ?? null)) {
+            return (string) json_encode(['error' => $reason]);
+        }
 
         try {
             $quote = app(CrossBorderTransferService::class)->quote($this->user, $input)->toArray();
