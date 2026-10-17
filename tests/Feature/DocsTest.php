@@ -176,3 +176,7 @@ test('pay links are documented', function () {
     $this->get('/docs/merchants')->assertOk()->assertSee('archived', false)->assertSee('/pay/l/', false);
     $this->get('/docs/api/merchants')->assertOk()->assertSee('/api/v1/merchants/{merchant}/links', false);
 });
+
+test('paypal-verified receipts are documented', function () {
+    $this->get('/docs/providers')->assertOk()->assertSee('PayPal-verified receipts', false)->assertSee('/receipts/paypal/', false);
+});

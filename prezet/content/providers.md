@@ -559,6 +559,25 @@ reports, and the transaction is marked **Actual**. If your PayPal rate differs,
 set a `fee_schedule` on the provider. Use [Quote a Payment](/docs/api/quote-payment)
 to see the fees before charging.
 
+### PayPal-verified receipts
+
+After paying, the payer sees a receipt built from **PayPal's own record** of
+the payment, re-checked with PayPal (at most once a minute):
+
+- PayPal's **transaction ID** (the capture) and order ID, and the time PayPal
+  recorded the payment;
+- the payer as PayPal identified them (name, masked email, verified account);
+- the status (**Completed**, **Partially refunded** or **Refunded**, including
+  refunds made in PayPal) and **seller protection**;
+- for cross-border and merchant payments, what the recipient receives and the
+  delivery status.
+
+PayPal's fee is never shown to the payer. The receipt can be printed or saved
+as a PDF, and has a permanent signed link (`/receipts/paypal/{transaction}`).
+PayPal also emails the payer its official receipt; this page says so and points
+to their PayPal activity, where the same transaction ID appears. Merchant
+customers see the same details on their live receipt page.
+
 ## Adding your own driver
 
 Drivers are plain classes in `app/Http/Controllers/Providers` that implement

@@ -46,7 +46,8 @@ test('without a return url the payer sees the outcome', function () {
     $this->get(paypalReturnUrl($transaction))
         ->assertOk()
         ->assertSee('Payment complete')
-        ->assertSee('25.00 USD');
+        ->assertSee('USD 25.00')
+        ->assertSee('Verified with PayPal');
 });
 
 test('a payer who cancels fails the transaction', function () {

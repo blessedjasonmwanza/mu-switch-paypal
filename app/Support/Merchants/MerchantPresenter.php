@@ -8,6 +8,7 @@ use App\Models\Merchant;
 use App\Support\CrossBorder\CrossBorderQuote;
 use App\Support\Currency;
 use App\Support\Market;
+use App\Support\Paypal\PaypalReceipt;
 
 /**
  * Shapes merchants, their payment quotes and their settlements for the API,
@@ -104,7 +105,7 @@ final class MerchantPresenter
      */
     public static function receipt(CrossBorderTransfer $transfer): array
     {
-        $transfer->loadMissing(['merchant', 'events']);
+        $transfer->loadMissing(['merchant', 'events', 'fundingTransaction.paymentProvider']);
         $paid = in_array($transfer->status, [CrossBorderStatus::FUNDED, CrossBorderStatus::PAYING_OUT, CrossBorderStatus::DELIVERED], true);
 
         return [
@@ -124,6 +125,8 @@ final class MerchantPresenter
             // The merchant's price; its commission to the aggregator is between them.
             'price' => ['amount' => (string) Currency::fromMinorUnits($transfer->target_amount_minor + $transfer->commission_minor, $transfer->target_currency), 'currency' => $transfer->target_currency],
             'created_at' => $transfer->created_at?->toIso8601String(),
+            // PayPal's own record of the payment, once it's captured.
+            'paypal' => $transfer->fundingTransaction ? PaypalReceipt::for($transfer->fundingTransaction) : null,
         ];
     }
 }

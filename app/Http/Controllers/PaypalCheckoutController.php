@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\TransactionStatus;
 use App\Http\Controllers\Providers\PaypalController;
 use App\Models\Transaction;
+use App\Support\Paypal\PaypalReceipt;
 use App\Support\TransactionVerifier;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -76,6 +77,18 @@ class PaypalCheckoutController extends Controller
             ]));
         }
 
-        return view('checkout.result', ['transaction' => $transaction]);
+        // Just verified with PayPal on the way here, so no need to ask again.
+        return view('checkout.result', ['transaction' => $transaction, 'receipt' => PaypalReceipt::for($transaction, refresh: false)]);
+    }
+
+    /**
+     * The payment's PayPal-verified receipt, from a permanent signed link.
+     */
+    public function receipt(Request $request, Transaction $transaction): View
+    {
+        abort_unless($request->hasValidSignature(), 403);
+        abort_unless($transaction->paymentProvider?->class === PaypalController::class, 404);
+
+        return view('checkout.result', ['transaction' => $transaction, 'receipt' => PaypalReceipt::for($transaction)]);
     }
 }
