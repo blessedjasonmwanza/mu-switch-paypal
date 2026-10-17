@@ -63,6 +63,7 @@ class SendMoneyController extends Controller
             'sourceCurrencies' => $this->fundingCurrencies($user, $fx),
             'returned' => $this->returnedTransfer($request, $user),
             'aiReady' => AiProviderChain::for($user)->canRun(),
+            'conversations' => SendMoneyAssistantController::recentConversations($user),
         ]);
     }
 

@@ -227,6 +227,26 @@ function parseAssistantText(text: string): ParsedMessage {
 /**
  * Render formatted markdown lines with bold tags and auto-link URLs opening in a new tab.
  */
+/**
+ * A link's readable text: a PayPal checkout reads as such, a bare URL
+ * shows its host, and a written label is kept.
+ */
+function linkLabel(url: string, label?: string): string {
+    if (url.includes('paypal.com') && url.includes('checkout')) {
+        return 'PayPal checkout';
+    }
+
+    if (label && !/^https?:\/\//.test(label)) {
+        return label;
+    }
+
+    try {
+        return new URL(url).host;
+    } catch {
+        return url;
+    }
+}
+
 function FormattedText({ text }: { text: string }) {
     const lines = text.split('\n');
 
@@ -239,26 +259,35 @@ function FormattedText({ text }: { text: string }) {
 
                 // Strip leading markdown bullets if present for cleaner prose
                 const cleanLine = line.replace(/^\s*[*-]\s+/, '');
-                const regex = /(https?:\/\/[^\s<]+|\*\*[^*]+\*\*)/g;
+                // Markdown links first, so "[text](url)" never shows its brackets.
+                const regex =
+                    /(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/[^\s<)\]]+|\*\*[^*]+\*\*)/g;
                 const parts = cleanLine.split(regex);
-                const isSingleUrlLine =
-                    cleanLine.trim().startsWith('http://') ||
-                    cleanLine.trim().startsWith('https://');
 
                 return (
                     <div key={i} className="leading-relaxed break-words">
                         {parts.map((part, j) => {
                             if (!part) {
-return null;
-}
+                                return null;
+                            }
+
+                            const markdownLink = part.match(
+                                /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/,
+                            );
 
                             if (
+                                markdownLink ||
                                 part.startsWith('http://') ||
                                 part.startsWith('https://')
                             ) {
-                                const cleanUrl = part.replace(/[.,;)]+$/, '');
-                                const trailing = part.slice(cleanUrl.length);
-                                const isPaypal = cleanUrl.includes('paypal.com');
+                                const cleanUrl = markdownLink
+                                    ? markdownLink[2]
+                                    : part.replace(/[.,;)\]]+$/, '');
+                                const trailing = markdownLink
+                                    ? ''
+                                    : part.slice(cleanUrl.length);
+                                const isPaypal =
+                                    cleanUrl.includes('paypal.com');
 
                                 return (
                                     <span key={j} className="inline">
@@ -267,14 +296,19 @@ return null;
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className={cn(
-                                                'inline-flex items-center gap-1 font-medium underline underline-offset-2 break-all transition-colors cursor-pointer',
+                                                'inline-flex cursor-pointer items-center gap-1 font-medium break-all underline underline-offset-2 transition-colors',
                                                 isPaypal
-                                                    ? 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-semibold'
+                                                    ? 'font-semibold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200'
                                                     : 'text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300',
                                             )}
                                             title="Open link in a new tab"
                                         >
-                                            <span>{cleanUrl}</span>
+                                            <span>
+                                                {linkLabel(
+                                                    cleanUrl,
+                                                    markdownLink?.[1],
+                                                )}
+                                            </span>
                                             <ArrowUpRight className="inline h-3.5 w-3.5 shrink-0 stroke-[2.2]" />
                                         </a>
                                         {trailing}
@@ -295,21 +329,6 @@ return null;
 
                             return part;
                         })}
-
-                        {/* If this line is just a PayPal checkout URL, provide a prominent quick button right below it */}
-                        {isSingleUrlLine && cleanLine.includes('paypal.com') && (
-                            <div className="mt-1.5 mb-1">
-                                <a
-                                    href={cleanLine.trim().replace(/[.,;)]+$/, '')}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#0070BA] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#003087] active:scale-98"
-                                >
-                                    <span>Pay with PayPal</span>
-                                    <ArrowUpRight className="h-3.5 w-3.5" />
-                                </a>
-                            </div>
-                        )}
                     </div>
                 );
             })}
@@ -387,8 +406,8 @@ function PaymentActionCard({ started }: { started: StartedTransfer }) {
 
     const copyLink = async () => {
         if (!started.checkout_url) {
-return;
-}
+            return;
+        }
 
         try {
             await navigator.clipboard.writeText(started.checkout_url);
@@ -430,12 +449,11 @@ return;
                         </div>
                         <div className="mt-0.5 text-2xl font-bold tracking-tight text-neutral-900 tabular-nums dark:text-white">
                             {started.recipient_gets.currency}{' '}
-                            {Number(started.recipient_gets.amount).toLocaleString(
-                                'en-US',
-                                {
-                                    minimumFractionDigits: 2,
-                                },
-                            )}
+                            {Number(
+                                started.recipient_gets.amount,
+                            ).toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                            })}
                         </div>
                         <div className="mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400">
                             Delivered to recipient via mobile money
@@ -457,7 +475,10 @@ return;
 
                 <div className="mt-3 flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
                     <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    <span>Protected by PayPal · Auto-refunded if delivery cannot be completed</span>
+                    <span>
+                        Protected by PayPal · Auto-refunded if delivery cannot
+                        be completed
+                    </span>
                 </div>
 
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -492,7 +513,8 @@ return;
                 </div>
 
                 <p className="mt-2 text-center text-[11px] text-neutral-400 dark:text-neutral-500">
-                    Opens in a new tab. Return to this page to check transfer status.
+                    Opens in a new tab. Return to this page to check transfer
+                    status.
                 </p>
             </div>
         </div>
@@ -552,7 +574,7 @@ function TransferQuoteSubCard({ quote }: { quote: ParsedQuote }) {
                 {/* Sender pays & rate breakdown */}
                 <div className="mt-3 grid grid-cols-2 gap-3 border-t border-neutral-100 pt-2.5 text-xs dark:border-neutral-800">
                     <div>
-                        <span className="text-[10px] text-neutral-400 uppercase tracking-wide">
+                        <span className="text-[10px] tracking-wide text-neutral-400 uppercase">
                             Sender pays
                         </span>
                         <div className="font-semibold text-neutral-800 tabular-nums dark:text-neutral-200">
@@ -560,7 +582,7 @@ function TransferQuoteSubCard({ quote }: { quote: ParsedQuote }) {
                         </div>
                     </div>
                     <div>
-                        <span className="text-[10px] text-neutral-400 uppercase tracking-wide">
+                        <span className="text-[10px] tracking-wide text-neutral-400 uppercase">
                             Exchange rate
                         </span>
                         <div className="font-semibold text-neutral-800 tabular-nums dark:text-neutral-200">
@@ -578,23 +600,170 @@ function TransferQuoteSubCard({ quote }: { quote: ParsedQuote }) {
  * starting one shows an approval card, and nothing moves until it's approved
  * here and paid on PayPal.
  */
+/**
+ * An assistant reply, formatted the same way wherever it's shown: text with
+ * emphasis and links, and quotes as a transfer summary card.
+ */
+export function AssistantMessageContent({ text }: { text: string }) {
+    const parsed = parseAssistantText(text);
+
+    if (!parsed.quote) {
+        return <FormattedText text={parsed.plainText} />;
+    }
+
+    return (
+        <div>
+            {parsed.intro && <FormattedText text={parsed.intro} />}
+            <TransferQuoteSubCard quote={parsed.quote} />
+            {parsed.followUp && <FormattedText text={parsed.followUp} />}
+        </div>
+    );
+}
+
+/** Where this browser tab remembers the conversation in progress. */
+const CONVERSATION_KEY = 'moneyunify.send.conversation';
+
+export interface ResumedConversation {
+    id: string;
+    messages: Array<{
+        id: string;
+        role: 'user' | 'assistant';
+        text: string;
+        at: string | null;
+    }>;
+    pending?: Pending[];
+    transfers?: Array<StartedTransfer & { status: string }>;
+}
+
+/**
+ * The transfer still waiting for the sender to pay, so its Pay with PayPal
+ * card comes back with the conversation.
+ */
+function awaitingPayment(
+    transfers: ResumedConversation['transfers'],
+): StartedTransfer | null {
+    return (
+        (transfers ?? []).find(
+            (transfer) =>
+                transfer.status === 'awaiting_payment' && transfer.checkout_url,
+        ) ?? null
+    );
+}
+
+/**
+ * Stored messages as chat messages. Everything is answered except a final
+ * assistant message, so its quick actions (e.g. "Yes, go ahead") come back.
+ */
+function fromStored(messages: ResumedConversation['messages']): Message[] {
+    return messages.map((message, index) => ({
+        id: message.id,
+        role: message.role,
+        text: message.text,
+        answered: !(
+            index === messages.length - 1 && message.role === 'assistant'
+        ),
+        timestamp: message.at
+            ? new Date(message.at).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+              })
+            : undefined,
+    }));
+}
+
 export function SendMoneyAssistant({
     aiReady,
     canSend,
     onlyReload,
+    resume = null,
 }: {
     aiReady: boolean;
     canSend: boolean;
     onlyReload: string[];
+    /** A past conversation to carry on with (remount with a new key to switch). */
+    resume?: ResumedConversation | null;
 }) {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [conversationId, setConversationId] = useState<string | null>(null);
-    const [pending, setPending] = useState<Pending[]>([]);
-    const [started, setStarted] = useState<StartedTransfer | null>(null);
+    const [messages, setMessages] = useState<Message[]>(() =>
+        fromStored(resume?.messages ?? []),
+    );
+    const [conversationId, setConversationId] = useState<string | null>(
+        resume?.id ?? null,
+    );
+    const [pending, setPending] = useState<Pending[]>(resume?.pending ?? []);
+    const [started, setStarted] = useState<StartedTransfer | null>(() =>
+        awaitingPayment(resume?.transfers),
+    );
     const [draft, setDraft] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const endRef = useRef<HTMLDivElement>(null);
+
+    // Remember the conversation in progress, so a reload or switching tabs
+    // carries on with it instead of starting a new one.
+    useEffect(() => {
+        try {
+            if (conversationId) {
+                sessionStorage.setItem(CONVERSATION_KEY, conversationId);
+            }
+        } catch {
+            // Storage may be unavailable; the conversation still works.
+        }
+    }, [conversationId]);
+
+    useEffect(() => {
+        if (resume) {
+            return;
+        }
+
+        let saved: string | null = null;
+
+        try {
+            saved = sessionStorage.getItem(CONVERSATION_KEY);
+        } catch {
+            saved = null;
+        }
+
+        if (!saved) {
+            return;
+        }
+
+        const controller = new AbortController();
+
+        fetch(SendMoneyAssistantController.show.url(saved), {
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((json) => {
+                if (!json?.data) {
+                    sessionStorage.removeItem(CONVERSATION_KEY);
+
+                    return;
+                }
+
+                setConversationId(json.data.conversation_id);
+                setMessages(fromStored(json.data.messages));
+                setPending(json.data.pending ?? []);
+                setStarted(awaitingPayment(json.data.transfers));
+            })
+            .catch(() => undefined);
+
+        return () => controller.abort();
+    }, [resume]);
+
+    const startNewConversation = () => {
+        try {
+            sessionStorage.removeItem(CONVERSATION_KEY);
+        } catch {
+            // Ignore storage errors.
+        }
+
+        setConversationId(null);
+        setMessages([]);
+        setPending([]);
+        setStarted(null);
+        setError(null);
+    };
 
     useEffect(() => {
         endRef.current?.scrollIntoView({
@@ -620,6 +789,11 @@ export function SendMoneyAssistant({
             const json = await response.json();
 
             if (!response.ok) {
+                // Keep the conversation even when a turn fails, so "try again" has context.
+                if (json.data?.conversation_id) {
+                    setConversationId(json.data.conversation_id);
+                }
+
                 setError(json.message ?? 'The assistant could not respond.');
 
                 return;
@@ -628,6 +802,7 @@ export function SendMoneyAssistant({
             const data = json.data;
             setConversationId(data.conversation_id);
             setPending(data.pending ?? []);
+            router.reload({ only: ['conversations'] });
 
             if (data.reply) {
                 setMessages((current) => [
@@ -659,13 +834,15 @@ export function SendMoneyAssistant({
 
         // Mark previously answered messages
         setMessages((current) =>
-            current.map((m) => ({ ...m, answered: true })).concat({
-                id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                role: 'user',
-                answered: false,
-                text,
-                timestamp: nowTime(),
-            }),
+            current
+                .map((m) => ({ ...m, answered: true }))
+                .concat({
+                    id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                    role: 'user',
+                    answered: false,
+                    text,
+                    timestamp: nowTime(),
+                }),
         );
         setDraft('');
         void call(SendMoneyAssistantController.message.url(), {
@@ -717,6 +894,19 @@ export function SendMoneyAssistant({
 
     return (
         <div className="flex flex-col" data-test="send-assistant">
+            {(conversationId || messages.length > 0) && (
+                <div className="mb-2 flex items-center justify-between gap-2 border-b border-sidebar-border/50 pb-2 text-[11px] text-neutral-500 dark:border-sidebar-border/70">
+                    <span>Follow-ups stay in this conversation.</span>
+                    <button
+                        type="button"
+                        onClick={startNewConversation}
+                        disabled={busy}
+                        className="cursor-pointer rounded-full border border-sidebar-border/70 px-2.5 py-0.5 font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-50 dark:border-sidebar-border dark:text-neutral-300 dark:hover:bg-neutral-900"
+                    >
+                        New conversation
+                    </button>
+                </div>
+            )}
             <div className="max-h-[28rem] min-h-[16rem] space-y-3.5 overflow-y-auto pr-1">
                 {messages.length === 0 && (
                     <div className="space-y-2.5 pt-1">
@@ -747,7 +937,7 @@ export function SendMoneyAssistant({
                         return (
                             <div key={message.id} className="flex justify-end">
                                 <div className="max-w-[85%] rounded-2xl rounded-tr-xs bg-neutral-900 px-3.5 py-2 text-sm text-white shadow-xs dark:bg-neutral-100 dark:text-neutral-900">
-                                    <p className="whitespace-pre-line leading-relaxed">
+                                    <p className="leading-relaxed whitespace-pre-line">
                                         {message.text}
                                     </p>
                                     {message.timestamp && (
@@ -760,8 +950,6 @@ export function SendMoneyAssistant({
                         );
                     }
 
-                    const parsed = parseAssistantText(message.text);
-
                     return (
                         <div
                             key={message.id}
@@ -771,31 +959,14 @@ export function SendMoneyAssistant({
                                 <Sparkles className="h-3.5 w-3.5" />
                             </span>
                             <div className="max-w-[88%] rounded-2xl rounded-tl-xs border border-neutral-200/60 bg-neutral-100/90 px-3.5 py-2.5 text-sm text-neutral-800 shadow-2xs dark:border-neutral-800/80 dark:bg-neutral-800/80 dark:text-neutral-100">
-                                {parsed.quote ? (
-                                    <div>
-                                        {parsed.intro && (
-                                            <FormattedText
-                                                text={parsed.intro}
-                                            />
-                                        )}
-                                        <TransferQuoteSubCard
-                                            quote={parsed.quote}
-                                        />
-                                        {parsed.followUp && (
-                                            <FormattedText
-                                                text={parsed.followUp}
-                                            />
-                                        )}
-                                    </div>
-                                ) : (
-                                    <FormattedText text={parsed.plainText} />
-                                )}
+                                <AssistantMessageContent text={message.text} />
 
                                 {/* Minimal quick action pill buttons for confirmations */}
                                 {isLatest &&
                                     !busy &&
                                     !message.answered &&
-                                    parsed.isConfirmation && (
+                                    parseAssistantText(message.text)
+                                        .isConfirmation && (
                                         <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-neutral-200/60 pt-2 dark:border-neutral-700/60">
                                             <button
                                                 type="button"

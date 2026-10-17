@@ -2,6 +2,7 @@
 
 namespace App\Support\CrossBorder;
 
+use App\Enums\CrossBorderStatus;
 use App\Models\CrossBorderTransfer;
 use App\Models\CrossBorderTransferEvent;
 use App\Support\Currency;
@@ -11,6 +12,21 @@ use App\Support\Currency;
  */
 final class CrossBorderTransferPresenter
 {
+    /**
+     * Where the sender pays, while the transfer is still waiting for payment.
+     */
+    public static function checkoutUrl(CrossBorderTransfer $transfer): ?string
+    {
+        if ($transfer->status !== CrossBorderStatus::AWAITING_PAYMENT) {
+            return null;
+        }
+
+        $links = (array) data_get($transfer->fundingTransaction?->provider_response, 'order.links', []);
+        $payerAction = collect($links)->first(fn ($link): bool => is_array($link) && in_array($link['rel'] ?? null, ['payer-action', 'approve'], true));
+
+        return is_string($payerAction['href'] ?? null) ? $payerAction['href'] : null;
+    }
+
     /**
      * @return array<string, mixed>
      */

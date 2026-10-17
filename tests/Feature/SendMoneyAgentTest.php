@@ -9,6 +9,7 @@ use App\Http\Controllers\Providers\SandboxPayoutController;
 use App\Models\CrossBorderTransfer;
 use App\Models\PaymentProvider;
 use App\Models\User;
+use App\Support\CrossBorder\TransferIntent;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -66,7 +67,7 @@ test('the agent has the transfer tools, and starting a transfer always needs app
         'amount' => 2500, 'mode' => 'target', 'country' => 'ZM', 'account_number' => '0977123456',
     ]));
 
-    expect($approval?->reason)->toBe('Send money to 0977123456 in Zambia: the recipient gets 2500 ZMW.');
+    expect($approval?->reason)->toBe('Send ZMW 2500.00 to 0977123456 in Zambia. The sender pays USD 92.30 with PayPal.');
 });
 
 test('the corridor and quote tools describe what can be sent without creating anything', function () {
@@ -168,4 +169,103 @@ test('the assistant needs an ai provider', function () {
         ->assertJsonPath('message', 'Add an AI provider on the AI & Agents page to use the assistant.');
 
     SendMoneyAgent::assertNeverPrompted();
+});
+
+// Grounding and guardrails
+
+test('the agent can only send money: no refund or other money-moving tools', function () {
+    $names = collect((new SendMoneyAgent($this->user))->tools())->map(fn ($tool) => class_basename($tool))->all();
+
+    expect($names)->toBe(SendMoneyAgent::TOOLS)
+        ->and(collect($names)->filter(fn ($name) => preg_match('/refund|reverse|cancel|payout/i', $name)))->toBeEmpty();
+});
+
+test('quotes and transfers must match the amount and number the person gave', function () {
+    $intent = TransferIntent::fromMessages(['sent 3 kwacha to 0971943638', 'try again']);
+
+    $wrong = json_decode((string) (new QuoteTransfer($this->user, $intent))->handle(new ToolRequest(['amount' => 20, 'mode' => 'source', 'country' => 'ZM', 'source_currency' => 'USD'])), true);
+    expect($wrong['error'])->toBe('The user asked for 3 ZMW, not 20. Quote exactly what they asked for.');
+
+    $right = json_decode((string) (new QuoteTransfer($this->user, $intent))->handle(new ToolRequest(['amount' => 3, 'mode' => 'target', 'country' => 'ZM'])), true);
+    expect($right['recipient_gets'])->toBe(['amount' => '3.00', 'currency' => 'ZMW']);
+
+    $start = new StartTransfer($this->user, null, $intent);
+    $mismatched = ['amount' => 20, 'mode' => 'source', 'country' => 'ZM', 'source_currency' => 'USD', 'account_number' => '260971943638'];
+
+    expect($start->shouldRequestApproval(new ToolRequest($mismatched)))->toBeNull()
+        ->and(json_decode((string) $start->handle(new ToolRequest($mismatched)), true)['error'])->toContain('asked for 3 ZMW')
+        ->and(CrossBorderTransfer::count())->toBe(0);
+
+    $approval = $start->shouldRequestApproval(new ToolRequest(['amount' => 3, 'mode' => 'target', 'country' => 'ZM', 'account_number' => '0971943638']));
+    expect($approval->reason)->toBe('Send ZMW 3.00 to 0971943638 in Zambia. The sender pays USD 0.12 with PayPal.');
+});
+
+test('a message whose turn failed is carried into the next turn', function () {
+    $calls = 0;
+    SendMoneyAgent::fake(function () use (&$calls) {
+        return ++$calls === 1 ? throw new RuntimeException('Provider overloaded') : 'Got it.';
+    });
+    $this->actingAs($this->user);
+
+    $this->postJson(route('send.assistant.message'), ['message' => 'sent 3 kwacha to 0971943638'])
+        ->assertStatus(502)
+        ->assertJsonStructure(['data' => ['conversation_id']]);
+    $this->postJson(route('send.assistant.message'), ['message' => 'try again'])->assertOk();
+
+    SendMoneyAgent::assertPrompted(fn ($prompt) => str_contains($prompt->prompt, 'sent 3 kwacha to 0971943638') && str_contains($prompt->prompt, 'try again'));
+
+    // Once answered, it's not repeated.
+    $this->postJson(route('send.assistant.message'), ['message' => 'thanks'])->assertOk();
+    SendMoneyAgent::assertPrompted(fn ($prompt) => $prompt->prompt === 'thanks');
+});
+
+test('recent conversations show who sent what, and only to their owner', function () {
+    $conversation = agentConversation($this->user);
+    DB::table('agent_conversation_messages')->insert([
+        ['id' => (string) Str::uuid(), 'conversation_id' => $conversation, 'participant_type' => $this->user->getMorphClass(), 'participant_id' => $this->user->id, 'agent' => SendMoneyAgent::class, 'role' => 'user', 'content' => 'Send K2,500 to 0977123456', 'attachments' => '[]', 'steps' => '[]', 'usage' => '{}', 'meta' => '{}', 'status' => 'completed', 'created_at' => now()->subMinute(), 'updated_at' => now()->subMinute()],
+        ['id' => (string) Str::uuid(), 'conversation_id' => $conversation, 'participant_type' => $this->user->getMorphClass(), 'participant_id' => $this->user->id, 'agent' => SendMoneyAgent::class, 'role' => 'assistant', 'content' => 'That is USD 92.30.', 'attachments' => '[]', 'steps' => '[]', 'usage' => '{}', 'meta' => '{}', 'status' => 'completed', 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    $this->actingAs($this->user)->get(route('send.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('conversations.0.id', $conversation)
+            ->where('conversations.0.title', 'Send money')
+            ->where('conversations.0.first_message', 'Send K2,500 to 0977123456')
+            ->where('conversations.0.by.email', $this->user->email)
+            ->where('conversations.0.messages', 2));
+
+    $this->getJson(route('send.assistant.conversation', $conversation))
+        ->assertOk()
+        ->assertJsonPath('data.messages.0.text', 'Send K2,500 to 0977123456')
+        ->assertJsonPath('data.messages.1.role', 'assistant')
+        ->assertJsonPath('data.pending', []);
+
+    $this->actingAs(User::factory()->create())->getJson(route('send.assistant.conversation', $conversation))->assertNotFound();
+});
+
+test('a transfer started after approval comes back with its pay link, also when the conversation is reopened', function () {
+    $conversation = agentConversation($this->user);
+
+    // The approved tool runs inside the resumed turn, so the reply carries no tool result.
+    SendMoneyAgent::fake(function () {
+        (new StartTransfer($this->user))->handle(new ToolRequest([
+            'amount' => 3, 'mode' => 'target', 'country' => 'ZM', 'account_number' => '0971943638',
+        ]));
+
+        return 'Great! To finish, please pay at this PayPal link.';
+    });
+
+    $response = $this->actingAs($this->user)
+        ->postJson(route('send.assistant.decide'), ['conversation_id' => $conversation, 'decisions' => ['call-1' => 'approve']])
+        ->assertOk();
+
+    $transfer = CrossBorderTransfer::sole();
+
+    expect($response->json('data.transfer.reference'))->toBe($transfer->reference)
+        ->and($response->json('data.transfer.checkout_url'))->toStartWith('https://www.sandbox.paypal.com/checkoutnow?token=ORDER-')
+        ->and($transfer->refresh()->conversation_id)->toBe($conversation);
+
+    $this->getJson(route('send.assistant.conversation', $conversation))
+        ->assertJsonPath('data.transfers.0.reference', $transfer->reference)
+        ->assertJsonPath('data.transfers.0.checkout_url', $response->json('data.transfer.checkout_url'));
 });

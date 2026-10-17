@@ -171,12 +171,24 @@ What it can do:
 | `QuoteTransfer` | Quotes a transfer (rate, what each side pays and gets, route) without creating anything | No |
 | `StartTransfer` | Starts the transfer and creates the sender's PayPal checkout | **Always** |
 | `GetTransferStatus` | Checks one of your transfers | No |
-| PayPal MCP tools | PayPal's own tools, when PayPal MCP is on | **Always** |
+| PayPal MCP tools | PayPal's own **look-up** tools only (names starting `get_`, `list_`, `show_`, `search_`, `retrieve_` or `track_`), when PayPal MCP is on | **Always** |
 
 The safeguards are in code, not in the prompt:
 
+- **Only what you asked for.** The assistant can only quote or start a
+  transfer for the amount and the mobile number you gave in the conversation.
+  It can't reuse them from an earlier transfer: if you say "try again" without
+  them, it asks. "K2,500" or "2,500 kwacha" means what the recipient receives;
+  "$20" means what the sender pays.
+- **Send only.** It can quote, start and check transfers, nothing else. It
+  can't refund, cancel or reverse a payment; refunds are done from the
+  **Payments** page, and a failed delivery is refunded automatically.
+- **Nothing lost.** If a message can't be answered (for example the AI provider
+  is busy), it's carried into your next message.
+
 - **Nothing moves without you.** Starting a transfer always shows an approval
-  card with the recipient and amount. Rejecting it stops it. The sender then
+  card with the recipient, what they receive and what the sender pays, so a
+  wrong amount is obvious before you approve. Rejecting it stops it. The sender then
   pays on PayPal, which is a second approval.
 - **Spending limits** apply to every transfer, as for the API. See
   [Cross-Border Transfers](/docs/api/cross-border-transfers).
@@ -185,6 +197,13 @@ The safeguards are in code, not in the prompt:
 - **Audit.** A transfer the assistant starts is marked as coming from the
   assistant and linked to its conversation, which is stored in the
   conversation tables.
+
+### Recent conversations
+
+Under the **New transfer** card, **Recent conversations** lists the latest
+assistant conversations: who had them, when, how many messages, and the
+transfers each one started with their status. Open one to read it, then
+**Continue this conversation** to pick it up in the assistant.
 
 ## Production checklist
 

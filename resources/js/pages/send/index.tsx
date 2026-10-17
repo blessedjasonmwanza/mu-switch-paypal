@@ -18,7 +18,10 @@ import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import SendMoneyController from '@/actions/App/Http/Controllers/SendMoneyController';
 import InputError from '@/components/input-error';
+import { RecentConversations } from '@/components/recent-conversations';
+import type { ConversationSummary } from '@/components/recent-conversations';
 import { SendMoneyAssistant } from '@/components/send-money-assistant';
+import type { ResumedConversation } from '@/components/send-money-assistant';
 import { TableFooter } from '@/components/table-footer';
 import type { PageMeta } from '@/components/table-footer';
 import { TableSearch } from '@/components/table-search';
@@ -105,9 +108,10 @@ interface Props {
     sourceCurrencies: string[];
     returned: string | null;
     aiReady: boolean;
+    conversations: ConversationSummary[];
 }
 
-const ONLY = ['transfers', 'filters', 'returned'];
+const ONLY = ['transfers', 'filters', 'returned', 'conversations'];
 
 const selectClassName =
     'flex h-9 w-full rounded-full border border-input bg-transparent px-3.5 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
@@ -241,8 +245,10 @@ export default function SendMoney({
     sourceCurrencies,
     returned,
     aiReady,
+    conversations,
 }: Props) {
     const [tab, setTab] = useState<'assistant' | 'form'>('assistant');
+    const [resume, setResume] = useState<ResumedConversation | null>(null);
     const ready = countries.length > 0 && sourceCurrencies.length > 0;
     const form = useForm({
         country: countries[0]?.code ?? '',
@@ -444,417 +450,458 @@ export default function SendMoney({
                 )}
 
                 <div className="grid items-start gap-6 xl:grid-cols-12">
-                    <Card className="gap-0 border border-sidebar-border/70 p-5 xl:sticky xl:top-6 xl:col-span-5 dark:border-sidebar-border">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <h2 className="text-sm font-semibold">
-                                    New transfer
-                                </h2>
-                                <p className="mt-0.5 text-xs text-neutral-500">
-                                    {tab === 'assistant'
-                                        ? 'Describe the transfer; you approve before anything starts.'
-                                        : 'Quotes are free and lock the rate for a few minutes.'}
-                                </p>
+                    <div className="space-y-6 xl:col-span-5">
+                        <Card className="gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <h2 className="text-sm font-semibold">
+                                        New transfer
+                                    </h2>
+                                    <p className="mt-0.5 text-xs text-neutral-500">
+                                        {tab === 'assistant'
+                                            ? 'Describe the transfer; you approve before anything starts.'
+                                            : 'Quotes are free and lock the rate for a few minutes.'}
+                                    </p>
+                                </div>
+                                <div
+                                    className="inline-flex shrink-0 rounded-full bg-neutral-100 p-0.5 text-[11px] dark:bg-neutral-800"
+                                    role="tablist"
+                                    aria-label="How to send"
+                                >
+                                    {(
+                                        [
+                                            ['assistant', 'Assistant'],
+                                            ['form', 'Form'],
+                                        ] as const
+                                    ).map(([value, label]) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={tab === value}
+                                            onClick={() => setTab(value)}
+                                            className={cn(
+                                                'inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-0.5 font-medium transition-colors',
+                                                tab === value
+                                                    ? 'bg-white text-neutral-900 shadow-xs dark:bg-neutral-950 dark:text-neutral-100'
+                                                    : 'text-neutral-500',
+                                            )}
+                                        >
+                                            {value === 'assistant' && (
+                                                <Sparkles className="h-3 w-3" />
+                                            )}
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div
-                                className="inline-flex shrink-0 rounded-full bg-neutral-100 p-0.5 text-[11px] dark:bg-neutral-800"
-                                role="tablist"
-                                aria-label="How to send"
-                            >
-                                {(
-                                    [
-                                        ['assistant', 'Assistant'],
-                                        ['form', 'Form'],
-                                    ] as const
-                                ).map(([value, label]) => (
-                                    <button
-                                        key={value}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={tab === value}
-                                        onClick={() => setTab(value)}
-                                        className={cn(
-                                            'inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-0.5 font-medium transition-colors',
-                                            tab === value
-                                                ? 'bg-white text-neutral-900 shadow-xs dark:bg-neutral-950 dark:text-neutral-100'
-                                                : 'text-neutral-500',
-                                        )}
-                                    >
-                                        {value === 'assistant' && (
-                                            <Sparkles className="h-3 w-3" />
-                                        )}
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
 
-                        {tab === 'assistant' ? (
-                            <div className="mt-4">
+                            {/* Kept mounted, so switching tabs never loses the conversation. */}
+                            <div
+                                className={cn(
+                                    'mt-4',
+                                    tab !== 'assistant' && 'hidden',
+                                )}
+                            >
                                 <SendMoneyAssistant
+                                    key={resume?.id ?? 'new'}
+                                    resume={resume}
                                     aiReady={aiReady}
                                     canSend={ready}
                                     onlyReload={ONLY}
                                 />
                             </div>
-                        ) : (
-                            <form onSubmit={submit} className="mt-4 space-y-4">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1">
-                                        <Label htmlFor="send-country">
-                                            Send to
-                                        </Label>
-                                        <select
-                                            id="send-country"
-                                            value={country}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'country',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            className={selectClassName}
-                                            disabled={!ready}
-                                        >
-                                            {countries.map((option) => (
-                                                <option
-                                                    key={option.code}
-                                                    value={option.code}
-                                                >
-                                                    {countryFlag(option.code)}{' '}
-                                                    {option.name} (
-                                                    {option.currency})
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <InputError
-                                            message={form.errors.country}
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label htmlFor="send-source">
-                                            Sender pays in
-                                        </Label>
-                                        <select
-                                            id="send-source"
-                                            value={source}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'source_currency',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            className={selectClassName}
-                                            disabled={!ready}
-                                        >
-                                            {sourceCurrencies.map(
-                                                (currency) => (
+                            {tab === 'form' && (
+                                <form
+                                    onSubmit={submit}
+                                    className="mt-4 space-y-4"
+                                >
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <Label htmlFor="send-country">
+                                                Send to
+                                            </Label>
+                                            <select
+                                                id="send-country"
+                                                value={country}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'country',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className={selectClassName}
+                                                disabled={!ready}
+                                            >
+                                                {countries.map((option) => (
                                                     <option
-                                                        key={currency}
-                                                        value={currency}
+                                                        key={option.code}
+                                                        value={option.code}
                                                     >
-                                                        {currency} via PayPal
+                                                        {countryFlag(
+                                                            option.code,
+                                                        )}{' '}
+                                                        {option.name} (
+                                                        {option.currency})
                                                     </option>
-                                                ),
-                                            )}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-1">
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="send-amount">
-                                            Amount
-                                        </Label>
-                                        <div
-                                            className="inline-flex rounded-full bg-neutral-100 p-0.5 text-[11px] dark:bg-neutral-800"
-                                            role="radiogroup"
-                                            aria-label="What the amount means"
-                                        >
-                                            {(
-                                                [
-                                                    [
-                                                        'target',
-                                                        'Recipient gets',
-                                                    ],
-                                                    ['source', 'Sender pays'],
-                                                ] as const
-                                            ).map(([value, label]) => (
-                                                <button
-                                                    key={value}
-                                                    type="button"
-                                                    role="radio"
-                                                    aria-checked={
-                                                        mode === value
-                                                    }
-                                                    onClick={() =>
-                                                        form.setData(
-                                                            'mode',
-                                                            value,
-                                                        )
-                                                    }
-                                                    className={cn(
-                                                        'cursor-pointer rounded-full px-2.5 py-0.5 font-medium transition-colors',
-                                                        mode === value
-                                                            ? 'bg-white text-neutral-900 shadow-xs dark:bg-neutral-950 dark:text-neutral-100'
-                                                            : 'text-neutral-500',
-                                                    )}
-                                                >
-                                                    {label}
-                                                </button>
-                                            ))}
+                                                ))}
+                                            </select>
+                                            <InputError
+                                                message={form.errors.country}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label htmlFor="send-source">
+                                                Sender pays in
+                                            </Label>
+                                            <select
+                                                id="send-source"
+                                                value={source}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'source_currency',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className={selectClassName}
+                                                disabled={!ready}
+                                            >
+                                                {sourceCurrencies.map(
+                                                    (currency) => (
+                                                        <option
+                                                            key={currency}
+                                                            value={currency}
+                                                        >
+                                                            {currency} via
+                                                            PayPal
+                                                        </option>
+                                                    ),
+                                                )}
+                                            </select>
                                         </div>
                                     </div>
-                                    <div className="relative">
-                                        <Input
-                                            id="send-amount"
-                                            type="number"
-                                            inputMode="decimal"
-                                            min="0"
-                                            step="any"
-                                            value={amount}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'amount',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            placeholder="0.00"
-                                            className="pr-14"
-                                            disabled={!ready}
-                                        />
-                                        <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-xs font-medium text-neutral-500">
-                                            {mode === 'target'
-                                                ? target
-                                                : source}
-                                        </span>
-                                    </div>
-                                    <InputError message={form.errors.amount} />
-                                </div>
 
-                                <div
-                                    className="rounded-lg border border-sidebar-border/70 bg-neutral-50/60 p-3.5 dark:border-sidebar-border dark:bg-neutral-900/40"
-                                    aria-live="polite"
-                                    data-test="send-quote"
-                                >
-                                    {shownQuote ? (
-                                        <>
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div>
-                                                    <div className="text-[11px] tracking-wide text-neutral-500 uppercase">
-                                                        Sender pays
-                                                    </div>
-                                                    <div className="text-lg font-semibold tabular-nums">
-                                                        {formatMoney(
-                                                            shownQuote.sender_pays,
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="send-amount">
+                                                Amount
+                                            </Label>
+                                            <div
+                                                className="inline-flex rounded-full bg-neutral-100 p-0.5 text-[11px] dark:bg-neutral-800"
+                                                role="radiogroup"
+                                                aria-label="What the amount means"
+                                            >
+                                                {(
+                                                    [
+                                                        [
+                                                            'target',
+                                                            'Recipient gets',
+                                                        ],
+                                                        [
+                                                            'source',
+                                                            'Sender pays',
+                                                        ],
+                                                    ] as const
+                                                ).map(([value, label]) => (
+                                                    <button
+                                                        key={value}
+                                                        type="button"
+                                                        role="radio"
+                                                        aria-checked={
+                                                            mode === value
+                                                        }
+                                                        onClick={() =>
+                                                            form.setData(
+                                                                'mode',
+                                                                value,
+                                                            )
+                                                        }
+                                                        className={cn(
+                                                            'cursor-pointer rounded-full px-2.5 py-0.5 font-medium transition-colors',
+                                                            mode === value
+                                                                ? 'bg-white text-neutral-900 shadow-xs dark:bg-neutral-950 dark:text-neutral-100'
+                                                                : 'text-neutral-500',
                                                         )}
-                                                    </div>
-                                                </div>
-                                                <ArrowDown className="h-4 w-4 -rotate-90 text-neutral-400" />
-                                                <div className="text-right">
-                                                    <div className="text-[11px] tracking-wide text-neutral-500 uppercase">
-                                                        Recipient gets
-                                                    </div>
-                                                    <div className="text-lg font-semibold text-emerald-700 tabular-nums dark:text-emerald-400">
-                                                        {formatMoney(
-                                                            shownQuote.recipient_gets,
-                                                        )}
-                                                    </div>
-                                                </div>
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
                                             </div>
-                                            <dl className="mt-3 space-y-1.5 border-t border-sidebar-border/60 pt-3">
-                                                <QuoteRow label="Rate">
-                                                    1{' '}
-                                                    {
-                                                        shownQuote.sender_pays
-                                                            .currency
-                                                    }{' '}
-                                                    ={' '}
-                                                    {Number(
-                                                        shownQuote.fx
-                                                            .effective_rate,
-                                                    ).toLocaleString('en-US', {
-                                                        maximumFractionDigits: 4,
-                                                    })}{' '}
-                                                    {
-                                                        shownQuote
-                                                            .recipient_gets
-                                                            .currency
-                                                    }
-                                                </QuoteRow>
-                                                <QuoteRow
-                                                    label={`FX margin (${Number(shownQuote.fx.margin_percent)}%)`}
-                                                >
-                                                    {formatMoney({
-                                                        amount: shownQuote.fx
-                                                            .margin_amount,
-                                                        currency:
+                                        </div>
+                                        <div className="relative">
+                                            <Input
+                                                id="send-amount"
+                                                type="number"
+                                                inputMode="decimal"
+                                                min="0"
+                                                step="any"
+                                                value={amount}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'amount',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="0.00"
+                                                className="pr-14"
+                                                disabled={!ready}
+                                            />
+                                            <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-xs font-medium text-neutral-500">
+                                                {mode === 'target'
+                                                    ? target
+                                                    : source}
+                                            </span>
+                                        </div>
+                                        <InputError
+                                            message={form.errors.amount}
+                                        />
+                                    </div>
+
+                                    <div
+                                        className="rounded-lg border border-sidebar-border/70 bg-neutral-50/60 p-3.5 dark:border-sidebar-border dark:bg-neutral-900/40"
+                                        aria-live="polite"
+                                        data-test="send-quote"
+                                    >
+                                        {shownQuote ? (
+                                            <>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-[11px] tracking-wide text-neutral-500 uppercase">
+                                                            Sender pays
+                                                        </div>
+                                                        <div className="text-lg font-semibold tabular-nums">
+                                                            {formatMoney(
+                                                                shownQuote.sender_pays,
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <ArrowDown className="h-4 w-4 -rotate-90 text-neutral-400" />
+                                                    <div className="text-right">
+                                                        <div className="text-[11px] tracking-wide text-neutral-500 uppercase">
+                                                            Recipient gets
+                                                        </div>
+                                                        <div className="text-lg font-semibold text-emerald-700 tabular-nums dark:text-emerald-400">
+                                                            {formatMoney(
+                                                                shownQuote.recipient_gets,
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <dl className="mt-3 space-y-1.5 border-t border-sidebar-border/60 pt-3">
+                                                    <QuoteRow label="Rate">
+                                                        1{' '}
+                                                        {
                                                             shownQuote
                                                                 .sender_pays
-                                                                .currency,
-                                                    })}
-                                                </QuoteRow>
-                                                <QuoteRow label="Delivered via">
-                                                    {shownQuote.payout_route.join(
-                                                        ' → ',
+                                                                .currency
+                                                        }{' '}
+                                                        ={' '}
+                                                        {Number(
+                                                            shownQuote.fx
+                                                                .effective_rate,
+                                                        ).toLocaleString(
+                                                            'en-US',
+                                                            {
+                                                                maximumFractionDigits: 4,
+                                                            },
+                                                        )}{' '}
+                                                        {
+                                                            shownQuote
+                                                                .recipient_gets
+                                                                .currency
+                                                        }
+                                                    </QuoteRow>
+                                                    <QuoteRow
+                                                        label={`FX margin (${Number(shownQuote.fx.margin_percent)}%)`}
+                                                    >
+                                                        {formatMoney({
+                                                            amount: shownQuote
+                                                                .fx
+                                                                .margin_amount,
+                                                            currency:
+                                                                shownQuote
+                                                                    .sender_pays
+                                                                    .currency,
+                                                        })}
+                                                    </QuoteRow>
+                                                    <QuoteRow label="Delivered via">
+                                                        {shownQuote.payout_route.join(
+                                                            ' → ',
+                                                        )}
+                                                    </QuoteRow>
+                                                    <QuoteRow label="Your provider fees (est.)">
+                                                        {[
+                                                            shownQuote
+                                                                .operator_fees
+                                                                .paypal,
+                                                            shownQuote
+                                                                .operator_fees
+                                                                .payout,
+                                                        ]
+                                                            .filter(
+                                                                (
+                                                                    fee,
+                                                                ): fee is Money =>
+                                                                    fee !==
+                                                                    null,
+                                                            )
+                                                            .map(formatMoney)
+                                                            .join(' + ') || '—'}
+                                                    </QuoteRow>
+                                                </dl>
+                                                <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-neutral-500">
+                                                    <Lock className="h-3 w-3" />
+                                                    {secondsLeft > 0
+                                                        ? `Rate locked for ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
+                                                        : 'Rate expired: change the amount to re-quote'}
+                                                    {isQuoting && (
+                                                        <Loader2 className="ml-auto h-3 w-3 animate-spin" />
                                                     )}
-                                                </QuoteRow>
-                                                <QuoteRow label="Your provider fees (est.)">
-                                                    {[
-                                                        shownQuote.operator_fees
-                                                            .paypal,
-                                                        shownQuote.operator_fees
-                                                            .payout,
-                                                    ]
-                                                        .filter(
-                                                            (
-                                                                fee,
-                                                            ): fee is Money =>
-                                                                fee !== null,
-                                                        )
-                                                        .map(formatMoney)
-                                                        .join(' + ') || '—'}
-                                                </QuoteRow>
-                                            </dl>
-                                            <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-neutral-500">
-                                                <Lock className="h-3 w-3" />
-                                                {secondsLeft > 0
-                                                    ? `Rate locked for ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
-                                                    : 'Rate expired: change the amount to re-quote'}
-                                                {isQuoting && (
-                                                    <Loader2 className="ml-auto h-3 w-3 animate-spin" />
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p className="flex items-center gap-2 text-xs text-neutral-500">
+                                                {isQuoting ? (
+                                                    <>
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        Quoting…
+                                                    </>
+                                                ) : shownError ? (
+                                                    <span className="text-red-600 dark:text-red-400">
+                                                        {shownError}
+                                                    </span>
+                                                ) : (
+                                                    'Enter an amount to see the rate, what the sender pays and what arrives.'
                                                 )}
                                             </p>
-                                        </>
-                                    ) : (
-                                        <p className="flex items-center gap-2 text-xs text-neutral-500">
-                                            {isQuoting ? (
-                                                <>
-                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                    Quoting…
-                                                </>
-                                            ) : shownError ? (
-                                                <span className="text-red-600 dark:text-red-400">
-                                                    {shownError}
-                                                </span>
-                                            ) : (
-                                                'Enter an amount to see the rate, what the sender pays and what arrives.'
-                                            )}
-                                        </p>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="col-span-2 space-y-1 sm:col-span-1">
-                                        <Label htmlFor="send-number">
-                                            Recipient&apos;s mobile number
-                                        </Label>
-                                        <Input
-                                            id="send-number"
-                                            value={form.data.account_number}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'account_number',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            placeholder="0977 123 456"
-                                            autoComplete="off"
-                                            disabled={!ready}
-                                        />
-                                        <InputError
-                                            message={form.errors.account_number}
-                                        />
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="col-span-2 space-y-1 sm:col-span-1">
+                                            <Label htmlFor="send-number">
+                                                Recipient&apos;s mobile number
+                                            </Label>
+                                            <Input
+                                                id="send-number"
+                                                value={form.data.account_number}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'account_number',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="0977 123 456"
+                                                autoComplete="off"
+                                                disabled={!ready}
+                                            />
+                                            <InputError
+                                                message={
+                                                    form.errors.account_number
+                                                }
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-1 sm:col-span-1">
+                                            <Label htmlFor="send-name">
+                                                Recipient&apos;s name (optional)
+                                            </Label>
+                                            <Input
+                                                id="send-name"
+                                                value={form.data.recipient_name}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'recipient_name',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                disabled={!ready}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-1 sm:col-span-1">
+                                            <Label htmlFor="send-network">
+                                                Network (optional)
+                                            </Label>
+                                            <Input
+                                                id="send-network"
+                                                value={form.data.network}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'network',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="Detected from the number"
+                                                disabled={!ready}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-1 sm:col-span-1">
+                                            <Label htmlFor="send-payer">
+                                                Sender&apos;s PayPal email
+                                                (optional)
+                                            </Label>
+                                            <Input
+                                                id="send-payer"
+                                                type="email"
+                                                value={form.data.payer_email}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'payer_email',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                disabled={!ready}
+                                            />
+                                            <InputError
+                                                message={
+                                                    form.errors.payer_email
+                                                }
+                                            />
+                                        </div>
                                     </div>
-                                    <div className="col-span-2 space-y-1 sm:col-span-1">
-                                        <Label htmlFor="send-name">
-                                            Recipient&apos;s name (optional)
-                                        </Label>
-                                        <Input
-                                            id="send-name"
-                                            value={form.data.recipient_name}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'recipient_name',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            disabled={!ready}
-                                        />
-                                    </div>
-                                    <div className="col-span-2 space-y-1 sm:col-span-1">
-                                        <Label htmlFor="send-network">
-                                            Network (optional)
-                                        </Label>
-                                        <Input
-                                            id="send-network"
-                                            value={form.data.network}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'network',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            placeholder="Detected from the number"
-                                            disabled={!ready}
-                                        />
-                                    </div>
-                                    <div className="col-span-2 space-y-1 sm:col-span-1">
-                                        <Label htmlFor="send-payer">
-                                            Sender&apos;s PayPal email
-                                            (optional)
-                                        </Label>
-                                        <Input
-                                            id="send-payer"
-                                            type="email"
-                                            value={form.data.payer_email}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'payer_email',
-                                                    e.target.value,
-                                                )
-                                            }
-                                            disabled={!ready}
-                                        />
-                                        <InputError
-                                            message={form.errors.payer_email}
-                                        />
-                                    </div>
-                                </div>
 
-                                <Button
-                                    type="submit"
-                                    size="3"
-                                    style={{ width: '100%' }}
-                                    className="cursor-pointer gap-2"
-                                    disabled={
-                                        !ready ||
-                                        !shownQuote ||
-                                        secondsLeft === 0 ||
-                                        !form.data.account_number ||
-                                        form.processing
-                                    }
-                                >
-                                    {form.processing ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <img
-                                            src="/paypal.png"
-                                            alt=""
-                                            className="h-4 w-4 rounded-sm bg-white object-contain"
-                                        />
-                                    )}
-                                    {shownQuote
-                                        ? `Pay ${formatMoney(shownQuote.sender_pays)} with PayPal`
-                                        : 'Pay with PayPal'}
-                                </Button>
-                                <p className="text-center text-[11px] text-neutral-500">
-                                    The sender approves the payment on PayPal.
-                                    Nothing is sent until PayPal confirms it.
-                                </p>
-                            </form>
-                        )}
-                    </Card>
+                                    <Button
+                                        type="submit"
+                                        size="3"
+                                        style={{ width: '100%' }}
+                                        className="cursor-pointer gap-2"
+                                        disabled={
+                                            !ready ||
+                                            !shownQuote ||
+                                            secondsLeft === 0 ||
+                                            !form.data.account_number ||
+                                            form.processing
+                                        }
+                                    >
+                                        {form.processing ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <img
+                                                src="/paypal.png"
+                                                alt=""
+                                                className="h-4 w-4 rounded-sm bg-white object-contain"
+                                            />
+                                        )}
+                                        {shownQuote
+                                            ? `Pay ${formatMoney(shownQuote.sender_pays)} with PayPal`
+                                            : 'Pay with PayPal'}
+                                    </Button>
+                                    <p className="text-center text-[11px] text-neutral-500">
+                                        The sender approves the payment on
+                                        PayPal. Nothing is sent until PayPal
+                                        confirms it.
+                                    </p>
+                                </form>
+                            )}
+                        </Card>
+
+                        <RecentConversations
+                            conversations={conversations}
+                            onContinue={(conversation) => {
+                                setResume(conversation);
+                                setTab('assistant');
+                            }}
+                        />
+                    </div>
 
                     <Card className="gap-0 border border-sidebar-border/70 p-5 xl:col-span-7 dark:border-sidebar-border">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

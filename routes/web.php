@@ -79,6 +79,8 @@ if (! config('app.docs_only_routes')) {
         Route::post('send/{transfer:reference}/verify', [SendMoneyController::class, 'verify'])->middleware(LogApiRequests::class)->name('send.verify');
         Route::post('send/assistant', [SendMoneyAssistantController::class, 'message'])->middleware(['throttle:20,1', LogApiRequests::class])->name('send.assistant.message');
         Route::post('send/assistant/decide', [SendMoneyAssistantController::class, 'decide'])->middleware(['throttle:20,1', LogApiRequests::class])->name('send.assistant.decide');
+        Route::get('send/assistant/conversations', [SendMoneyAssistantController::class, 'conversations'])->name('send.assistant.conversations');
+        Route::get('send/assistant/conversations/{conversation}', [SendMoneyAssistantController::class, 'show'])->name('send.assistant.conversation');
 
         Route::get('rates', [RatesController::class, 'index'])->name('rates.index');
         Route::post('rates/quote', [RatesController::class, 'quote'])->middleware(LogApiRequests::class)->name('rates.quote');
@@ -116,6 +118,11 @@ if (! config('app.docs_only_routes')) {
     Route::get('pay/{merchant}', [MerchantPayController::class, 'show'])->name('pay.show');
     Route::post('pay/{merchant}/quote', [MerchantPayController::class, 'quote'])->middleware('throttle:60,1')->name('pay.quote');
     Route::post('pay/{merchant}', [MerchantPayController::class, 'store'])->middleware(['throttle:10,1', LogApiRequests::class])->name('pay.store');
+
+    // A PayPal payment's verified receipt (permanent signed link).
+    Route::get('receipts/paypal/{transaction:transaction_id}', [PaypalCheckoutController::class, 'receipt'])
+        ->middleware('throttle:60,1')
+        ->name('paypal.receipt');
 
     // Where PayPal returns the payer after checkout (signed links).
     Route::prefix('checkout/paypal/{transaction:transaction_id}')
