@@ -29,6 +29,7 @@
         :root {
             --bg: #f5f6f8; --card: #ffffff; --text: #0a0a0a; --muted: #6b7280; --faint: #9ca3af;
             --border: #e5e5e5; --soft: #f6f7f9; --line: #ececec; --fg: 10, 10, 10;
+            --brand: #2d6fbe; --brand-hover: #1d61af; --brand-soft: #f0f6fd; --brand-border: #cee2fa;
             --ok: #047857; --ok-bg: #ecfdf5; --refund: #6d28d9; --refund-bg: #f5f3ff;
             --warn: #b45309; --warn-bg: #fffbeb; --paypal: #003087; --paypal-bg: #eef4fb;
         }
@@ -36,17 +37,19 @@
             :root {
                 --bg: #0a0a0a; --card: #141414; --text: #f5f5f5; --muted: #a3a3a3; --faint: #737373;
                 --border: #2a2a2a; --soft: #1b1b1b; --line: #242424; --fg: 245, 245, 245;
+                --brand: #4589df; --brand-hover: #5b9bf2; --brand-soft: #0e2138; --brand-border: #1a3f6e;
                 --ok: #6ee7b7; --ok-bg: #052e22; --refund: #c4b5fd; --refund-bg: #1e1636;
                 --warn: #fcd34d; --warn-bg: #2a1f05; --paypal: #93c5fd; --paypal-bg: #0f1a2b;
             }
         }
         * { box-sizing: border-box; }
-        body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 40px 16px;
+        body { margin: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 20px 16px;
                background: var(--bg); color: var(--text); font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-        .wrap { width: 100%; max-width: 440px; }
+        .wrap { width: 100%; max-width: 440px; display: flex; flex-direction: column; max-height: calc(100dvh - 36px); }
 
         /* The dashboard's card: a light border and a raised, layered shadow. */
         .card { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+                display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; max-height: 100%;
                 box-shadow:
                     0 1px 2px 0 rgba(var(--fg), .08),
                     0 6px 16px 0 rgba(var(--fg), .06),
@@ -54,36 +57,72 @@
                     0 4px 16px 6px rgba(var(--fg), .05),
                     0 0 0 8px color-mix(in oklab, var(--card) 24%, transparent),
                     0 6px 16px 8px rgba(var(--fg), .04); }
-        .section { padding: 22px 26px; }
+        .card > :first-child { border-top-left-radius: 17px; border-top-right-radius: 17px; }
+        .card > :last-child { border-bottom-left-radius: 17px; border-bottom-right-radius: 17px; }
+        .section { padding: 20px 24px; }
+        .card-header { flex-shrink: 0; padding: 20px 24px 16px; }
+        .card-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding: 16px 24px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--line) transparent;
+        }
+        .card-body::-webkit-scrollbar { width: 5px; }
+        .card-body::-webkit-scrollbar-track { background: transparent; }
+        .card-body::-webkit-scrollbar-thumb { background-color: var(--line); border-radius: 999px; }
+        .card-body::-webkit-scrollbar-thumb:hover { background-color: var(--brand-border); }
+        .card-footer { flex-shrink: 0; padding: 14px 24px 18px; }
 
         .brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .brand-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .mark { width: 36px; height: 36px; border-radius: 10px; background: var(--text); color: var(--card);
-                display: grid; place-items: center; font-weight: 700; flex-shrink: 0; }
+        .mark {
+            width: 36px; height: 36px; border-radius: 10px; background: #ffffff;
+            border: 1px solid var(--border); padding: 5px;
+            display: grid; place-items: center; font-weight: 700; flex-shrink: 0;
+            box-shadow: 0 1px 3px rgba(10, 10, 10, 0.04);
+        }
+        @media (prefers-color-scheme: dark) {
+            .mark { background: #161616; border-color: var(--border); }
+        }
+        .mark-img { width: 100%; height: 100%; object-fit: contain; display: block; }
         .brand-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .brand-sub, .meta { font-size: 12px; color: var(--muted); }
-        .meta { text-align: right; line-height: 1.35; }
-        .sandbox { position: absolute; top: 14px; right: -6px; background: var(--warn-bg); color: var(--warn);
-                   font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-                   padding: 3px 10px; border-radius: 6px 0 0 6px; }
+        .brand-sub { font-size: 12px; color: var(--brand); font-weight: 500; }
+        .meta { font-size: 12px; color: var(--muted); text-align: right; line-height: 1.35; flex-shrink: 0; }
+        .sandbox {
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+            padding: 7px 16px; background: var(--soft); border-bottom: 1px solid var(--line);
+            border-top-left-radius: 17px; border-top-right-radius: 17px;
+            font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+            color: var(--muted); flex-shrink: 0; user-select: none;
+        }
+        .sandbox-dot {
+            width: 6px; height: 6px; border-radius: 999px; background: #d97706;
+            box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.22); flex-shrink: 0;
+        }
+        @media (prefers-color-scheme: dark) {
+            .sandbox-dot { background: #fbbf24; box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.22); }
+        }
 
-        .status { text-align: center; padding-top: 8px; }
-        .icon { width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center; margin: 0 auto 12px; }
-        .icon svg { width: 26px; height: 26px; }
+        .status { text-align: center; padding-top: 4px; }
+        .icon { width: 46px; height: 46px; border-radius: 999px; display: grid; place-items: center; margin: 0 auto 10px; }
+        .icon svg { width: 23px; height: 23px; }
         .tone-ok { background: var(--ok-bg); color: var(--ok); }
         .tone-refund { background: var(--refund-bg); color: var(--refund); }
         .tone-warn { background: var(--warn-bg); color: var(--warn); }
         .tone-muted { background: var(--soft); color: var(--muted); }
         h1 { font-size: 18px; margin: 0; }
         .lead { margin: 4px 0 0; color: var(--muted); }
-        .amount { font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin: 16px 0 0; font-variant-numeric: tabular-nums; }
-        .via { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 6px 12px;
-               border-radius: 999px; background: var(--paypal-bg); color: var(--paypal); font-size: 12px; font-weight: 600; }
+        .amount { font-size: 32px; font-weight: 700; letter-spacing: -.02em; margin: 12px 0 0; font-variant-numeric: tabular-nums; }
+        .via { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 5px 12px;
+               border-radius: 999px; background: var(--paypal-bg); color: var(--paypal); font-size: 11.5px; font-weight: 600; }
         .via img { width: 16px; height: 16px; object-fit: contain; }
         .verified { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); font-weight: 600; }
 
         /* A tear-off edge, like a printed receipt. */
-        .tear { position: relative; height: 0; border-top: 2px dashed var(--line); margin: 0 18px; }
+        .tear { position: relative; height: 0; border-top: 2px dashed var(--line); margin: 0 18px; flex-shrink: 0; z-index: 2; }
         .tear::before, .tear::after { content: ""; position: absolute; top: -12px; width: 22px; height: 22px;
                                       border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
         .tear::before { left: -31px; clip-path: inset(0 0 0 50%); }
@@ -98,26 +137,47 @@
         .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
         .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
 
-        .totals { background: var(--soft); border-radius: 12px; padding: 12px 14px; margin-top: 20px; }
+        .totals { background: var(--soft); border-radius: 12px; padding: 12px 14px; margin-top: 18px; }
         .totals .row { padding: 3px 0; }
         .totals .grand { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 9px; font-weight: 700; }
         .totals .grand dt { color: var(--text); }
 
         .note { font-size: 12px; color: var(--muted); text-align: center; margin: 0; }
-        .note a { color: var(--paypal); font-weight: 600; }
-        .actions { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+        .note a { color: var(--brand); font-weight: 600; text-underline-offset: 2px; }
+        .note a:hover { text-decoration: underline; color: var(--brand-hover); }
+        .actions { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
         .btn { appearance: none; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit;
                font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: 999px; cursor: pointer; text-decoration: none;
-               display: inline-flex; align-items: center; gap: 6px; }
+               display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s, border-color 0.15s, color 0.15s; }
         .btn:hover { background: var(--soft); }
+        .btn-primary { background: var(--brand); color: #ffffff; border-color: var(--brand); }
+        .btn-primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); color: #ffffff; }
         .btn svg { width: 14px; height: 14px; }
-        footer { margin-top: 22px; text-align: center; font-size: 11px; color: var(--faint); }
+        footer { margin-top: 12px; text-align: center; font-size: 11px; color: var(--faint); flex-shrink: 0; }
+        .brand-link { color: var(--brand); font-weight: 600; }
 
-        @media (max-width: 480px) { .section { padding: 20px; } .amount { font-size: 30px; } }
+        @media (max-width: 480px) {
+            body { padding: 12px 10px; }
+            .wrap { max-height: calc(100dvh - 24px); }
+            .section { padding: 16px 18px; }
+            .card-header { padding: 16px 18px 12px; }
+            .card-body { padding: 14px 18px; }
+            .card-footer { padding: 12px 18px 16px; }
+            .amount { font-size: 28px; }
+            .btn { font-size: 12px; padding: 6px 12px; }
+        }
+        @media (max-height: 580px) {
+            body { min-height: auto; height: auto; padding: 16px; }
+            .wrap { max-height: none; }
+            .card { max-height: none; }
+            .card-body { overflow-y: visible; }
+        }
         @media print {
             :root { --bg: #fff; --card: #fff; --text: #000; --muted: #444; --faint: #666; --border: #ddd; --soft: #f5f5f5; }
-            body { padding: 0; place-items: start center; }
-            .card { box-shadow: none; }
+            body { padding: 0; place-items: start center; min-height: auto; height: auto; }
+            .wrap { max-height: none; height: auto; }
+            .card { box-shadow: none; max-height: none; height: auto; }
+            .card-body { overflow-y: visible; max-height: none; }
             .actions, .no-print { display: none !important; }
         }
     </style>
@@ -126,13 +186,18 @@
 <div class="wrap">
     <main class="card" data-test="paypal-receipt-card">
         @if ($receipt && $receipt['sandbox'])
-            <span class="sandbox" title="Made in PayPal's sandbox: no real money moved">Sandbox · test payment</span>
+            <div class="sandbox" title="Made in PayPal's sandbox: no real money moved">
+                <span class="sandbox-dot" aria-hidden="true"></span>
+                <span>Sandbox · test payment</span>
+            </div>
         @endif
 
-        <div class="section">
+        <div class="card-header section">
             <div class="brand">
                 <div class="brand-left">
-                    <div class="mark" aria-hidden="true">{{ mb_strtoupper(mb_substr($business, 0, 1)) }}</div>
+                    <div class="mark" aria-hidden="true">
+                        <img src="{{ $receipt['logo_url'] ?? '/moneyunify-icon.png' }}" alt="{{ $business }}" class="mark-img">
+                    </div>
                     <div style="min-width: 0">
                         <div class="brand-name">{{ $business }}</div>
                         <div class="brand-sub">{{ $receipt ? 'Payment receipt' : 'Payment' }}</div>
@@ -146,7 +211,7 @@
                 @endif
             </div>
 
-            <div class="status" style="margin-top: 22px">
+            <div class="status">
                 <div class="icon tone-{{ $outcome['tone'] }}" aria-hidden="true">
                     @if ($outcome['tone'] === 'ok')
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -176,7 +241,7 @@
 
         <div class="tear" aria-hidden="true"></div>
 
-        <div class="section">
+        <div class="card-body section">
             @if ($receipt)
                 <div class="group">
                     <h2>Payment</h2>
@@ -242,7 +307,7 @@
 
         @if ($receipt)
             <div class="tear" aria-hidden="true"></div>
-            <div class="section">
+            <div class="card-footer section">
                 <p class="note">
                     PayPal has also emailed your official receipt{{ $receipt['payer']['email'] ? ' to '.$receipt['payer']['email'] : '' }}.
                     Find it in your <a href="{{ $receipt['activity_url'] }}" target="_blank" rel="noopener">PayPal activity</a>
@@ -253,7 +318,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
                         Print or save as PDF
                     </button>
-                    <a class="btn" href="{{ $receipt['receipt_url'] }}">
+                    <a class="btn btn-primary" href="{{ $receipt['receipt_url'] }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         Permanent link
                     </a>
@@ -263,7 +328,7 @@
     </main>
 
     <footer>
-        Powered by MoneyUnify · PayPal to mobile money
+        Powered by <strong class="brand-link">MoneyUnify</strong> · PayPal to mobile money
         @if ($receipt && $receipt['checked_live'])<span class="no-print"> · checked with PayPal just now</span>@endif
     </footer>
 </div>
