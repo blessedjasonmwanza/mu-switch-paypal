@@ -149,7 +149,8 @@ export default function PayReceipt({ receipt }: { receipt: Receipt }) {
                                     {receipt.paypal.status}
                                 </span>
                                 {receipt.paypal.sandbox && (
-                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-0.5 text-[11px] font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800/60 dark:text-neutral-400">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 ring-2 ring-amber-500/20" />
                                         Sandbox · test payment
                                     </span>
                                 )}
