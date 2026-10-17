@@ -148,6 +148,9 @@ collecting via `POST /api/v1/payment/request`.
 - API — Send a payout: https://moneyunify.one/docs/api/payouts
 - API — Exchange rates & FX quotes: https://moneyunify.one/docs/api/fx
 - API — Cross-border transfers (PayPal to mobile money): https://moneyunify.one/docs/api/cross-border-transfers
+- API — Merchant API (aggregators: PayPal in, mobile-money settlement out): https://moneyunify.one/docs/api/merchants
+- API — Refund a payment: https://moneyunify.one/docs/api/refunds
+- Merchants (for aggregators): https://moneyunify.one/docs/merchants
 - API — Responses & errors: https://moneyunify.one/docs/api/responses
 - Coverage: https://moneyunify.one/docs/api/coverage
 - Providers: https://moneyunify.one/docs/providers

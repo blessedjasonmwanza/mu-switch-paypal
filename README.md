@@ -2,15 +2,18 @@
 
 ![MoneyUnify Logo](public/moneyunify-logo-horizontal.png)
 
-> **PayPal AI Hackathon 2026 entry: MoneyUnify-PayPal.** An AI agent that lets
-> anyone with a PayPal account pay someone who only has mobile money, routed
-> through the MoneyUnify switch. [Jump to MoneyUnify-PayPal ↓](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
+> **PayPal AI Hackathon 2026 entry: MoneyUnify-PayPal.** The engine that
+> connects PayPal to African mobile money. Aggregators, payment service
+> providers and operators use it to let their merchants and customers be paid
+> with PayPal and settled straight to a mobile-money wallet, through one API, a
+> pay link or an AI agent. [Jump to MoneyUnify-PayPal ↓](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
 
 ## Table of Contents
 
 - [MoneyUnify-PayPal: PayPal to mobile money, with an AI agent](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
   - [The problem](#the-problem)
   - [The solution](#the-solution)
+  - [For aggregators, DFSPs, FSPs and operators](#for-aggregators-dfsps-fsps-and-operators)
   - [How it works](#how-it-works)
   - [Why an agent, and why it's safe](#why-an-agent-and-why-its-safe)
   - [Built with](#built-with)
@@ -79,10 +82,40 @@ countries**. Every transfer is a new local payout through the mobile-money
 networks the switch already integrates. Merchants and freelancers get paid by
 PayPal customers straight into the wallet they actually use.
 
-The same capabilities are exposed as an **MCP server**. Any AI agent, including
-one already using PayPal's MCP server, can quote corridors and pay out to
-mobile money. For example: *"invoice my client in PayPal, and when it's paid,
-send 60% to my supplier's M-Pesa."*
+Next, the same capabilities will be exposed as an **MCP server**, so any AI
+agent, including one already using PayPal's MCP server, can quote corridors
+and pay out to mobile money.
+
+### For aggregators, DFSPs, FSPs and operators
+
+Mobile money moves more than a trillion US dollars a year, most of it in
+Sub-Saharan Africa (GSMA, *State of the Industry Report on Mobile Money*). Very
+little of it can be reached from PayPal today, because every business would
+have to integrate PayPal, an FX source, and each mobile-money operator on its
+own.
+
+MoneyUnify is the **switch that does it once, for everyone**. An aggregator
+(or a bank, a DFSP or FSP, or a mobile-money operator) runs MoneyUnify with its
+own PayPal account and its own payout accounts (Lenco and pawaPay are built
+in), and gets:
+
+- **Merchant onboarding.** Each merchant gets a settlement wallet, a currency
+  and a commission rate, from the dashboard or the API.
+- **A pay link per merchant.** Customers anywhere pay in USD, EUR or GBP with
+  PayPal; the merchant is settled in ZMW, MWK or its own currency, to its
+  mobile-money wallet, seconds after PayPal confirms.
+- **A merchant API** (`/api/v1/merchants`) so platforms and apps can onboard
+  merchants and charge customers without touching PayPal's, the FX provider's
+  or any operator's API.
+- **Revenue built in.** The aggregator keeps an FX margin and a commission per
+  payment, both shown up front.
+- **Trust built in.** A locked exchange rate, automatic PayPal refunds when a
+  settlement fails, refunds from the dashboard or API, and a double-entry
+  ledger with float alerts so payout accounts never run dry.
+
+PayPal gains a new way to serve the businesses and families of a whole
+continent; operators gain new inbound volume into their wallets; merchants get
+paid by the world in the money they already use.
 
 ### How it works
 
@@ -120,23 +153,25 @@ keys. These rules are enforced in code, not in the prompt:
   on its own.
 - **Spending limits** per transfer and per day. Requests over the limit are
   refused, and the agent explains why.
-- **New recipients must be confirmed** before the first transfer.
+- **Every transfer needs your approval** before it starts, whatever the agent
+  was asked; PayPal's own tools need approval too.
 - **Quotes expire**, so you never pay at a stale FX rate.
-- **Every tool call is audited** and shown on the order timeline.
+- **Every transfer is audited:** its timeline records each step, and it's
+  linked to the conversation that started it.
 
 ### Built with
 
 | | |
 | --- | --- |
-| **PayPal** | Orders v2 (create, capture), Webhooks (signature verification), Refunds, JavaScript SDK v6, sandbox; works alongside the PayPal MCP server |
-| **AI** | [Laravel AI SDK](https://laravel.com/ai) agents running Claude (Anthropic): tool calling for recipient resolution, quoting, routing explanations and "ask your payments" questions, with human approval before any payment, conversation memory and streaming |
-| **Agent interface** | Laravel MCP: a MoneyUnify MCP server for any MCP client, and an MCP client that gives our agent PayPal's MCP tools |
-| **Mobile money** | The MoneyUnify switch's 13 mobile-money and card drivers; pawaPay sandbox for payouts |
+| **PayPal** | Orders v2 (create, capture), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; works alongside the PayPal MCP server |
+| **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): a Send Money agent with tool calling and human approval before any transfer, conversation memory, and a treasury agent that suggests float top-ups |
+| **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's MCP tools (a MoneyUnify MCP server is next) |
+| **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay |
 | **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest |
-| **Hosting** | Render |
 
-> **Sandbox only.** All payments run against the PayPal and provider sandboxes.
-> No real money moves.
+> **Test safely.** Develop against PayPal's sandbox, pawaPay's sandbox or the
+> built-in Simulated Payouts driver. Lenco has no sandbox: payouts through
+> Lenco move real money, so test them with small amounts.
 
 To run the AI features, each account adds one or more AI providers on the **AI &
 Agents** page, in failover order, with the server's `.env` as the fallback. PayPal MCP connects
@@ -155,6 +190,8 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] FX quotes: exchange rates and conversions locked for 10 minutes, per account
 - [x] Cross-border transfers: pay with PayPal, delivered to mobile money at a locked rate, refunded if delivery fails
 - [x] Send Money page and AI assistant: quote, approve, pay with PayPal, follow delivery
+- [x] Refunds: full and partial, from the API and the dashboard, plus refunds made in PayPal
+- [x] Merchants for aggregators: onboarding, pay links, merchant API, commission, settlement to mobile money
 - [ ] MCP server
 - [ ] Hosted demo on Render
 

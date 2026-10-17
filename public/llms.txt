@@ -15,6 +15,8 @@ MoneyUnify Switch removes single-gateway dependency: you integrate once against 
 - [Request a Payment](https://moneyunify.one/docs/api/request-payment): the single collection endpoint, its parameters, and examples.
 - [Quote a Payment](https://moneyunify.one/docs/api/quote-payment): fees from both sides (merchant pays or payer pays) for every provider that would route a payment, before charging.
 - [Send a Payout](https://moneyunify.one/docs/api/payouts): send money to a mobile wallet, with fallback that never pays twice and idempotency keys.
+- [Merchant API](https://moneyunify.one/docs/api/merchants): aggregators onboard merchants and charge their customers with PayPal; each payment settles to the merchant's mobile-money wallet, minus the aggregator's commission.
+- [Refund a Payment](https://moneyunify.one/docs/api/refunds): refund a PayPal payment in full or in part, safely retried.
 - [Cross-Border Transfers](https://moneyunify.one/docs/api/cross-border-transfers): the sender pays with PayPal and the recipient is paid on mobile money in their currency, at a locked rate, with an automatic refund if delivery fails.
 - [Exchange Rates & FX Quotes](https://moneyunify.one/docs/api/fx): exchange rates, and conversions locked for 10 minutes, quoted from what you send or what must arrive.
 - [Verify a Payment](https://moneyunify.one/docs/api/verify-payment): confirm the final settled (`success`/`failed`) outcome of a transaction.

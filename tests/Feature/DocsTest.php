@@ -165,3 +165,14 @@ test('the send money page and assistant are documented', function () {
         ->assertSee('TRANSFER_MAX_DAILY_USD', false)
         ->assertSee('From the dashboard', false);
 });
+
+test('refunds and merchants are documented', function () {
+    $this->get('/docs/api/refunds')->assertOk()->assertSee('/api/v1/payment/refund', false)->assertSee('Refunds made in PayPal', false);
+    $this->get('/docs/merchants')->assertOk()->assertSee('pay link', false)->assertSee('IMPACT_BENCHMARK_COST_PERCENT', false);
+    $this->get('/docs/api/merchants')->assertOk()->assertSee('/api/v1/merchants/{merchant}/charge', false);
+});
+
+test('pay links are documented', function () {
+    $this->get('/docs/merchants')->assertOk()->assertSee('archived', false)->assertSee('/pay/l/', false);
+    $this->get('/docs/api/merchants')->assertOk()->assertSee('/api/v1/merchants/{merchant}/links', false);
+});

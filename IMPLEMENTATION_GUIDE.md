@@ -254,6 +254,18 @@ class MoneyUnifyPaypalAgent implements Agent, Conversational, HasTools
 - **Public `pay/{transfer}` page.** A sender who arrives from a shared link sees the quote and pays. No account needed.
 - **Dashboard.** Add corridor KPIs: volume by corridor, delivery success rate, median time to deliver, and refunds.
 
+### 4.8b Refunds and merchant settlement for aggregators ✅
+
+**Refunds (built 2026-10-17).** `App\Support\Refunds\PaymentRefunder` refunds any completed payment from a driver that implements `RefundsPayments`, in full or in part. Each refund is a debit transaction (`refund_of_id`); a payment-level lock and the refundable balance (paid less successful and pending refunds) stop over-refunding. PayPal refunds carry our id as `custom_id` and a stable `PayPal-Request-Id`. Refunds made in PayPal's dashboard are synced when the order is re-read (webhook or verify), and an unconfirmed refund is retried with the same request. Payments that fund a cross-border transfer are refused (the transfer refunds itself). API: `POST /api/v1/payment/refund` and `/refund/verify`; dashboard: **Refund** on a payment. Tests: `tests/Feature/RefundTest.php`.
+
+**Merchants (built 2026-10-17).** The impact case: an aggregator, DFSP, FSP or operator runs MoneyUnify with its own PayPal and payout accounts and collects for many merchants.
+- `merchants` (settlement wallet, country, currency, commission %, active) and `cross_border_transfers.merchant_id`, `commission_minor`, `payer_email`.
+- `CrossBorderTransferService::quoteForMerchant()` and `collectForMerchant()`: the customer pays with PayPal; the merchant is settled to its wallet at the locked rate, less the commission (rounded in the merchant's favour). Only the per-transfer cap applies.
+- Public pay page per merchant (`/pay/{slug}`, `MerchantPayController`) with a live quote and a live receipt (`/pay/receipt/{reference}`).
+- Merchant API (`/api/v1/merchants`: list, create, update, quote, charge with `Idempotency-Key`, settlements).
+- Dashboard **Merchants** page with impact figures: merchants paid, payments settled, totals settled to mobile money and commission per currency, and the average all-in cost to merchants (optionally against `IMPACT_BENCHMARK_COST_PERCENT`).
+- Tests: `tests/Feature/MerchantTest.php`. Docs: `prezet/content/merchants.md`, `prezet/content/api/merchants.md`, `prezet/content/api/refunds.md`.
+
 ### 4.9 Tests (Pest)
 
 Agents are tested with the SDK's fakes, so no real model calls happen in CI. Use `MoneyUnifyPaypalAgent::fake([...])->preventStrayPrompts()`, `AgentResponse::fakeWithPendingApprovals([...])`, `assertPrompted()` and `assertNeverPrompted()`. Tools are tested directly by calling `handle()` with a `Laravel\Ai\Tools\Request`.
