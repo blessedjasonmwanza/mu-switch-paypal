@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\RefundsPayments;
+use App\Enums\TransactionStatus;
+use App\Exceptions\RefundException;
+use App\Models\CrossBorderTransfer;
 use App\Models\Transaction;
 use App\Support\Currency;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Market;
+use App\Support\Refunds\PaymentRefunder;
 use Brick\Math\RoundingMode;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -238,6 +244,7 @@ class PaymentController extends Controller
         return $query
             ->when($status, fn (Builder $q) => $q->where('status', $status))
             ->with([
+                'refunds',
                 'paymentProvider:id,name,class,logo_url',
                 'customer:id,name,email',
                 'customer.accounts:id,customer_id,number,country',
@@ -260,9 +267,79 @@ class PaymentController extends Controller
                 'status' => $transaction->status->value,
                 'isFx' => (bool) $transaction->is_fx,
                 'fees' => $this->feeBreakdown($transaction),
+                'refund' => $this->refundSummary($transaction),
                 'createdAtHuman' => $transaction->created_at?->diffForHumans(),
                 'createdAt' => $transaction->created_at?->format('Y-m-d H:i:s T'),
             ]);
+    }
+
+    /**
+     * Refunds so far, what can still be refunded, and why not when it can't.
+     *
+     * @return array{refunded: string, refundable: string, canRefund: bool, blockedReason: ?string, items: list<array<string, mixed>>}
+     */
+    private function refundSummary(Transaction $transaction): array
+    {
+        $class = $transaction->paymentProvider?->class;
+        $transfer = CrossBorderTransfer::query()->where('funding_transaction_id', $transaction->id)->value('reference');
+
+        $blocked = match (true) {
+            ! $class || ! is_subclass_of($class, RefundsPayments::class) => 'This provider does not support refunds.',
+            $transfer !== null => 'This payment funds a cross-border transfer, which refunds it automatically if delivery fails.',
+            $transaction->status !== TransactionStatus::SUCCESS => 'Only completed payments can be refunded.',
+            default => null,
+        };
+
+        // Sums from the loaded refunds, so the list doesn't query per row.
+        $minor = fn (array $statuses): int => $transaction->refunds
+            ->filter(fn (Transaction $refund): bool => in_array($refund->status, $statuses, true))
+            ->sum(fn (Transaction $refund): int => Currency::toMinorUnits((string) $refund->amount, $transaction->currency));
+        $paid = Currency::toMinorUnits((string) $transaction->amount, $transaction->currency);
+        $refundable = (string) Currency::fromMinorUnits(max(0, $paid - $minor([TransactionStatus::SUCCESS, TransactionStatus::PENDING])), $transaction->currency);
+
+        return [
+            'refunded' => (string) Currency::fromMinorUnits($minor([TransactionStatus::SUCCESS]), $transaction->currency),
+            'refundable' => $refundable,
+            'canRefund' => $blocked === null && (float) $refundable > 0,
+            'blockedReason' => $blocked,
+            'items' => $transaction->refunds->map(fn (Transaction $refund): array => [
+                'id' => $refund->transaction_id,
+                'amount' => (string) Currency::fromMinorUnits(Currency::toMinorUnits((string) $refund->amount, $transaction->currency), $transaction->currency),
+                'status' => $refund->status->value,
+                'reason' => $refund->provider_response['reason'] ?? null,
+                'fromPaypal' => ($refund->provider_response['source'] ?? null) === 'paypal',
+                'createdAt' => $refund->created_at?->diffForHumans(),
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Refund a payment from the dashboard, in full or in part.
+     */
+    public function refund(Request $request, Transaction $transaction): RedirectResponse
+    {
+        abort_unless($request->user()->paymentProviders()->whereKey($transaction->payment_provider_id)->exists(), 404);
+
+        $validated = $request->validate([
+            'amount' => 'nullable|numeric|gt:0',
+            'reason' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $refund = app(PaymentRefunder::class)->refund($transaction, isset($validated['amount']) ? (string) $validated['amount'] : null, $validated['reason'] ?? null);
+        } catch (RefundException $e) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return back();
+        }
+
+        Inertia::flash('toast', match ($refund->status) {
+            TransactionStatus::SUCCESS => ['type' => 'success', 'message' => __('Refunded :amount :currency.', ['amount' => (string) Currency::fromMinorUnits(Currency::toMinorUnits((string) $refund->amount, $refund->currency), $refund->currency), 'currency' => $refund->currency])],
+            TransactionStatus::FAILED => ['type' => 'error', 'message' => __('The refund was refused: :reason', ['reason' => data_get($refund->provider_response, 'error.message', 'no reason given')])],
+            default => ['type' => 'success', 'message' => __('Refund requested. PayPal is processing it.')],
+        });
+
+        return back();
     }
 
     /**

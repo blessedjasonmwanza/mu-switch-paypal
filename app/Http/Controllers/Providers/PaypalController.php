@@ -192,7 +192,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         $transaction->save();
 
         try {
-            $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail), $transaction->transaction_id);
+            $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name')), $transaction->transaction_id);
         } catch (PaypalException $e) {
             return $this->failTransaction($transaction, $e->getMessage(), $e->status >= 500 ? 502 : 422);
         }
@@ -261,6 +261,8 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
             'provider_response' => [...($transaction->provider_response ?? []), 'order' => $order],
         ]);
 
+        $this->syncRefunds($transaction, $order);
+
         return ApiResponse::status($status->value, self::statusMessage($status), [
             'transaction_id' => $transaction->transaction_id,
             'reference' => $transaction->provider_transaction_id,
@@ -281,7 +283,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         $captureId = data_get($payment->provider_response, 'order.purchase_units.0.payments.captures.0.id');
 
         if (! is_string($captureId) || $captureId === '') {
-            $refund->update(['status' => TransactionStatus::FAILED, 'provider_response' => ['error' => 'The payment has no PayPal capture to refund']]);
+            $refund->update(['status' => TransactionStatus::FAILED, 'provider_response' => [...($refund->provider_response ?? []), 'error' => 'The payment has no PayPal capture to refund']]);
 
             return TransactionStatus::FAILED;
         }
@@ -289,11 +291,11 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         $amount = $this->formatAmount((float) $refund->amount, $refund->currency) ?? (string) $refund->amount;
 
         try {
-            $result = $this->client->refundCapture($captureId, $amount, $refund->currency, 'refund-'.$refund->transaction_id, $note);
+            $result = $this->client->refundCapture($captureId, $amount, $refund->currency, 'refund-'.$refund->transaction_id, $note, $refund->transaction_id);
         } catch (PaypalException $e) {
             // A definite refusal is final; otherwise the outcome is unknown, so check again later.
             $status = $e->isUnprocessable() || $e->isNotFound() ? TransactionStatus::FAILED : TransactionStatus::PENDING;
-            $refund->update(['status' => $status, 'provider_response' => ['error' => ['issue' => $e->issue, 'message' => $e->getMessage()]]]);
+            $refund->update(['status' => $status, 'provider_response' => [...($refund->provider_response ?? []), 'error' => ['issue' => $e->issue, 'message' => $e->getMessage()]]]);
 
             return $status;
         }
@@ -302,7 +304,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         $refund->update([
             'status' => $status,
             'provider_transaction_id' => $result['id'] ?? $refund->provider_transaction_id,
-            'provider_response' => ['refund' => $result],
+            'provider_response' => [...($refund->provider_response ?? []), 'refund' => $result],
         ]);
 
         return $status;
@@ -313,8 +315,12 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
      */
     public function verifyRefund(Transaction $refund): TransactionStatus
     {
+        // PayPal never confirmed this refund: ask again with the same request
+        // id, which returns the original refund instead of making a second one.
         if ($refund->provider_transaction_id === $refund->transaction_id) {
-            return $refund->status;
+            $payment = $refund->refund_of_id ? Transaction::find($refund->refund_of_id) : null;
+
+            return $payment ? $this->refundPayment($payment, $refund) : $refund->status;
         }
 
         try {
@@ -324,7 +330,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         }
 
         $status = self::refundStatus($result);
-        $refund->update(['status' => $status, 'provider_response' => ['refund' => $result]]);
+        $refund->update(['status' => $status, 'provider_response' => [...($refund->provider_response ?? []), 'refund' => $result]]);
 
         return $status;
     }
@@ -380,7 +386,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
      *
      * @return array<string, mixed>
      */
-    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail): array
+    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail, mixed $brandName = null): array
     {
         return [
             'intent' => 'CAPTURE',
@@ -393,7 +399,8 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
                 'paypal' => array_filter([
                     'email_address' => $payerEmail,
                     'experience_context' => [
-                        'brand_name' => Str::limit((string) config('app.name'), 127, ''),
+                        // The business the payer sees on PayPal: a merchant's name when collecting for one.
+                        'brand_name' => Str::limit(is_string($brandName) && trim($brandName) !== '' ? trim($brandName) : (string) config('app.name'), 127, ''),
                         'user_action' => 'PAY_NOW',
                         'shipping_preference' => 'NO_SHIPPING',
                         'return_url' => URL::signedRoute('paypal.checkout.return', ['transaction' => $transaction->transaction_id]),
@@ -484,6 +491,55 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
     private static function captureStatus(array $order): ?string
     {
         return $order['purchase_units'][0]['payments']['captures'][0]['status'] ?? null;
+    }
+
+    /**
+     * Record refunds PayPal reports on the order, including ones made in the
+     * PayPal dashboard, so the payment and the ledger always match PayPal.
+     *
+     * @param  array<string, mixed>  $order
+     */
+    private function syncRefunds(Transaction $payment, array $order): void
+    {
+        foreach ((array) data_get($order, 'purchase_units.0.payments.refunds', []) as $refund) {
+            if (! is_array($refund) || ! is_string($refund['id'] ?? null) || ! is_numeric(data_get($refund, 'amount.value'))) {
+                continue;
+            }
+
+            $status = self::refundStatus($refund);
+
+            // Ours carries our id as custom_id; otherwise match PayPal's refund id.
+            $record = Transaction::query()
+                ->where('refund_of_id', $payment->id)
+                ->where(fn ($query) => $query
+                    ->where('provider_transaction_id', $refund['id'])
+                    ->when(is_string($refund['custom_id'] ?? null), fn ($q) => $q->orWhere('transaction_id', $refund['custom_id'])))
+                ->first();
+
+            if ($record) {
+                if ($record->status !== $status || $record->provider_transaction_id !== $refund['id']) {
+                    $record->update(['status' => $status, 'provider_transaction_id' => $refund['id']]);
+                }
+
+                continue;
+            }
+
+            $id = (string) Str::uuid();
+            $record = new Transaction([
+                'transaction_id' => $id,
+                'provider_transaction_id' => $refund['id'],
+                'customer_id' => $payment->customer_id,
+                'amount' => (string) data_get($refund, 'amount.value'),
+                'currency' => strtoupper((string) data_get($refund, 'amount.currency_code', $payment->currency)),
+                'country' => $payment->country,
+                'status' => $status,
+                'direction' => 'debit',
+                'refund_of_id' => $payment->id,
+                'provider_response' => ['refund' => $refund, 'source' => 'paypal'],
+            ]);
+            $record->paymentProvider()->associate($this->provider);
+            $record->save();
+        }
     }
 
     /**

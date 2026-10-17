@@ -5,6 +5,7 @@ use App\Http\Controllers\CrossBorderTransferController;
 use App\Http\Controllers\FxController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PaypalWebhookController;
+use App\Http\Controllers\RefundController;
 use App\Http\Controllers\SwitchController;
 use App\Http\Middleware\VerifyApiAccess;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +19,11 @@ Route::prefix('v1')->middleware(VerifyApiAccess::class)->group(function () {
         Route::post('/quote', 'quotePayment');
         Route::post('/request', 'requestPayment');
         Route::post('/verify', 'verifyPayment');
+    });
+
+    Route::prefix('payment/refund')->controller(RefundController::class)->group(function () {
+        Route::post('/', 'store');
+        Route::post('/verify', 'verify');
     });
 
     Route::prefix('payout')->controller(PayoutController::class)->group(function () {

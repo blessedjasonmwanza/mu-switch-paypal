@@ -25,6 +25,15 @@ return [
         'timeout' => (int) env('GATEWAY_TIMEOUT', 180),
     ],
 
+    /*
+     * PayPal can take well over 8 seconds to connect from some networks
+     * (TCP plus TLS). A call that never connected can't have moved money, and
+     * PayPal calls carry request ids, so it's safe to wait longer here.
+     */
+    'paypal' => [
+        'connect_timeout' => (int) env('PAYPAL_CONNECT_TIMEOUT', 20),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

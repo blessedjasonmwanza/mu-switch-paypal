@@ -53,6 +53,8 @@ if (! config('app.docs_only_routes')) {
         Route::delete('providers/{provider}', [ProviderController::class, 'destroy'])->name('providers.destroy');
 
         Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+
+        Route::post('payments/{transaction:transaction_id}/refund', [PaymentController::class, 'refund'])->middleware('throttle:20,1')->name('payments.refund');
         Route::get('transfers', [TransferController::class, 'index'])->name('transfers.index');
         Route::post('transfers/transactions/{transaction:transaction_id}/verify', [TransferController::class, 'verifyTransaction'])->middleware(LogApiRequests::class)->name('transfers.transactions.verify');
 

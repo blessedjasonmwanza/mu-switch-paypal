@@ -2,6 +2,8 @@ import { Head, Link, router, usePoll } from '@inertiajs/react';
 import { Button, Select, TextField } from '@radix-ui/themes';
 import { ChevronLeft, ChevronRight, Coins, Globe, Search, Wallet } from 'lucide-react';
 import { useState } from 'react';
+import { RefundPanel } from '@/components/refund-panel';
+import type { RefundSummary } from '@/components/refund-panel';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -22,6 +24,7 @@ interface Tx {
     status: string;
     isFx: boolean;
     fees: TxFees | null;
+    refund: RefundSummary;
     createdAtHuman: string | null;
     createdAt: string | null;
 }
@@ -315,6 +318,8 @@ function PrevNext({ prevUrl, nextUrl }: { prevUrl: string | null; nextUrl: strin
 export default function Index({ metrics, metricTrend, topCurrencies, topCountries, transactions: page, filters, rangeOptions, perPageOptions }: PaymentsProps) {
     const [q, setQ] = useState(filters.q ?? '');
     const [selected, setSelected] = useState<Tx | null>(null);
+    // The open payment, kept in step with the latest data (e.g. after a refund).
+    const shown = selected ? (page.data.find((tx) => tx.id === selected.id) ?? selected) : null;
 
     // Volume is shown in the busiest currency (a mixed-currency total has no single unit).
     const displayCurrency = topCurrencies[0]?.currency ?? 'USD';
@@ -566,35 +571,44 @@ delete query[k];
             </div>
 
             {/* Detail dialog */}
-            <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+            <Dialog open={!!shown} onOpenChange={(open) => !open && setSelected(null)}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader className="border-b pb-4">
                         <DialogTitle className="flex items-center gap-2">
-                            <span className="font-mono text-sm">{selected?.reference}</span>
-                            {selected && (
-                                <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(selected.status))}>
-                                    {selected.status}
+                            <span className="font-mono text-sm">{shown?.reference}</span>
+                            {shown && (
+                                <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(shown.status))}>
+                                    {shown.status}
                                 </span>
                             )}
                         </DialogTitle>
-                        <DialogDescription>{selected?.createdAt}</DialogDescription>
+                        <DialogDescription>{shown?.createdAt}</DialogDescription>
                     </DialogHeader>
 
-                    {selected && (
+                    {shown && (
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                            <Detail label="Amount" value={formatMoney(selected.amount, selected.currency)} />
-                            <Detail label="Currency" value={selected.currency} />
-                            <Detail label="Provider" value={selected.provider ?? '—'} />
-                            <Detail label="Provider Ref" value={selected.providerReference ?? '—'} mono />
-                            <Detail label="Account" value={selected.account ?? '—'} mono />
-                            <Detail label="Name" value={selected.customerName ?? '—'} />
-                            <Detail label="Country" value={selected.countryName ? `${selected.countryName} (${selected.country})` : '—'} />
-                            <Detail label="FX" value={selected.isFx ? 'Yes' : 'No'} />
-                            <Detail label="Created" value={selected.createdAtHuman ?? '—'} />
+                            <Detail label="Amount" value={formatMoney(shown.amount, shown.currency)} />
+                            <Detail label="Currency" value={shown.currency} />
+                            <Detail label="Provider" value={shown.provider ?? '—'} />
+                            <Detail label="Provider Ref" value={shown.providerReference ?? '—'} mono />
+                            <Detail label="Account" value={shown.account ?? '—'} mono />
+                            <Detail label="Name" value={shown.customerName ?? '—'} />
+                            <Detail label="Country" value={shown.countryName ? `${shown.countryName} (${shown.country})` : '—'} />
+                            <Detail label="FX" value={shown.isFx ? 'Yes' : 'No'} />
+                            <Detail label="Created" value={shown.createdAtHuman ?? '—'} />
                         </dl>
                     )}
 
-                    {selected && <FeeBreakdown tx={selected} />}
+                    {shown && <FeeBreakdown tx={shown} />}
+                    {shown && (
+                        <RefundPanel
+                            key={`${shown.reference}-${shown.refund.refundable}`}
+                            reference={shown.reference}
+                            currency={shown.currency}
+                            refund={shown.refund}
+                            onlyReload={['transactions', 'metrics']}
+                        />
+                    )}
                 </DialogContent>
             </Dialog>
         </>

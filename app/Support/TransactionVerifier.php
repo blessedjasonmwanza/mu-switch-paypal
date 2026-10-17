@@ -5,6 +5,8 @@ namespace App\Support;
 use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
 use App\Contracts\PayoutProviderInterface;
+use App\Contracts\RefundsPayments;
+use App\Enums\TransactionStatus;
 use App\Jobs\SendTransactionCallback;
 use App\Models\ApiLog;
 use App\Models\Transaction;
@@ -31,7 +33,12 @@ class TransactionVerifier
         }
 
         $driver = app($provider->class);
-        $isPayout = $transaction->direction === 'debit';
+        $isRefund = $transaction->refund_of_id !== null;
+        $isPayout = $transaction->direction === 'debit' && ! $isRefund;
+
+        if ($isRefund && ! $driver instanceof RefundsPayments) {
+            return ApiResponse::error('Payment driver does not support refunds', 422);
+        }
 
         if ($isPayout && ! $driver instanceof PayoutProviderInterface) {
             return ApiResponse::error('Payout driver must implement PayoutProviderInterface', 500);
@@ -59,7 +66,11 @@ class TransactionVerifier
                 return $configError;
             }
 
-            $response = $isPayout ? $driver->verifyPayout($transaction) : $driver->verifyPayment($transaction);
+            $response = match (true) {
+                $isRefund => $this->refundResponse($transaction, $driver->verifyRefund($transaction)),
+                $isPayout => $driver->verifyPayout($transaction),
+                default => $driver->verifyPayment($transaction),
+            };
         } finally {
             ProviderCallContext::clear();
 
@@ -85,6 +96,24 @@ class TransactionVerifier
         $this->notifyIfSettled($transaction->refresh());
 
         return $response;
+    }
+
+    /**
+     * A refund's latest state, in the same envelope as other verifications.
+     */
+    private function refundResponse(Transaction $refund, TransactionStatus $status): JsonResponse
+    {
+        return ApiResponse::status($status->value, match ($status) {
+            TransactionStatus::SUCCESS => 'Refund completed',
+            TransactionStatus::FAILED => 'Refund failed',
+            default => 'Refund is still processing',
+        }, [
+            'refund_id' => $refund->transaction_id,
+            'transaction_id' => Transaction::query()->whereKey($refund->refund_of_id)->value('transaction_id'),
+            'status' => $status->value,
+            'amount' => (string) $refund->amount,
+            'currency' => $refund->currency,
+        ]);
     }
 
     /**

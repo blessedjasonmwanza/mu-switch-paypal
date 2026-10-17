@@ -98,11 +98,12 @@ class PaypalClient
      *
      * @return array<string, mixed>
      */
-    public function refundCapture(string $captureId, string $amount, string $currency, string $requestId, ?string $note = null): array
+    public function refundCapture(string $captureId, string $amount, string $currency, string $requestId, ?string $note = null, ?string $customId = null): array
     {
         return $this->send('POST', '/v2/payments/captures/'.rawurlencode($captureId).'/refund', array_filter([
             'amount' => ['value' => $amount, 'currency_code' => strtoupper($currency)],
-            'note_to_payer' => $note,
+            'note_to_payer' => $note === null ? null : mb_substr($note, 0, 255),
+            'custom_id' => $customId,
         ]), $requestId);
     }
 
@@ -180,6 +181,7 @@ class PaypalClient
     private function request(): PendingRequest
     {
         return Http::acceptJson()
+            ->connectTimeout(max((int) config('services.gateways.connect_timeout'), (int) config('services.paypal.connect_timeout', 20)))
             ->timeout(self::attemptTimeout())
             ->retry(
                 [...self::RETRY_DELAYS],
