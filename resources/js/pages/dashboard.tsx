@@ -15,8 +15,8 @@ import {
     XCircle,
 } from 'lucide-react';
 import { useState  } from 'react';
-import type { ReactNode } from 'react';
-import { ActivityAreaChart } from '@/components/activity-area-chart';
+import type {ReactNode} from 'react';
+import { ActivityAreaChart, getCurrencyColor, type ActivityPoint, type TrendCurrency } from '@/components/activity-area-chart';
 import { TableFooter } from '@/components/table-footer';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -60,12 +60,8 @@ interface DashboardProps {
         activeProviders: { value: number; total: number };
         failed: Stat;
     };
-    volumeTrend: {
-        date: string;
-        label: string;
-        count: number;
-        volume: number;
-    }[];
+    volumeTrend: ActivityPoint[];
+    trendCurrencies?: TrendCurrency[];
     statusBreakdown: Record<string, number>;
     providerPerformance: Paginated<{
         id: number;
@@ -298,6 +294,7 @@ export default function Dashboard({
     hasProviders,
     stats,
     volumeTrend,
+    trendCurrencies = [],
     statusBreakdown,
     providerPerformance,
     recentTransactions,
@@ -307,6 +304,8 @@ export default function Dashboard({
 }: DashboardProps) {
     const [loading, setLoading] = useState(false);
     const [showToken, setShowToken] = useState(false);
+    const [chartMetric, setChartMetric] = useState<'count' | 'volume'>('count');
+    const [selectedChartCurrency, setSelectedChartCurrency] = useState<string | null>(null);
     const [txSearch, setTxSearch] = useState(transactionFilters.q ?? '');
     const [provSearch, setProvSearch] = useState(providerFilters.q ?? '');
 
@@ -465,17 +464,114 @@ export default function Dashboard({
                 {/* Activity chart + status breakdown */}
                 <div className="grid gap-6 lg:grid-cols-3">
                     <Card className="gap-0 border border-sidebar-border/70 p-5 lg:col-span-2 dark:border-sidebar-border">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <h2 className="text-sm font-semibold">
-                                    Transaction Activity
-                                </h2>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-sm font-semibold">
+                                        Transaction Activity
+                                    </h2>
+                                    {trendCurrencies.length > 0 && (
+                                        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                                            {trendCurrencies.length}{' '}
+                                            {trendCurrencies.length === 1
+                                                ? 'currency'
+                                                : 'currencies'}
+                                        </span>
+                                    )}
+                                </div>
                                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                    Daily transaction count — last 14 days
+                                    {chartMetric === 'count'
+                                        ? 'Daily transaction count by transacted currency — last 14 days'
+                                        : 'Daily volume by transacted currency — last 14 days'}
                                 </p>
                             </div>
-                            <Activity className="h-4 w-4 text-neutral-400" />
+
+                            <div className="flex items-center gap-2 self-start sm:self-auto">
+                                <div className="inline-flex rounded-md bg-neutral-100 p-0.5 dark:bg-neutral-800">
+                                    <button
+                                        type="button"
+                                        onClick={() => setChartMetric('count')}
+                                        className={cn(
+                                            'rounded px-2.5 py-0.5 text-xs font-medium transition-colors',
+                                            chartMetric === 'count'
+                                                ? 'bg-white text-neutral-900 shadow-xs dark:bg-neutral-900 dark:text-neutral-100'
+                                                : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100',
+                                        )}
+                                    >
+                                        Count
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setChartMetric('volume')}
+                                        className={cn(
+                                            'rounded px-2.5 py-0.5 text-xs font-medium transition-colors',
+                                            chartMetric === 'volume'
+                                                ? 'bg-white text-neutral-900 shadow-xs dark:bg-neutral-900 dark:text-neutral-100'
+                                                : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100',
+                                        )}
+                                    >
+                                        Volume
+                                    </button>
+                                </div>
+                                <Activity className="h-4 w-4 text-neutral-400" />
+                            </div>
                         </div>
+
+                        {trendCurrencies.length > 0 && (
+                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                                {trendCurrencies.length > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedChartCurrency(null)}
+                                        className={cn(
+                                            'rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors',
+                                            selectedChartCurrency === null
+                                                ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 shadow-xs'
+                                                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700',
+                                        )}
+                                    >
+                                        All ({trendCurrencies.length})
+                                    </button>
+                                )}
+                                {trendCurrencies.map((c, idx) => {
+                                    const color = getCurrencyColor(c.currency, idx);
+                                    const isSelected = selectedChartCurrency === c.currency;
+                                    const isDimmed =
+                                        selectedChartCurrency !== null && !isSelected;
+
+                                    return (
+                                        <button
+                                            key={c.currency}
+                                            type="button"
+                                            onClick={() =>
+                                                setSelectedChartCurrency((prev) =>
+                                                    prev === c.currency ? null : c.currency,
+                                                )
+                                            }
+                                            className={cn(
+                                                'flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-all',
+                                                isSelected
+                                                    ? 'bg-neutral-900 text-white shadow-xs dark:bg-neutral-100 dark:text-neutral-900'
+                                                    : isDimmed
+                                                      ? 'opacity-40 hover:opacity-80 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+                                                      : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
+                                            )}
+                                        >
+                                            <span
+                                                className="h-2 w-2 rounded-full shrink-0"
+                                                style={{ backgroundColor: color.stroke }}
+                                            />
+                                            <span className="font-semibold">{c.currency}</span>
+                                            <span className="text-[11px] opacity-80 tabular-nums">
+                                                ({c.count} {c.count === 1 ? 'txn' : 'txns'} &middot;{' '}
+                                                {formatMoney(c.volume, c.currency)})
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
                         {!hasTrend ? (
                             <div className="flex h-44 flex-col items-center justify-center text-center text-sm text-neutral-400">
                                 <Activity className="mb-2 h-6 w-6" />
@@ -485,8 +581,11 @@ export default function Dashboard({
                             <div className="mt-4">
                                 <ActivityAreaChart
                                     points={volumeTrend}
-                                    formatVolume={(v) =>
-                                        formatMoney(v, currency)
+                                    currencies={trendCurrencies}
+                                    metric={chartMetric}
+                                    selectedCurrency={selectedChartCurrency}
+                                    formatVolume={(v, curr) =>
+                                        formatMoney(v, curr ?? currency)
                                     }
                                 />
                             </div>

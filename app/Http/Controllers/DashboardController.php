@@ -48,13 +48,15 @@ class DashboardController extends Controller
         $now = Carbon::now();
         $periodStart = $now->copy()->subDays(self::PERIOD_DAYS);
         $previousStart = $now->copy()->subDays(self::PERIOD_DAYS * 2);
+        $trendData = $this->volumeTrendData($providerIds);
 
         return Inertia::render('dashboard', [
             'apiToken' => $user->ensureApiToken(),
             'currency' => $this->dominantCurrency($providerIds),
             'hasProviders' => $providers->isNotEmpty(),
             'stats' => $this->stats($providerIds, $periodStart, $previousStart, $providers),
-            'volumeTrend' => $this->volumeTrend($providerIds),
+            'volumeTrend' => $trendData['points'],
+            'trendCurrencies' => $trendData['currencies'],
             'statusBreakdown' => $this->statusBreakdown($providerIds, $periodStart),
             'providerPerformance' => $this->providerPerformance($providers, $providerIds, $periodStart, $request),
             'recentTransactions' => $this->recentTransactions($providerIds, $request),
@@ -207,12 +209,15 @@ class DashboardController extends Controller
     }
 
     /**
-     * Daily transaction count and successful volume for the trend chart.
+     * Daily transaction trend with per-currency breakdowns and active currencies for the trend chart.
      *
      * @param  Collection<int, int>  $providerIds
-     * @return list<array{date: string, label: string, count: int, volume: float}>
+     * @return array{
+     *     points: list<array<string, mixed>>,
+     *     currencies: list<array{currency: string, count: int, volume: float}>
+     * }
      */
-    private function volumeTrend(Collection $providerIds): array
+    private function volumeTrendData(Collection $providerIds): array
     {
         $start = Carbon::now()->subDays(self::TREND_DAYS - 1)->startOfDay();
 
@@ -220,26 +225,76 @@ class DashboardController extends Controller
             ->whereIn('payment_provider_id', $providerIds)
             ->where('created_at', '>=', $start)
             ->selectRaw('date(created_at) as day')
+            ->selectRaw("coalesce(nullif(currency, ''), 'USD') as currency_code")
             ->selectRaw('count(*) as count')
             ->selectRaw("coalesce(sum(case when status = 'success' then amount else 0 end), 0) as volume")
-            ->groupBy('day')
-            ->get()
-            ->keyBy('day');
+            ->groupBy('day', 'currency_code')
+            ->get();
 
-        return collect(range(0, self::TREND_DAYS - 1))
-            ->map(function (int $offset) use ($start, $rows): array {
+        // Identify currencies that have actually transacted in this 14-day window.
+        $currencyTotals = $rows->groupBy('currency_code')
+            ->map(fn ($group, $code) => [
+                'currency' => (string) $code,
+                'count' => (int) $group->sum('count'),
+                'volume' => round((float) $group->sum('volume'), 2),
+            ])
+            ->sortByDesc('count')
+            ->values();
+
+        $activeCurrencies = $currencyTotals->pluck('currency')->all();
+        $rowsByDay = $rows->groupBy('day');
+
+        $points = collect(range(0, self::TREND_DAYS - 1))
+            ->map(function (int $offset) use ($start, $rowsByDay, $activeCurrencies): array {
                 $date = $start->copy()->addDays($offset);
                 $key = $date->format('Y-m-d');
-                $row = $rows->get($key);
+                $dayRows = $rowsByDay->get($key, collect());
 
-                return [
+                $byCurrency = [];
+                $flatKeys = [];
+
+                foreach ($activeCurrencies as $currency) {
+                    $match = $dayRows->firstWhere('currency_code', $currency);
+                    $cCount = (int) ($match->count ?? 0);
+                    $cVolume = round((float) ($match->volume ?? 0), 2);
+
+                    $byCurrency[$currency] = [
+                        'count' => $cCount,
+                        'volume' => $cVolume,
+                    ];
+
+                    $flatKeys["{$currency}_count"] = $cCount;
+                    $flatKeys["{$currency}_volume"] = $cVolume;
+                }
+
+                $totalCount = (int) $dayRows->sum('count');
+                $totalVolume = round((float) $dayRows->sum('volume'), 2);
+
+                return array_merge([
                     'date' => $key,
                     'label' => $date->format('M j'),
-                    'count' => (int) ($row->count ?? 0),
-                    'volume' => round((float) ($row->volume ?? 0), 2),
-                ];
+                    'count' => $totalCount,
+                    'volume' => $totalVolume,
+                    'byCurrency' => $byCurrency,
+                ], $flatKeys);
             })
             ->all();
+
+        return [
+            'points' => $points,
+            'currencies' => $currencyTotals->all(),
+        ];
+    }
+
+    /**
+     * Daily transaction count and successful volume for the trend chart.
+     *
+     * @param  Collection<int, int>  $providerIds
+     * @return list<array<string, mixed>>
+     */
+    private function volumeTrend(Collection $providerIds): array
+    {
+        return $this->volumeTrendData($providerIds)['points'];
     }
 
     /**
