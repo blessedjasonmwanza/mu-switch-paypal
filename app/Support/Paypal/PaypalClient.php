@@ -32,6 +32,12 @@ class PaypalClient
      */
     private const RETRY_DELAYS = [500, 1500];
 
+    /** Seconds a quick call (see quick()) may wait for PayPal's answer. */
+    private const QUICK_TIMEOUT = 10;
+
+    /** Calls that fail fast instead of retrying (see quick()). */
+    private bool $quick = false;
+
     public function __construct(
         private readonly string $clientId,
         private readonly string $clientSecret,
@@ -54,6 +60,20 @@ class PaypalClient
         }
 
         return new self($clientId, $clientSecret, $environment);
+    }
+
+    /**
+     * A copy that tries once with a short answer timeout, for calls with a
+     * safe fallback (such as exchange rates), so a slow PayPal never holds up
+     * the caller. The connect allowance is kept: some networks take seconds
+     * to reach PayPal.
+     */
+    public function quick(): static
+    {
+        $client = clone $this;
+        $client->quick = true;
+
+        return $client;
     }
 
     public function environment(): PaypalEnvironment
@@ -202,8 +222,14 @@ class PaypalClient
      */
     private function request(): PendingRequest
     {
-        return Http::acceptJson()
-            ->connectTimeout(max((int) config('services.gateways.connect_timeout'), (int) config('services.paypal.connect_timeout', 20)))
+        $request = Http::acceptJson()
+            ->connectTimeout(max((int) config('services.gateways.connect_timeout'), (int) config('services.paypal.connect_timeout', 20)));
+
+        if ($this->quick) {
+            return $request->timeout(self::QUICK_TIMEOUT);
+        }
+
+        return $request
             ->timeout(self::attemptTimeout())
             ->retry(
                 [...self::RETRY_DELAYS],

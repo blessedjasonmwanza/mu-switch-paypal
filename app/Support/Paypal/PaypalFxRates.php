@@ -148,7 +148,8 @@ final class PaypalFxRates
             return $found;
         }
 
-        $client = PaypalClient::fromConfig((array) $provider->config);
+        // Rates have a fallback, so PayPal gets one quick try.
+        $client = PaypalClient::fromConfig((array) $provider->config)?->quick();
 
         if ($client === null) {
             return $found;

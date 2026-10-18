@@ -247,3 +247,29 @@ test('checking again forgets what paypal said, so the next quote asks paypal afr
 
     expect($quoter->quote('USD', 'ZMW', 100, ownerId: $this->user->id)->rateSource)->toBe('paypal');
 });
+
+test('a slow paypal never holds up a quote for long: one quick try, then moneyunify rates', function () {
+    Http::fake([
+        '*/v1/oauth2/token' => Http::response(['access_token' => 'A21-paypal-token', 'expires_in' => 32400]),
+        '*/v2/pricing/quote-exchange-rates' => Http::failedConnection(),
+    ]);
+    $quoter = app(FxQuoter::class);
+
+    expect($quoter->quote('USD', 'ZMW', 100, ownerId: $this->user->id)->rateSource)->toBe('moneyunify')
+        ->and($quoter->quote('USD', 'ZMW', 50, ownerId: $this->user->id)->rateSource)->toBe('moneyunify')
+        ->and(fxCalls())->toBe(1); // no retries, and no second try while PayPal is unavailable
+
+    Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/pricing/quote-exchange-rates'));
+});
+
+test('paypal rates are fetched ahead of time, so quotes are served from the cache', function () {
+    fakePaypalFx();
+
+    $this->artisan('paypal-fx:warm')->assertSuccessful();
+    expect(fxCalls())->toBe(1);
+
+    $quote = app(FxQuoter::class)->quote('USD', 'ZMW', 100, ownerId: $this->user->id);
+
+    expect($quote->rateSource)->toBe('paypal')
+        ->and(fxCalls())->toBe(1);
+});

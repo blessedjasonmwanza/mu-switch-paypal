@@ -13,3 +13,6 @@ Schedule::command('treasury:check-floats')->everyFiveMinutes()->withoutOverlappi
 
 // Payout providers rarely call back, so move in-flight transfers forward every minute.
 Schedule::command('cross-border:refresh')->everyMinute()->withoutOverlapping();
+
+// Keep PayPal's exchange rates cached, so FX quotes never wait on PayPal.
+Schedule::command('paypal-fx:warm')->everyThirtyMinutes()->withoutOverlapping();
