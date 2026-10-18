@@ -23,6 +23,11 @@ class Merchant extends Model
         'wallet_number', 'wallet_name', 'network', 'commission_percent', 'is_active',
     ];
 
+    protected $hidden = ['mcp_key_hash'];
+
+    /** Merchant MCP keys start with this, so they're easy to recognise (and to scan for if leaked). */
+    public const MCP_KEY_PREFIX = 'mu_mk_';
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -58,6 +63,40 @@ class Merchant extends Model
         return $slug;
     }
 
+    /**
+     * Issue a new MCP access key, replacing any earlier one. Only its hash is
+     * stored, so the key is returned once and can't be shown again.
+     */
+    public function issueMcpKey(): string
+    {
+        $key = self::MCP_KEY_PREFIX.Str::random(40);
+
+        $this->forceFill([
+            'mcp_key_hash' => hash('sha256', $key),
+            'mcp_key_hint' => substr($key, 0, 10).'…'.substr($key, -4),
+            'mcp_key_issued_at' => now(),
+        ])->save();
+
+        return $key;
+    }
+
+    public function revokeMcpKey(): void
+    {
+        $this->forceFill(['mcp_key_hash' => null, 'mcp_key_hint' => null, 'mcp_key_issued_at' => null])->save();
+    }
+
+    /**
+     * The merchant an MCP access key belongs to.
+     */
+    public static function findByMcpKey(?string $key): ?self
+    {
+        if (! is_string($key) || ! str_starts_with($key, self::MCP_KEY_PREFIX)) {
+            return null;
+        }
+
+        return self::query()->where('mcp_key_hash', hash('sha256', $key))->first();
+    }
+
     public function getRouteKeyName(): string
     {
         return 'slug';
@@ -68,6 +107,7 @@ class Merchant extends Model
         return [
             'commission_percent' => 'decimal:2',
             'is_active' => 'boolean',
+            'mcp_key_issued_at' => 'datetime',
         ];
     }
 }
