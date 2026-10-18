@@ -81,7 +81,10 @@ export default function PayMerchant({
     const [quoteError, setQuoteError] = useState<string | null>(null);
     const [isQuoting, setIsQuoting] = useState(false);
     const [payingWith, setPayingWith] = useState<'paypal' | 'card'>('paypal');
-    const [sdkBusy, setSdkBusy] = useState(false);
+    // True only while the approved payment is being captured: the button
+    // stays usable while PayPal's window is open, so a closed or blocked
+    // window never leaves the customer stuck.
+    const [capturing, setCapturing] = useState(false);
     const [sdkError, setSdkError] = useState<string | null>(null);
     const captureUrl = useRef<string | null>(null);
     const canPay = merchant.is_active && payCurrencies.length > 0;
@@ -166,49 +169,44 @@ export default function PayMerchant({
     // window, then captured here before showing the receipt.
     const createSdkOrder = async (): Promise<string> => {
         setSdkError(null);
-        setSdkBusy(true);
 
-        try {
-            const response = await fetch(
-                link ? linkOrder.url(link.code) : pay.order.url(merchant.slug),
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Accept: 'application/json',
-                        'X-CSRF-TOKEN': csrfToken(),
-                    },
-                    body: JSON.stringify({ ...form.data, pay_with: 'paypal' }),
+        const response = await fetch(
+            link ? linkOrder.url(link.code) : pay.order.url(merchant.slug),
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrfToken(),
                 },
-            );
-            const json = await response.json().catch(() => ({}));
+                body: JSON.stringify({ ...form.data, pay_with: 'paypal' }),
+            },
+        );
+        const json = await response.json().catch(() => ({}));
 
-            if (!response.ok) {
-                const message =
-                    json.message ?? 'PayPal could not start the payment.';
-                setSdkError(message);
+        if (!response.ok) {
+            const message =
+                json.message ?? 'PayPal could not start the payment.';
+            setSdkError(message);
 
-                throw new Error(message);
-            }
-
-            // Made with another PayPal account than the button's: pay on PayPal's page instead.
-            if (json.data.client_id !== paypalSdk?.client_id) {
-                window.location.href = json.data.checkout_url;
-
-                throw new Error('Continuing on PayPal…');
-            }
-
-            captureUrl.current = json.data.capture_url;
-
-            return json.data.order_id as string;
-        } catch (error) {
-            setSdkBusy(false);
-
-            throw error;
+            throw new Error(message);
         }
+
+        // Made with another PayPal account than the button's: pay on PayPal's page instead.
+        if (json.data.client_id !== paypalSdk?.client_id) {
+            window.location.href = json.data.checkout_url;
+
+            throw new Error('Continuing on PayPal…');
+        }
+
+        captureUrl.current = json.data.capture_url;
+
+        return json.data.order_id as string;
     };
 
     const captureSdkOrder = async () => {
+        setCapturing(true);
+
         try {
             const response = await fetch(captureUrl.current ?? '', {
                 method: 'POST',
@@ -223,7 +221,7 @@ export default function PayMerchant({
                 setSdkError(
                     json.message ?? 'PayPal could not confirm the payment.',
                 );
-                setSdkBusy(false);
+                setCapturing(false);
 
                 return;
             }
@@ -231,7 +229,7 @@ export default function PayMerchant({
             router.visit(json.data.receipt_url);
         } catch {
             setSdkError('PayPal could not confirm the payment.');
-            setSdkBusy(false);
+            setCapturing(false);
         }
     };
 
@@ -509,15 +507,18 @@ export default function PayMerchant({
                                         disabled={
                                             !shownQuote ||
                                             form.processing ||
-                                            sdkBusy
+                                            capturing
                                         }
                                         createOrder={createSdkOrder}
                                         onApprove={captureSdkOrder}
-                                        onCancel={() => setSdkBusy(false)}
-                                        onError={(error) => {
-                                            setSdkBusy(false);
-                                            setSdkError(error.message);
-                                        }}
+                                        onCancel={() =>
+                                            setSdkError(
+                                                'Payment cancelled. You can try again.',
+                                            )
+                                        }
+                                        onError={(error) =>
+                                            setSdkError(error.message)
+                                        }
                                         fallback={classicPaypalButton}
                                     />
                                 ) : (

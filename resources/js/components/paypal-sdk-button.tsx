@@ -81,6 +81,7 @@ export function PaypalSdkButton({
     onApprove,
     onCancel,
     onError,
+    onSettled,
     fallback,
 }: {
     clientId: string;
@@ -92,18 +93,36 @@ export function PaypalSdkButton({
     onApprove: (orderId: string) => Promise<void> | void;
     onCancel?: () => void;
     onError?: (error: Error) => void;
+    /**
+     * PayPal's session ended without approval: closed, blocked or failed.
+     * Called after onCancel or onError, and when the session returns
+     * without calling either (e.g. its window was blocked).
+     */
+    onSettled?: () => void;
     fallback: React.ReactNode;
 }) {
     const button = useRef<HTMLElement | null>(null);
     const session = useRef<PaypalSession | null>(null);
-    const callbacks = useRef({ createOrder, onApprove, onCancel, onError });
+    const callbacks = useRef({
+        createOrder,
+        onApprove,
+        onCancel,
+        onError,
+        onSettled,
+    });
     // Ready for this client, environment and currency (a change waits for a new session).
     const sessionKey = `${environment}|${clientId}|${currency}`;
     const [readyFor, setReadyFor] = useState<string | null>(null);
     const ready = readyFor === sessionKey;
 
     useEffect(() => {
-        callbacks.current = { createOrder, onApprove, onCancel, onError };
+        callbacks.current = {
+            createOrder,
+            onApprove,
+            onCancel,
+            onError,
+            onSettled,
+        };
     });
 
     useEffect(() => {
@@ -168,7 +187,8 @@ export function PaypalSdkButton({
 
             session.current
                 .start({ presentationMode: 'auto' }, order)
-                .catch((error: Error) => callbacks.current.onError?.(error));
+                .catch((error: Error) => callbacks.current.onError?.(error))
+                .finally(() => callbacks.current.onSettled?.());
         };
 
         element.addEventListener('click', start);
