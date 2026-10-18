@@ -48,7 +48,7 @@
 | **The solution** | One engine that does it once. MoneyUnify collects with PayPal, converts at PayPal's own exchange rate, and pays out to MTN, Airtel, Zamtel, M-Pesa and other wallets, falling back across providers and refunding automatically if delivery fails. |
 | **Who uses it** | Aggregators, payment service providers, DFSPs, mobile-money operators and e-commerce businesses, as their own payment tool, as a gateway for their merchants, or both. |
 | **How people use it** | A pay link, a REST API, a Send Money page, an AI assistant that turns "send K500 to my brother" into an approved transfer, and MCP servers for any AI agent or app. |
-| **Scale** | 32 countries, 14 payment providers and 24 currencies in the switch today, and PayPal FX into 100+ currencies. |
+| **Scale** | **204 countries reached:** payers in PayPal's 201 markets can pay in, and money is collected and paid out on mobile money in 32 countries, through 14 payment providers and 24 currencies, with PayPal FX into 100+ currencies. |
 | **Proof** | A real PayPal sandbox payment delivered to a mobile wallet through pawaPay's sandbox in six seconds, and a failed delivery refunded through PayPal automatically, with every step and ledger entry recorded. |
 
 ### The problem
@@ -398,7 +398,7 @@ A standalone [API Documentation](API_DOCUMENTATION.md) file is also available fo
 
 ## Supported Countries and Mobile Networks
 
-The built-in provider drivers collectively cover **32 countries** across Africa. The switch reaches a country only when you configure (and activate) a provider that supports it — coverage is the **union of the providers you configure**. See the full [Coverage reference](prezet/content/api/coverage.md) in the docs.
+The built-in provider drivers collectively cover **32 countries** across Africa for mobile money: collections, and payouts through pawaPay and Lenco. With PayPal, payers in **PayPal's 201 markets** (per PayPal's [country list](https://developer.paypal.com/api/rest/reference/country-codes/)) can pay in, so the switch reaches **204 countries** in all: 29 have both, 172 are PayPal only, and Ghana, Liberia and South Sudan are mobile money only. The switch reaches a country only when you configure (and activate) a provider that supports it — coverage is the **union of the providers you configure**. See the full [Coverage reference](prezet/content/api/coverage.md) in the docs.
 
 ### Countries and currencies
 
@@ -458,7 +458,7 @@ Aggregators (pawaPay, Ting) reach the major mobile-money operators (MMOs) in eac
 | **DPO Pay** | 9 | Operator configured per market (MNO code) — e.g. Safaricom, Vodacom, Tigo, MTN, Airtel |
 | **pawaPay** | 20 | All major MMOs per market — auto-detected (e.g. MTN, Airtel, Vodafone, Orange, Tigo, Moov) |
 | **Ting by Cellulant** | 25 | All major MMOs per market — operator code configured per market |
-| **PayPal** | 32 | None: hosted PayPal checkout (wallet and cards), charged in a PayPal currency such as USD |
+| **PayPal** | 32 (settled to) · 201 (payers from) | None: PayPal's button or hosted checkout (wallet, guest card), charged in a PayPal currency such as USD; payers anywhere in PayPal's 201 markets |
 
 ## Requirements
 

@@ -15,9 +15,13 @@ drivers** can serve, the currency used, and the mobile networks reachable there
 > provider supports. Tick the markets you serve when you
 > [add a provider](/docs/providers).
 
-> **PayPal** can serve every market below, collecting in a PayPal currency such
-> as USD rather than the local one. It isn't listed per row because it doesn't
-> reach mobile-money networks. See [the PayPal driver](/docs/providers).
+> **PayPal** adds where payers can pay in from: PayPal's **201 markets** (per
+> PayPal's [country list](https://developer.paypal.com/api/rest/reference/country-codes/)),
+> charged in a PayPal currency such as USD and settled to mobile money in the
+> markets below. Together that's **204 countries reached**: 29 with both, 172
+> PayPal only, and Ghana, Liberia and South Sudan mobile money only. PayPal isn't
+> listed per row because it doesn't reach mobile-money networks itself. See
+> [the PayPal driver](/docs/providers).
 
 ## Countries & currencies
 

@@ -216,3 +216,7 @@ test('paypal\'s agent toolkit setup is documented', function () {
 test('the pawapay v2 driver is documented', function () {
     $this->get('/docs/providers')->assertOk()->assertSee('pawaPay API v2')->assertSee('/v2/payouts')->assertDontSee('predict-correspondent');
 });
+
+test('the coverage docs count paypal\'s markets', function () {
+    $this->get('/docs/api/coverage')->assertOk()->assertSee('201 markets')->assertSee('204 countries reached');
+});
