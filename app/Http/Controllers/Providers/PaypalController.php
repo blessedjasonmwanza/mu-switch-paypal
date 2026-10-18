@@ -257,14 +257,22 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
                 return ApiResponse::error($e->getMessage(), 502);
             }
 
-            $order = ['error' => ['issue' => $e->issue, 'message' => $e->getMessage()]];
+            $syncError = ['issue' => $e->issue, 'message' => $e->getMessage()];
             $status = $transaction->isFinal() ? $transaction->status : TransactionStatus::FAILED;
             $providerStatus = $e->issue;
+
+            // A settled payment keeps PayPal's record of it (the capture, the payer,
+            // refunds): its receipt is built from it. The failed lookup is noted beside it.
+            $known = (array) data_get($transaction->provider_response, 'order', []);
+            $order = $transaction->isFinal() && isset($known['id']) ? $known : ['error' => $syncError];
         }
+
+        $response = [...($transaction->provider_response ?? []), 'order' => $order];
+        unset($response['last_sync_error']);
 
         $transaction->update([
             'status' => $status,
-            'provider_response' => [...($transaction->provider_response ?? []), 'order' => $order],
+            'provider_response' => isset($syncError) ? [...$response, 'last_sync_error' => $syncError] : $response,
         ]);
 
         $this->syncRefunds($transaction, $order);

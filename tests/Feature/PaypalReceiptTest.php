@@ -6,6 +6,7 @@ use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Support\Paypal\PaypalReceipt;
+use App\Support\TransactionVerifier;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -136,4 +137,34 @@ test('a refunded payment is presented as refunded, not complete', function () {
         ->assertSee('Payment refunded')
         ->assertSee('This payment was refunded in full to your PayPal account.')
         ->assertDontSee('Payment complete');
+});
+
+test('a failed paypal lookup never wipes a settled payment\'s record', function () {
+    Http::fake([
+        '*/v1/oauth2/token' => Http::response(['access_token' => 'A21-paypal-token', 'expires_in' => 32400]),
+        '*/v2/checkout/orders/ORDER-1' => Http::response(['name' => 'RESOURCE_NOT_FOUND', 'details' => [['issue' => 'INVALID_RESOURCE_ID']], 'message' => 'The specified resource does not exist.'], 404),
+    ]);
+    $payment = capturedPayment($this->paypal, capturedOrder());
+
+    $receipt = PaypalReceipt::for($payment);
+    $payment->refresh();
+
+    expect($payment->status)->toBe(TransactionStatus::SUCCESS)
+        ->and(data_get($payment->provider_response, 'order.purchase_units.0.payments.captures.0.id'))->toBe('CAPTURE-1')
+        ->and(data_get($payment->provider_response, 'last_sync_error.message'))->not->toBeNull()
+        ->and($receipt['paypal_transaction_id'])->toBe('CAPTURE-1')
+        ->and($receipt['payer']['name'])->toBe('John Doe');
+});
+
+test('a pending order paypal no longer knows still fails', function () {
+    Http::fake([
+        '*/v1/oauth2/token' => Http::response(['access_token' => 'A21-paypal-token', 'expires_in' => 32400]),
+        '*/v2/checkout/orders/ORDER-1' => Http::response(['name' => 'RESOURCE_NOT_FOUND', 'message' => 'The specified resource does not exist.'], 404),
+    ]);
+    $payment = pendingPaypalTransaction($this->paypal);
+
+    app(TransactionVerifier::class)->verify($payment);
+
+    expect($payment->refresh()->status)->toBe(TransactionStatus::FAILED)
+        ->and(data_get($payment->provider_response, 'order.error'))->not->toBeNull();
 });
