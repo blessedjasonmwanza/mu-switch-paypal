@@ -204,3 +204,11 @@ test('the mcp servers are documented', function () {
         ->assertSee('charge_merchant_customer')
         ->assertSee('One switch, three ways to run it');
 });
+
+test('paypal\'s js sdk button is documented', function () {
+    $this->get('/docs/providers')->assertOk()->assertSee('JS SDK v6')->assertSee('/pay/receipt/{reference}/capture', false);
+});
+
+test('paypal\'s agent toolkit setup is documented', function () {
+    $this->get('/docs/ai-and-mcp')->assertOk()->assertSee('Agent Toolkit')->assertSee('PAYPAL_MCP_TRANSPORT')->assertSee('@paypal/mcp');
+});

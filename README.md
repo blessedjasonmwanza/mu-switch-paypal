@@ -179,9 +179,9 @@ keys. These rules are enforced in code, not in the prompt:
 
 | | |
 | --- | --- |
-| **PayPal** | Orders v2 (create, capture, guest card checkout), FX as a Service (exchange-rate quotes, rates locked to orders with `fx_id`), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; works alongside the PayPal MCP server |
+| **PayPal** | JS SDK v6 (PayPal's own button on merchant pay pages: the payer approves in PayPal's window without leaving the page), Orders v2 (create, capture, guest card checkout), FX as a Service (exchange-rate quotes, rates locked to orders with `fx_id`), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; PayPal's Agent Toolkit for our agents (PayPal's official `@paypal/mcp` server, built on `@paypal/agent-toolkit`, run locally) |
 | **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): a Send Money agent with tool calling and human approval before any transfer, conversation memory, and a treasury agent that suggests float top-ups |
-| **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's MCP tools, and two MoneyUnify MCP servers: one for operators (21 tools: payments, payouts, refunds, transfers, merchants, FX, treasury) and one for each merchant (its own key, scoped to its own payments and pay links) |
+| **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's Agent Toolkit tools (read-only for the Send Money assistant: `get_order`, `list_transactions`, `get_refund`, `list_disputes`…), and two MoneyUnify MCP servers: one for operators (21 tools: payments, payouts, refunds, transfers, merchants, FX, treasury) and one for each merchant (its own key, scoped to its own payments and pay links) |
 | **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay |
 | **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest |
 
@@ -190,7 +190,8 @@ keys. These rules are enforced in code, not in the prompt:
 > Lenco move real money, so test them with small amounts.
 
 To run the AI features, each account adds one or more AI providers on the **AI &
-Agents** page, in failover order, with the server's `.env` as the fallback. PayPal MCP connects
+Agents** page, in failover order, with the server's `.env` as the fallback. PayPal's Agent Toolkit
+(PayPal's official MCP server, run locally with Node.js 18+) connects
 automatically through the account's PayPal provider. See
 [AI & MCP Setup](prezet/content/ai-and-mcp.md).
 
@@ -234,8 +235,29 @@ Each run shows up across the platform:
 - an email to the payer, when they gave one, once the money is delivered or
   refunded (`MAIL_MAILER=log` writes it to `storage/logs` locally).
 
-Refunds on PayPal's side are real sandbox refunds. Swap in Lenco or pawaPay
-when you want real local delivery.
+Refunds on PayPal's side are real sandbox refunds.
+
+**Real payouts in pawaPay's sandbox.** To deliver through a real mobile-money
+API instead of the simulator, add **pawaPay** on **Providers** with a pawaPay
+sandbox API token (free from pawaPay) and environment `sandbox`, and pause
+Simulated Payouts. (Or set `PAWAPAY_SANDBOX_TOKEN` before
+`composer setup --demo-data`, which does both.) pawaPay's Zambian sandbox
+numbers then decide the outcome for real:
+
+| Recipient number | pawaPay sandbox outcome |
+| --- | --- |
+| `260763456789` (MTN), `260973456789` (Airtel), `260953456700` (Zamtel) | Completed |
+| `260763456079` (MTN), `260973456089` (Airtel) | Failed (pawaPay's sandbox answered `RECIPIENT_NOT_ALLOWED_TO_RECEIVE` in our run), so the sender is refunded through PayPal |
+| `260763456129` (MTN), `260973456129` (Airtel) | Stays submitted, so the switch keeps verifying it |
+
+Check the connection with one small payout (sandboxes only; it refuses live
+accounts, so it never moves real money):
+
+```bash
+php artisan payouts:check {provider_id}
+```
+
+Lenco has no sandbox: its payouts move real money.
 
 ### Build status
 
