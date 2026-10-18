@@ -71,6 +71,7 @@ interface Transfer {
         effective_rate: string;
         margin_percent: string;
         margin_amount: string;
+        rate_source?: 'paypal' | 'moneyunify' | null;
     };
     funding: { provider: string | null; status: string | null };
     payout: { provider: string | null; status: string } | null;
@@ -88,6 +89,7 @@ interface Quote {
         effective_rate: string;
         margin_percent: string;
         margin_amount: string;
+        rate_source?: 'paypal' | 'moneyunify';
     };
     operator_fees: { paypal: Money | null; payout: Money | null };
     funding_provider: string;
@@ -704,7 +706,15 @@ export default function SendMoney({
                                                     </div>
                                                 </div>
                                                 <dl className="mt-3 space-y-1.5 border-t border-sidebar-border/60 pt-3">
-                                                    <QuoteRow label="Rate">
+                                                    <QuoteRow
+                                                        label={
+                                                            shownQuote.fx
+                                                                .rate_source ===
+                                                            'paypal'
+                                                                ? 'Rate (PayPal FX)'
+                                                                : 'Rate'
+                                                        }
+                                                    >
                                                         1{' '}
                                                         {
                                                             shownQuote
@@ -1293,6 +1303,8 @@ export default function SendMoney({
                                                 shownTransfer.fx.margin_percent,
                                             )}
                                             %
+                                            {shownTransfer.fx.rate_source ===
+                                                'paypal' && ' · PayPal FX rate'}
                                         </span>
                                     </div>
                                     <div>

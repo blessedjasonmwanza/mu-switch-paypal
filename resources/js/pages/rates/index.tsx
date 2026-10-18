@@ -37,6 +37,21 @@ interface RateItem {
     margin_percent: number;
     country_code: string | null;
     country_name: string | null;
+    rate_source?: 'paypal' | 'moneyunify';
+}
+
+interface RateSource {
+    source: 'paypal' | 'moneyunify';
+    state:
+        | 'enabled'
+        | 'not_enabled'
+        | 'unavailable'
+        | 'unknown'
+        | 'off'
+        | 'no_paypal';
+    message: string | null;
+    activation_url: string | null;
+    provider: string | null;
 }
 
 interface QuoteData {
@@ -50,6 +65,7 @@ interface QuoteData {
     margin_percent: string;
     margin_amount: string;
     is_fx: boolean;
+    rate_source?: 'paypal' | 'moneyunify';
     quoted_at: string;
     expires_at: string;
     expires_in_seconds: number;
@@ -63,6 +79,7 @@ interface RatesPageProps {
     quoteTtlMinutes: number;
     supportedCurrencies: string[];
     activeQuote?: QuoteData | null;
+    rateSource: RateSource;
 }
 
 const selectClassName =
@@ -509,6 +526,70 @@ function CorridorQuotePopover({
     );
 }
 
+/**
+ * Where this account's rates come from: PayPal's FX when its PayPal business
+ * account has FX as a Service, otherwise MoneyUnify's rate table, with the
+ * way to switch PayPal FX on.
+ */
+function PaypalFxNotice({ rateSource }: { rateSource: RateSource }) {
+    if (rateSource.state === 'no_paypal') {
+        return null;
+    }
+
+    if (rateSource.source === 'paypal') {
+        return (
+            <div
+                className="flex items-center gap-3 rounded-xl border border-[#cfe0f5] bg-[#eef4fb] px-4 py-3 text-xs text-[#003087] dark:border-[#1e3a5f] dark:bg-[#0f1a2b] dark:text-[#93c5fd]"
+                data-test="paypal-fx-notice"
+            >
+                <img
+                    src="/paypal.png"
+                    alt=""
+                    className="h-5 w-5 object-contain"
+                />
+                <p>
+                    <span className="font-semibold">Rates from PayPal FX.</span>{' '}
+                    Quotes use PayPal&apos;s own exchange rates through{' '}
+                    {rateSource.provider}, plus your spread. Payments in another
+                    currency are converted by PayPal at a locked rate.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+            data-test="paypal-fx-notice"
+        >
+            <p>
+                <span className="font-semibold">
+                    {rateSource.state === 'off'
+                        ? 'Using MoneyUnify rates.'
+                        : rateSource.state === 'unavailable'
+                          ? 'PayPal FX is unavailable right now.'
+                          : 'Use PayPal’s exchange rates.'}
+                </span>{' '}
+                {rateSource.state === 'off'
+                    ? `${rateSource.provider} is set to MoneyUnify's rates. Switch its Exchange rates setting to paypal on the Providers page.`
+                    : rateSource.state === 'unavailable'
+                      ? "Quotes use MoneyUnify's rates until PayPal answers again."
+                      : `Enable FX as a Service on the PayPal business account behind ${rateSource.provider}, and quotes switch to PayPal's rates automatically. Until then, MoneyUnify's rates are used.`}
+            </p>
+            {rateSource.activation_url && (
+                <a
+                    href={rateSource.activation_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 rounded-full bg-amber-900 px-3 py-1.5 text-center font-semibold text-amber-50 hover:opacity-90 dark:bg-amber-200 dark:text-amber-950"
+                >
+                    Enable PayPal FX
+                </a>
+            )}
+        </div>
+    );
+}
+
 export default function RatesIndexPage({
     baseCurrency,
     rates,
@@ -516,6 +597,7 @@ export default function RatesIndexPage({
     quoteTtlMinutes,
     supportedCurrencies,
     activeQuote: serverActiveQuote,
+    rateSource,
 }: RatesPageProps) {
     const [initialQuote] = useState(() =>
         restoreQuote(serverActiveQuote ?? null),
@@ -732,6 +814,8 @@ export default function RatesIndexPage({
                         </p>
                     </div>
                 </div>
+
+                <PaypalFxNotice rateSource={rateSource} />
 
                 {/* Metric Summary Strip */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1298,8 +1382,17 @@ export default function RatesIndexPage({
                                                         {flagEmoji(countryCode)}
                                                     </span>
                                                     <div>
-                                                        <div className="font-medium text-neutral-900 dark:text-neutral-100">
+                                                        <div className="flex items-center gap-1.5 font-medium text-neutral-900 dark:text-neutral-100">
                                                             {rate.currency}
+                                                            {rate.rate_source ===
+                                                                'paypal' && (
+                                                                <span
+                                                                    className="rounded bg-[#eef4fb] px-1 py-px text-[9px] font-semibold text-[#003087] dark:bg-[#0f1a2b] dark:text-[#93c5fd]"
+                                                                    title="PayPal's own exchange rate"
+                                                                >
+                                                                    PayPal
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div className="text-xs text-neutral-500 dark:text-neutral-400">
                                                             {meta?.name ||
