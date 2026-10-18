@@ -2,23 +2,26 @@
 
 ![MoneyUnify Logo](public/moneyunify-logo-horizontal.png)
 
-> **PayPal AI Hackathon 2026 entry: MoneyUnify-PayPal.** The engine that
-> connects PayPal to African mobile money. Aggregators, payment service
-> providers and operators use it to let their merchants and customers be paid
-> with PayPal and settled straight to a mobile-money wallet, through one API, a
-> pay link or an AI agent. [Jump to MoneyUnify-PayPal ↓](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
+> **PayPal AI Hackathon 2026 entry: MoneyUnify-PayPal.** MoneyUnify is an
+> open-source payment engine that connects PayPal to African mobile money. A
+> business integrates it once and can take PayPal payments from anyone in the
+> world and settle them straight to a mobile-money wallet, in local currency,
+> at PayPal's own exchange rate, through an API, a pay link or an AI agent.
+> [Read the summary ↓](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
 
 ## Table of Contents
 
 - [MoneyUnify-PayPal: PayPal to mobile money, with an AI agent](#moneyunify-paypal-paypal-to-mobile-money-with-an-ai-agent)
+  - [At a glance](#at-a-glance)
   - [The problem](#the-problem)
-  - [The solution](#the-solution)
-  - [For aggregators, DFSPs, FSPs and operators](#for-aggregators-dfsps-fsps-and-operators)
-  - [Operating model and compliance](#operating-model-and-compliance)
+  - [What MoneyUnify does](#what-moneyunify-does)
+  - [Who it's for, and the impact at scale](#who-its-for-and-the-impact-at-scale)
   - [How it works](#how-it-works)
-  - [Why an agent, and why it's safe](#why-an-agent-and-why-its-safe)
+  - [Proven end to end](#proven-end-to-end)
+  - [Safety built in](#safety-built-in)
+  - [Operating model and compliance](#operating-model-and-compliance)
   - [Built with](#built-with)
-  - [Try it end to end (judges and testers)](#try-it-end-to-end-judges-and-testers)
+  - [Run it yourself](#run-it-yourself)
   - [Build status](#build-status)
 - [Introduction and Objective](#introduction-and-objective)
   - [What does MoneyUnify do?](#what-does-moneyunify-do)
@@ -36,6 +39,17 @@
 
 ## MoneyUnify-PayPal: PayPal to mobile money, with an AI agent
 
+### At a glance
+
+| | |
+| --- | --- |
+| **The problem** | Hundreds of millions of Africans are paid and pay on mobile money. The world pays with PayPal. There's no simple, trustworthy path between the two, and every business that wants one has to integrate PayPal, an FX source and each mobile-money operator separately. |
+| **The solution** | One engine that does it once. MoneyUnify collects with PayPal, converts at PayPal's own exchange rate, and pays out to MTN, Airtel, Zamtel, M-Pesa and other wallets, falling back across providers and refunding automatically if delivery fails. |
+| **Who uses it** | Aggregators, payment service providers, DFSPs, mobile-money operators and e-commerce businesses, as their own payment tool, as a gateway for their merchants, or both. |
+| **How people use it** | A pay link, a REST API, a Send Money page, an AI assistant that turns "send K500 to my brother" into an approved transfer, and MCP servers for any AI agent or app. |
+| **Scale** | 32 countries, 14 payment providers and 24 currencies in the switch today, and PayPal FX into 100+ currencies. |
+| **Proof** | A real PayPal sandbox payment delivered to a mobile wallet through pawaPay's sandbox in six seconds, and a failed delivery refunded through PayPal automatically, with every step and ledger entry recorded. |
+
 ### The problem
 
 Hundreds of millions of people across Africa keep their money on a phone:
@@ -43,9 +57,9 @@ MTN MoMo, Airtel Money, M-Pesa, Zamtel Kwacha. Their relatives abroad, and the
 customers and clients who want to pay them, keep theirs in a PayPal wallet.
 The two worlds barely touch.
 
-- A nurse in London who wants to pay her mother's grocery bill in Kitwe has
-  PayPal, but her mother only has an Airtel number. She falls back on cash
-  agents, transfer counters and opaque fees. The World Bank's Remittance Prices
+- A nurse in London wants to pay her mother's grocery bill in Kitwe. She has
+  PayPal; her mother only has an Airtel number. She falls back on cash agents,
+  transfer counters and opaque fees. The World Bank's Remittance Prices
   Worldwide data ranks Sub-Saharan Africa as the most expensive region in the
   world to send money to.
 - A freelance designer in Nairobi is paid by an overseas client through PayPal,
@@ -53,86 +67,136 @@ The two worlds barely touch.
 - A small shop in Lusaka could sell to the diaspora, but its customers abroad
   can't pay into a mobile wallet, so the sale never happens.
 
-The money exists on both sides. What's missing is a trustworthy path between a
-PayPal balance and a mobile-money wallet, simple enough that you can just ask
-for it.
+The money exists on both sides. What's missing is the plumbing. Building it is
+the same hard job for every business that tries: a PayPal integration, an
+exchange-rate source, and a separate integration, contract and float for every
+mobile-money operator in every country. So most never do, and the two worlds
+stay apart.
 
-### The solution
+### What MoneyUnify does
 
-**MoneyUnify-PayPal** connects the two. You tell an AI agent what you want in
-plain language:
+MoneyUnify is the engine that removes that work. A business integrates it once
+and gets every route MoneyUnify supports, across the providers it has
+contracts with.
 
-> "Send mum K2,000 for groceries, same Airtel number as last time."
+1. **Collects with PayPal, from anyone.** Payers approve with PayPal's own
+   button (JS SDK v6) or PayPal checkout, or pay by debit or credit card as a
+   guest, with no PayPal account needed.
+2. **Converts at PayPal's rate.** With FX as a Service on the business's PayPal
+   account, every quote uses PayPal's own exchange rate, locked for ten
+   minutes, and PayPal locks the rate on the order too. Without it, MoneyUnify's
+   own rates are used.
+3. **Delivers to the wallet.** The switch pays out in local currency through
+   the business's payout providers (pawaPay and Lenco today), trying the next
+   provider only when one definitely refuses, so a payout is never made twice.
+4. **Never strands money.** If delivery fails, the PayPal payment is refunded
+   automatically, and the payer is emailed either way when they gave an email
+   address. Every step is on the
+   transfer's timeline and in a double-entry ledger.
+5. **Works through people and agents.** Senders can just ask the AI assistant:
 
-The agent:
+   > "Send K500 to my brother on 0966554433."
 
-1. **Understands the request.** It resolves the recipient, the country and the
-   mobile network, and checks them against your past transfers.
-2. **Quotes honestly.** It shows the all-in cost (fees and FX rate) and what the
-   recipient will actually receive. It explains in plain English why it picked
-   the cheapest provider.
-3. **Collects with PayPal.** You approve in PayPal, so the money only moves when
-   you say so.
-4. **Delivers to the phone.** The MoneyUnify switch pays out in local currency.
-   If one provider is down, it automatically tries the next one: pawaPay, MTN,
-   Airtel, Lenco and so on.
-5. **Never strands your money.** If every provider fails, the PayPal payment is
-   refunded automatically, and you can see each step on a live timeline.
+   It quotes the exact amount, asks for approval, and returns a PayPal link. It
+   only ever uses the amount and number the person typed, and it can check
+   PayPal's own record of a payment through PayPal's Agent Toolkit. Any other
+   agent or app can do the same over MoneyUnify's MCP servers.
 
-Every PayPal wallet becomes a way to pay someone on mobile money in **32
-countries**. Every transfer is a new local payout through the mobile-money
-networks the switch already integrates. Merchants and freelancers get paid by
-PayPal customers straight into the wallet they actually use.
-
-The same capabilities are exposed as **MCP servers**, so any AI agent,
-including one already using PayPal's MCP server, can quote corridors, collect,
-pay out and settle merchants on mobile money. See
-[MCP Servers](prezet/content/mcp.md).
-
-### For aggregators, DFSPs, FSPs and operators
+### Who it's for, and the impact at scale
 
 Mobile money moves more than a trillion US dollars a year, most of it in
-Sub-Saharan Africa (GSMA, *State of the Industry Report on Mobile Money*). Very
-little of it can be reached from PayPal today, because every business would
-have to integrate PayPal, an FX source, and each mobile-money operator on its
-own.
+Sub-Saharan Africa (GSMA, *State of the Industry Report on Mobile Money*).
+Very little of it can be reached from PayPal today. MoneyUnify changes that
+for whoever deploys it, and each deployment serves many merchants at once.
 
-MoneyUnify is the **switch that does it once, for everyone**. An aggregator
-(or a bank, a DFSP or FSP, or a mobile-money operator) runs MoneyUnify with its
-own PayPal account and its own payout accounts (Lenco and pawaPay are built
-in), and gets:
+**One switch, used three ways:**
 
-- **Merchant onboarding.** Each merchant gets a settlement wallet, a currency
-  and a commission rate, from the dashboard or the API.
-- **A pay link per merchant.** Customers anywhere pay in USD, EUR or GBP with
-  PayPal; the merchant is settled in ZMW, MWK or its own currency, to its
-  mobile-money wallet, seconds after PayPal confirms.
-- **A merchant API** (`/api/v1/merchants`) so platforms and apps can onboard
-  merchants and charge customers without touching PayPal's, the FX provider's
-  or any operator's API.
-- **FX from PayPal, with no FX provider to sign up with.** If the operator's
-  PayPal business account has FX as a Service, every quote uses PayPal's own
-  exchange rates into 100+ currencies (ZMW, KES, UGX, TZS, GHS, NGN, MWK, RWF,
-  XOF, XAF, ZAR and more), and PayPal converts payments in other currencies at a
-  locked rate. A DFSP, an operator, or a country running MoneyUnify as its
-  national switch gets auditable, PayPal-grade FX from the PayPal account it
-  already has. Without it, MoneyUnify's own rates are used, so nothing breaks.
-- **Revenue built in.** The aggregator keeps an FX margin and a commission per
-  payment, both shown up front.
-- **Trust built in.** A locked exchange rate, automatic PayPal refunds when a
-  settlement fails, refunds from the dashboard or API, and a double-entry
-  ledger with float alerts so payout accounts never run dry.
+- **As a business's own payment tool:** collect from customers, pay out,
+  refund and send transfers from its own platform.
+- **As a gateway for other businesses:** an aggregator, DFSP or operator
+  onboards merchants, gives each a pay link and API access, and settles them to
+  their wallets less a commission.
+- **Both at once,** on the same account.
 
-- **One switch, used three ways.** Run it as your own payment tool (collect,
-  pay out, refund, send transfers from your platform), as a gateway that
-  collects and settles for other merchants, or both. Each way is open to AI
-  agents and apps over MCP: the operator server for the operator, and a merchant
-  server where each merchant connects with its own key and sees only its own
-  payments.
+**What a deploying business gets:**
 
-PayPal gains a new way to serve the businesses and families of a whole
-continent; operators gain new inbound volume into their wallets; merchants get
-paid by the world in the money they already use.
+- **Merchant onboarding** with a settlement wallet, currency and commission,
+  from the dashboard or the merchant API (`/api/v1/merchants`).
+- **Pay links** where customers anywhere pay in USD, EUR or GBP, and the
+  merchant is settled in ZMW, MWK or its own currency seconds after PayPal
+  confirms.
+- **FX without a separate FX provider:** PayPal's own rates into 100+
+  currencies, including ZMW, KES, UGX, TZS, GHS, NGN, MWK, RWF, XOF, XAF and ZAR,
+  for any business with FX as a Service on its PayPal business account. This
+  is what lets a DFSP, an operator or a national switch offer accurate,
+  auditable cross-border pricing from an account it already has.
+- **Revenue built in:** an FX margin and a commission per payment, both shown
+  up front.
+- **AI and app access for every merchant:** an operator MCP server for the
+  business, and a merchant MCP server where each merchant connects its own apps
+  or assistant with its own key and sees only its own payments.
+- **Treasury:** balances per provider, float-low alerts and AI suggestions for
+  topping up payout accounts, so payouts don't run dry.
+
+PayPal gains a way to serve the businesses and families of a whole continent;
+operators gain new inbound volume into their wallets; merchants get paid by
+the world in the money they already use.
+
+### How it works
+
+```mermaid
+flowchart LR
+    S[Payer or sender] -->|pay link, API, Send Money or AI assistant| MU[MoneyUnify]
+    MU -->|quote at PayPal's FX rate| S
+    MU -->|create order| PP[(PayPal<br/>Orders v2)]
+    S -->|approves with PayPal or card| PP
+    PP -->|capture, webhook| MU
+    MU -->|payout with automatic fallback| SW[MoneyUnify Switch]
+    SW --> M1[pawaPay] & M2[Lenco] & M3[...]
+    MU -.->|delivery failed| R[PayPal refund]
+    AG[AI agents and apps] -->|MCP| MU
+```
+
+1. **Quote.** MoneyUnify prices the transfer: what the payer pays, what arrives,
+   the locked exchange rate and whether it's PayPal's, and the route.
+2. **Collect.** It creates the PayPal order; the payer approves with PayPal or
+   by card, and the payment is captured (on return, by webhook or on the next
+   check, whichever comes first).
+3. **Pay out.** The switch pays the recipient in local currency through the
+   first payout provider that can, falling back only after a definite refusal.
+4. **Settle or refund.** The transfer ends *delivered* or *refunded*, never
+   stuck, with each step, both legs and the locked rate on record.
+
+### Proven end to end
+
+Both paths were run for real in PayPal's sandbox and pawaPay's sandbox on
+October 18, 2026, with nothing simulated:
+
+| | Delivered | Refunded |
+| --- | --- | --- |
+| Quote | ZMW 20.00 for USD 1.02, at PayPal's FX rate | Same |
+| PayPal | Payment captured (`4MD65230XU506884F`) | Payment captured (`40U28415C5158020C`) |
+| pawaPay | Paid out to `260763456789`: completed | Refused: "The payment would exceed customers maximum allowed balance." |
+| Outcome | **Delivered** six seconds after capture | **Refunded** through PayPal (`5MY87816BM615422U`) nine seconds after capture |
+| Ledger | Collection, PayPal fee and payout recorded | Collection, PayPal fee and refund recorded |
+
+### Safety built in
+
+The AI assistant does the work people find hard, but it never holds the keys.
+These rules are enforced in code, not in the prompt:
+
+- **Two approvals before money moves:** the person approves the transfer in the
+  chat, then approves the payment in PayPal itself.
+- **Only what the person said:** the assistant can quote or start a transfer
+  only for an amount and a phone number the person typed in that conversation.
+- **Send-only:** the assistant can't refund, and it gets only PayPal's
+  read-only tools, so it can check a payment but never move or refund money
+  through PayPal.
+- **Spending limits** per transfer and per day, for every transfer from any
+  channel.
+- **Quotes expire,** so nobody pays at a stale exchange rate.
+- **Everything is audited:** each transfer's timeline is linked to the
+  conversation that started it, and every request and provider call is logged.
 
 ### Operating model and compliance
 
@@ -162,157 +226,95 @@ accounts on their platforms. MoneyUnify doesn't include KYC or sanctions
 screening; a deploying business adds the checks its licence requires, using
 its own providers.
 
-### How it works
-
-```mermaid
-flowchart LR
-    S[Sender] -->|plain-language request| A[MoneyUnify-PayPal agent<br/>Laravel AI SDK + Claude]
-    A -->|quote: fees, FX, best route| S
-    A -->|create order| PP[(PayPal<br/>Orders v2)]
-    S -->|approves in PayPal| PP
-    PP -->|webhook: capture completed| B[PayPal transfer]
-    B -->|payout with automatic fallback| SW[MoneyUnify Switch]
-    SW --> M1[pawaPay] & M2[MTN MoMo] & M3[Airtel Money] & M4[...]
-    B -.->|all providers failed| R[PayPal refund]
-```
-
-1. **Collect.** A new PayPal driver plugs into the switch like any other
-   provider. It creates PayPal orders, sends the payer to approve, and captures
-   the payment.
-2. **Confirm.** Signature-verified PayPal webhooks mark the funding leg as paid.
-3. **Pay out.** The switch, which already handles collections across 13
-   providers, now also handles **payouts**, with the same country filtering,
-   cost-aware ordering and automatic fallback.
-4. **Settle or refund.** The transfer records both legs, the locked FX rate
-   and every state change. It ends either *delivered* or *refunded*, never
-   stuck.
-
-### Why an agent, and why it's safe
-
-The agent does the work people find hard: working out who and where, comparing
-routes, explaining costs, and recovering from failures. It never holds the
-keys. These rules are enforced in code, not in the prompt:
-
-- **You approve every payment twice:** first in the chat, when the agent asks
-  to create the payment, and then in PayPal itself. The agent can't move money
-  on its own.
-- **Spending limits** per transfer and per day. Requests over the limit are
-  refused, and the agent explains why.
-- **Every transfer needs your approval** before it starts, whatever the agent
-  was asked; PayPal's own tools need approval too.
-- **Quotes expire**, so you never pay at a stale FX rate.
-- **Every transfer is audited:** its timeline records each step, and it's
-  linked to the conversation that started it.
-
 ### Built with
 
 | | |
 | --- | --- |
-| **PayPal** | JS SDK v6 (PayPal's own button on merchant pay pages: the payer approves in PayPal's window without leaving the page), Orders v2 (create, capture, guest card checkout), FX as a Service (exchange-rate quotes, rates locked to orders with `fx_id`), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; PayPal's Agent Toolkit for our agents (PayPal's official `@paypal/mcp` server, built on `@paypal/agent-toolkit`, run locally) |
-| **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): a Send Money agent with tool calling and human approval before any transfer, conversation memory, and a treasury agent that suggests float top-ups |
-| **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's Agent Toolkit tools (read-only for the Send Money assistant: `get_order`, `list_transactions`, `get_refund`, `list_disputes`…), and two MoneyUnify MCP servers: one for operators (21 tools: payments, payouts, refunds, transfers, merchants, FX, treasury) and one for each merchant (its own key, scoped to its own payments and pay links) |
-| **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay (API v2, tested against pawaPay's sandbox) |
-| **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest |
+| **PayPal** | JS SDK v6 (PayPal's own button on merchant pay pages), Orders v2 (create, capture, guest card checkout), FX as a Service (PayPal's exchange rates, locked to orders with `fx_id`), Refunds API (full, partial and automatic), Webhooks (signature verified), and PayPal's Agent Toolkit through its MCP integration (PayPal's official `@paypal/mcp` server) |
+| **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): the Send Money assistant, with tool calling, human approval and conversation memory, and a treasury agent that suggests float top-ups |
+| **Agent interface** | Laravel MCP: PayPal's Agent Toolkit tools for the assistant (read-only: `get_order`, `list_transactions`, `get_refund`, `list_disputes` and more), and two MoneyUnify MCP servers, one for operators (21 tools: payments, payouts, refunds, transfers, merchants, FX, treasury) and one for each merchant (9 tools, scoped to its own payments and pay links) |
+| **Mobile money** | The MoneyUnify switch's 14 payment providers; payouts through pawaPay (API v2) and Lenco |
+| **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest (630 tests) |
 
-> **Test safely.** Develop against PayPal's sandbox, pawaPay's sandbox or the
-> built-in Simulated Payouts driver. Lenco has no sandbox: payouts through
-> Lenco move real money, so test them with small amounts.
+### Run it yourself
 
-To run the AI features, each account adds one or more AI providers on the **AI &
-Agents** page, in failover order, with the server's `.env` as the fallback. PayPal's Agent Toolkit
-(PayPal's official MCP server, run locally with Node.js 18+) connects
-automatically through the account's PayPal provider. See
-[AI & MCP Setup](prezet/content/ai-and-mcp.md).
+Every flow can be exercised without moving real money. MoneyUnify runs against
+PayPal's sandbox and pawaPay's sandbox, and it includes a **Simulated Payouts**
+provider for markets whose payout providers have no sandbox. Simulated Payouts
+needs no credentials, is never available when `APP_ENV=production`, and is
+never counted as real coverage. (Lenco has no sandbox, so it's used only with
+live accounts.)
 
-### Try it end to end (judges and testers)
+**Fastest start:** `composer setup --demo-data` creates a demo account
+(`demo@moneyunify.test`, password `password`) with a week of activity. See
+[Local Setup](#local-setup).
 
-Mobile-money payout providers rarely offer a sandbox (Lenco has none), so the
-switch ships a **Simulated Payouts** provider. With it and a PayPal sandbox app,
-you can run the whole flow, PayPal in and mobile money out, without moving
-real money. It needs no credentials. It's only available when `APP_ENV` isn't
-`production`, and it's never counted as real payout coverage.
-
-1. **Sign up** (or use the demo account from `composer setup --demo-data`, see
-   [Local Setup](#local-setup)) and open **Providers**.
-2. **Add PayPal**: your sandbox app's client ID and secret, with environment
-   `sandbox` (from [developer.paypal.com](https://developer.paypal.com/dashboard/applications)).
-3. **Add Simulated Payouts**: pick the countries to deliver to (Zambia by
-   default). Leave **Refuse numbers ending in** empty to use `0000`.
-4. **Send money** on the **Send Money** page, by the form or by asking the AI
-   assistant (for example *"Send K50 to 0977123456"*). Pay with a PayPal
-   sandbox buyer account, or choose **Debit or credit card** to pay as a guest.
-5. **Or collect for a merchant**: add one on **Merchants**, create a pay link
+1. **Add PayPal** on **Providers**: a sandbox app's client ID and secret, with
+   environment `sandbox` (from [developer.paypal.com](https://developer.paypal.com/dashboard/applications)).
+2. **Add a payout provider:** pawaPay with a sandbox API token for real
+   sandbox payouts, or Simulated Payouts.
+3. **Send money** on **Send Money**, with the form or by asking the assistant
+   (for example *"Send K50 to 0977123456"*). Pay with a PayPal sandbox buyer
+   account, or choose **Debit or credit card** to pay as a guest.
+4. **Or collect for a merchant:** add one on **Merchants**, create a pay link
    and pay it as a customer.
 
-The recipient's number decides what the simulated payout does, so every path
-can be shown on demand:
+The AI features use the AI providers each account adds on **AI & Agents**, with
+the server's `.env` as the fallback. PayPal's Agent Toolkit connects
+automatically through the account's PayPal provider (it needs Node.js 18+). See
+[AI & MCP Setup](prezet/content/ai-and-mcp.md).
 
-| Recipient number ends in | What happens |
-| --- | --- |
-| anything else, e.g. `0977123456` | Delivered |
-| `0000` | Refused, so the switch falls back to the next payout provider (or refunds the sender through PayPal if there's none) |
-| `9999` | No definite answer, so the switch verifies the payout before deciding |
-| `1111` | Accepted, then fails on verification, so the sender is refunded through PayPal |
+**Choosing the outcome.** The recipient's number decides what a sandbox payout
+does, so every path can be shown on demand.
 
-Each run shows up across the platform:
+With **pawaPay's sandbox** (Zambia):
 
-- the transfer's timeline on **Send Money**;
-- the PayPal-verified receipt;
-- the ledger entries, including the illustrative 1% payout fee;
-- the balances and float alerts on **Treasury**;
-- every provider call on **Logs**;
-- an email to the payer, when they gave one, once the money is delivered or
-  refunded (`MAIL_MAILER=log` writes it to `storage/logs` locally).
-
-Refunds on PayPal's side are real sandbox refunds.
-
-**Real payouts in pawaPay's sandbox.** To deliver through a real mobile-money
-API instead of the simulator, add **pawaPay** on **Providers** with a pawaPay
-sandbox API token (free from pawaPay) and environment `sandbox`, and pause
-Simulated Payouts. (Or set `PAWAPAY_SANDBOX_TOKEN` before
-`composer setup --demo-data`, which does both.) pawaPay's Zambian sandbox
-numbers then decide the outcome for real:
-
-| Recipient number | pawaPay sandbox outcome |
+| Recipient number | Outcome |
 | --- | --- |
 | `260763456789` (MTN), `260973456789` (Airtel), `260953456700` (Zamtel) | Completed |
-| `260763456079` (MTN), `260973456089` (Airtel) | Failed (pawaPay's sandbox answered `RECIPIENT_NOT_ALLOWED_TO_RECEIVE` in our run), so the sender is refunded through PayPal |
-| `260763456129` (MTN), `260973456129` (Airtel) | Stays submitted, so the switch keeps verifying it |
+| `260763456079` (MTN), `260973456089` (Airtel) | Failed, so the sender is refunded through PayPal |
+| `260763456129` (MTN), `260973456129` (Airtel) | Stays submitted, so the switch keeps checking it |
 
-Check the connection with one small payout (sandboxes only; it refuses live
+With **Simulated Payouts**:
+
+| Recipient number ends in | Outcome |
+| --- | --- |
+| anything else, e.g. `0977123456` | Delivered |
+| `0000` | Refused, so the switch falls back to the next payout provider, or refunds the sender |
+| `9999` | No definite answer, so the switch verifies before deciding |
+| `1111` | Accepted, then fails, so the sender is refunded through PayPal |
+
+Each run shows across the platform: the transfer's timeline on **Send Money**,
+the PayPal-verified receipt, the ledger and fees, balances and float alerts on
+**Treasury**, every provider call on **Logs**, and an email to the payer
+(`MAIL_MAILER=log` writes it to `storage/logs` locally).
+
+To check a payout provider with one small sandbox payout (it refuses live
 accounts, so it never moves real money):
 
 ```bash
 php artisan payouts:check {provider_id}
 ```
 
-Lenco has no sandbox: its payouts move real money.
-
 ### Build status
 
-The switch below existed before the hackathon. MoneyUnify-PayPal is being built
-during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
+The switch existed before the hackathon. Everything below was built during it,
+following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 
-- [x] PayPal collection driver and webhooks
-- [x] Payouts in the switch, with fallback, plus a double-entry ledger
-- [x] Treasury: balances, float-low alerts, and tracked transfers between accounts
-- [x] Treasury agent: AI rebalancing suggestions, checked by guardrails and approved by a person
-- [x] FX quotes: exchange rates and conversions locked for 10 minutes, per account
-- [x] Cross-border transfers: pay with PayPal, delivered to mobile money at a locked rate, refunded if delivery fails
-- [x] Send Money page and AI assistant: quote, approve, pay with PayPal, follow delivery
+- [x] PayPal collection: Orders v2, webhooks, guest card checkout, and PayPal's JS SDK v6 button on pay pages
+- [x] PayPal FX as a Service: quotes at PayPal's own rates, locked to orders, with MoneyUnify's rates as the fallback
+- [x] Payouts in the switch, with fallback that never pays twice, and a double-entry ledger
+- [x] Cross-border transfers: PayPal in, mobile money out at a locked rate, refunded if delivery fails
+- [x] pawaPay API v2 for collections and payouts
 - [x] Refunds: full and partial, from the API and the dashboard, plus refunds made in PayPal
 - [x] Merchants for aggregators: onboarding, pay links, merchant API, commission, settlement to mobile money
-- [x] Guest card checkout through PayPal, for payers without a PayPal account
-- [x] PayPal FX: quotes at PayPal's own rates, locked to orders, with MoneyUnify's rates as the fallback
-- [x] PayPal-verified receipts with a signed permanent link
-- [x] Payer emails: transfer or merchant payment delivered, and refunds completed
+- [x] PayPal-verified receipts and payer emails
+- [x] Send Money page and AI assistant, with PayPal's Agent Toolkit (read-only tools)
+- [x] MCP servers for operators and for each merchant
+- [x] Treasury: balances, float alerts, and AI rebalancing suggestions approved by a person
 - [x] Demo data: `composer setup --demo-data`
-- [x] MCP servers: operator (API token) and merchant (per-merchant key), over the same actions as the REST API
-- [x] PayPal's JS SDK v6 button on merchant pay pages
-- [x] PayPal's Agent Toolkit for the assistant (PayPal's official MCP server, read-only tools)
-- [x] pawaPay API v2 for collections and payouts
-- [x] Proven end to end in the sandboxes: a PayPal payment delivered to mobile money through pawaPay, and a refused payout refunded through PayPal automatically
-- [ ] Hosted demo on Render
+- [x] Proven end to end in PayPal's and pawaPay's sandboxes
+- [ ] Hosted demo
 
 ## Introduction and Objective
 
