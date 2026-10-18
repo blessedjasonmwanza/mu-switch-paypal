@@ -102,3 +102,17 @@ test('demo receipts show paypal\'s record without ever calling paypal', function
 
     Http::assertNothingSent();
 });
+
+test('a pawapay sandbox token makes the demo pay out through pawapay\'s real sandbox', function () {
+    config(['services.pawapay.sandbox_token' => 'pawapay-sandbox-token']);
+
+    $this->artisan('demo:seed')->assertSuccessful();
+
+    $user = User::where('email', DemoSeeder::EMAIL)->sole();
+    $pawapay = PaymentProvider::where('user_id', $user->id)->where('name', 'pawaPay sandbox')->sole();
+
+    expect($pawapay->is_active)->toBeTrue()
+        ->and($pawapay->config['environment'])->toBe('sandbox')
+        ->and(PaymentProvider::where('user_id', $user->id)->where('name', 'Simulated Payouts')->value('is_active'))->toBeFalse()
+        ->and(CrossBorderTransfer::where('user_id', $user->id)->count())->toBe(7); // the history is unchanged
+});

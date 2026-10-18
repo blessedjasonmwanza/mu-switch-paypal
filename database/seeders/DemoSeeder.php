@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Ai\Agents\SendMoneyAgent;
+use App\Http\Controllers\Providers\PawapayController;
 use App\Http\Controllers\Providers\PaypalController;
 use App\Http\Controllers\Providers\SandboxPayoutController;
 use App\Models\CrossBorderTransfer;
@@ -113,6 +114,19 @@ class DemoSeeder extends Seeder
             $paypal->update(['is_active' => false, 'config' => ['environment' => 'sandbox', 'supported_countries' => ['ZM'], 'fx_rates' => 'moneyunify']]);
         } finally {
             Carbon::setTestNow();
+        }
+
+        // With a pawaPay sandbox token, new payouts go through pawaPay's real sandbox
+        // (its test numbers complete, fail or stay pending); the simulator is paused.
+        if (filled(config('services.pawapay.sandbox_token'))) {
+            PaymentProvider::create([
+                'user_id' => $user->id,
+                'name' => 'pawaPay sandbox',
+                'class' => PawapayController::class,
+                'config' => ['api_token' => config('services.pawapay.sandbox_token'), 'environment' => 'sandbox', 'supported_countries' => ['ZM']],
+                'is_active' => true,
+            ]);
+            $wallets->update(['is_active' => false]);
         }
 
         if (filled(config('services.paypal.sandbox_client_id')) && filled(config('services.paypal.sandbox_client_secret'))) {
