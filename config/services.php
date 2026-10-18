@@ -32,6 +32,9 @@ return [
      */
     'paypal' => [
         'connect_timeout' => (int) env('PAYPAL_CONNECT_TIMEOUT', 20),
+        // Added to the demo account by `php artisan demo:seed` (optional).
+        'sandbox_client_id' => env('PAYPAL_SANDBOX_CLIENT_ID'),
+        'sandbox_client_secret' => env('PAYPAL_SANDBOX_CLIENT_SECRET'),
     ],
 
     'postmark' => [

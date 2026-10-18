@@ -53,6 +53,7 @@
             "@php artisan key:generate",
             "@php artisan migrate --force",
             "@php artisan docs:index --fresh",
+            "App\\Console\\SetupScripts::demoData",
             "npm install",
             "npm run build"
         ],
