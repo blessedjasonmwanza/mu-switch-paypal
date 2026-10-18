@@ -122,7 +122,7 @@ Takes every quote field, plus:
 | `recipient_name` | string | nullable | Shown in the transfer's details. |
 | `network` | string | nullable | The recipient's network, when the payout provider can't detect it. |
 | `narration` | string | nullable, max 100 | Shown to the recipient where the provider supports it. |
-| `payer_email` | string | nullable, email | Pre-fills the sender's PayPal login. |
+| `payer_email` | string | nullable, email | Pre-fills the sender's PayPal login, and is where the sender is emailed when the transfer is delivered or refunded. |
 | `pay_with` | string | nullable, `paypal` or `card` | `card` opens PayPal on its guest debit or credit card form, for senders without a PayPal account. Defaults to `paypal`. |
 | `return_url` | string | nullable, URL | Where PayPal sends the sender after paying. |
 
@@ -204,6 +204,20 @@ their own; `verify` is the fallback.
 | `refund_failed` | PayPal refused the refund. Call `verify` to retry it; the retry reuses the same PayPal request, so the sender is never refunded twice. |
 
 A transfer can only be read by the account that created it.
+
+## Emails to the sender
+
+When the request includes `payer_email`, the sender gets an email:
+
+- **Delivered:** what the recipient received, what they paid with PayPal, the
+  locked exchange rate, the reference and a link to their PayPal-verified
+  receipt.
+- **Refunded:** the transfer couldn't be delivered, so the full payment went
+  back to them through PayPal, with the same reference and receipt link.
+
+Each email is sent once, after the change is saved, through your app's mail
+settings (`MAIL_*` in `.env`). Senders who gave no email aren't emailed; PayPal
+still sends its own receipts.
 
 ## Errors
 

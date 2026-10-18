@@ -186,3 +186,8 @@ test('guest card checkout is documented', function () {
     $this->get('/docs/api/merchants')->assertOk()->assertSee('pay_with', false);
     $this->get('/docs/api/cross-border-transfers')->assertOk()->assertSee('pay_with', false);
 });
+
+test('payer emails are documented', function () {
+    $this->get('/docs/api/cross-border-transfers')->assertOk()->assertSee('Emails to the sender');
+    $this->get('/docs/providers')->assertOk()->assertSee('Refund emails');
+});

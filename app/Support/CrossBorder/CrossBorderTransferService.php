@@ -23,6 +23,7 @@ use App\Support\Fx\Exceptions\FxException;
 use App\Support\Fx\FxQuote;
 use App\Support\Fx\FxQuoter;
 use App\Support\Market;
+use App\Support\Notifications\PayerNotifier;
 use App\Support\Payouts\PayoutDispatcher;
 use App\Support\ProviderCallContext;
 use App\Support\ProviderFees;
@@ -497,6 +498,10 @@ class CrossBorderTransferService
         });
 
         $transfer->refresh();
+
+        if ($moved && $to === CrossBorderStatus::DELIVERED) {
+            app(PayerNotifier::class)->transferDelivered($transfer);
+        }
 
         return $moved;
     }

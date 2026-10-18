@@ -573,6 +573,13 @@ webhooks, refunds, receipt and payout. Where PayPal can't offer guest checkout
 account's *Website preferences*), PayPal shows its usual login, and the payment
 goes through as it always does.
 
+### Refund emails
+
+When a refund completes (from the dashboard, the API, PayPal itself, or a
+cross-border transfer that couldn't be delivered), the payer is emailed once
+with the amount, the reference and their PayPal-verified receipt. The email goes
+to the address given for the payment; payments without one aren't emailed.
+
 ### PayPal-verified receipts
 
 After paying, the payer sees a receipt built from **PayPal's own record** of

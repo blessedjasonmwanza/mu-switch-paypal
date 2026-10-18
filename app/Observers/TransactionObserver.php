@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Support\CrossBorder\CrossBorderTransferService;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Ledger\LedgerRecorder;
+use App\Support\Notifications\PayerNotifier;
 use App\Support\ProviderFees;
 
 /**
@@ -13,7 +14,8 @@ use App\Support\ProviderFees;
  * amount) in sync so payments are auditable end-to-end regardless of which
  * provider handled them. The collection fee uses the provider's ACTUAL figure
  * when it returns one in the charge response, otherwise the schedule estimate.
- * Once saved, the transaction's ledger entries are synced to its state.
+ * Once saved, the transaction's ledger entries are synced to its state, and
+ * the payer is told when a refund completes.
  */
 class TransactionObserver
 {
@@ -72,6 +74,10 @@ class TransactionObserver
     {
         app(LedgerRecorder::class)->sync($transaction);
         app(CrossBorderTransferService::class)->transactionChanged($transaction);
+
+        if ($transaction->refund_of_id !== null && ($transaction->wasChanged('status') || $transaction->wasRecentlyCreated)) {
+            app(PayerNotifier::class)->refundCompleted($transaction);
+        }
     }
 
     /**
