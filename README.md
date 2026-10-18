@@ -43,6 +43,7 @@
 
 | | |
 | --- | --- |
+| **The gap** | Mobile money moved more than **$2 trillion** in 2025, **$1.4 trillion** of it in Sub-Saharan Africa, across 2.3 billion accounts (GSMA, 2026). Very little of it can be reached from a PayPal wallet. |
 | **The problem** | Hundreds of millions of Africans are paid and pay on mobile money. The world pays with PayPal. There's no simple, trustworthy path between the two, and every business that wants one has to integrate PayPal, an FX source and each mobile-money operator separately. |
 | **The solution** | One engine that does it once. MoneyUnify collects with PayPal, converts at PayPal's own exchange rate, and pays out to MTN, Airtel, Zamtel, M-Pesa and other wallets, falling back across providers and refunding automatically if delivery fails. |
 | **Who uses it** | Aggregators, payment service providers, DFSPs, mobile-money operators and e-commerce businesses, as their own payment tool, as a gateway for their merchants, or both. |
@@ -66,6 +67,23 @@ The two worlds barely touch.
   but rent, school fees and suppliers are all paid on M-Pesa.
 - A small shop in Lusaka could sell to the diaspora, but its customers abroad
   can't pay into a mobile wallet, so the sale never happens.
+
+**The gap in numbers** (GSMA, *State of the Industry Report on Mobile Money
+2026*, covering 2025):
+
+| | 2025 |
+| --- | --- |
+| Value moved through mobile money worldwide | **More than $2 trillion**, double 2021's in four years, after about 20 years to reach the first trillion |
+| Of which in Sub-Saharan Africa | **$1.4 trillion**, about two-thirds of the world's total |
+| Registered mobile-money accounts worldwide | **2.3 billion**, up 13% (268 million new) in a year |
+| Accounts active every month (30-day active) | **593 million** worldwide, up 15%; **347 million** in Africa, almost 60% of the world's |
+| Registered accounts in Africa | About **1.2 billion**, more than half of the world's |
+
+The year before, the GSMA's 2025 report counted more than $1.7 trillion moved
+in 2024 and 1.1 billion of the world's 2 billion accounts in Sub-Saharan
+Africa. The market isn't just large, it's accelerating. Yet the wallets where
+most of it lives can't be paid into from PayPal, and the sellers, freelancers
+and families who use them can't accept PayPal's customers.
 
 The money exists on both sides. What's missing is the plumbing. Building it is
 the same hard job for every business that tries: a PayPal integration, an
@@ -104,10 +122,17 @@ contracts with.
 
 ### Who it's for, and the impact at scale
 
-Mobile money moves more than a trillion US dollars a year, most of it in
-Sub-Saharan Africa (GSMA, *State of the Industry Report on Mobile Money*).
-Very little of it can be reached from PayPal today. MoneyUnify changes that
-for whoever deploys it, and each deployment serves many merchants at once.
+Mobile money moved more than $2 trillion in 2025, $1.4 trillion of it in
+Sub-Saharan Africa, through 593 million wallets used every month (GSMA, 2026).
+Very little of that market can be reached from PayPal today. MoneyUnify opens
+it to whoever deploys it, and each deployment serves many merchants at once.
+
+| Who | What they tap into |
+| --- | --- |
+| **PayPal** | PayPal's customers worldwide can pay people and businesses who live on mobile money, and every such payment runs through PayPal checkout and, with FX as a Service, PayPal's own exchange rate. |
+| **Mobile-money operators and DFSPs** | New inbound volume from abroad into their wallets, through an engine they can run themselves. |
+| **Aggregators and payment providers** | A ready-made product: onboard merchants, collect with PayPal, settle to mobile money, and earn an FX margin and commission. |
+| **Merchants, freelancers and families** | Being paid by the world in the money they already use, settled in seconds. |
 
 **One switch, used three ways:**
 
@@ -315,6 +340,8 @@ following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] Demo data: `composer setup --demo-data`
 - [x] Proven end to end in PayPal's and pawaPay's sandboxes
 - [ ] Hosted demo
+
+**Sources:** GSMA, [*State of the Industry Report on Mobile Money 2026*](https://www.gsma.com/sotir/) (published March 2026), as reported by [ITWeb](https://www.itweb.co.za/article/mobile-money-industry-surpasses-2tn-threshold/Kjlyr7wBwy5vk6am) and [Connecting Africa](https://www.connectingafrica.com/mobile-money/-1-4t-flowed-through-mobile-money-in-sub-saharan-africa-in-2025-gsma); GSMA, *State of the Industry Report on Mobile Money 2025*, as reported by [Forbes Africa](https://www.forbesafrica.com/current-affairs/2025/04/09/sub-saharan-africa-dominates-global-mobile-money-landscape-with-1-1-billion-accounts-new-report-finds); World Bank, [Remittance Prices Worldwide](https://remittanceprices.worldbank.org/).
 
 ## Introduction and Objective
 
