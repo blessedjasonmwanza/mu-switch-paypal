@@ -184,24 +184,24 @@ test('payouts can only be verified by their own account', function () {
         ->assertNotFound();
 });
 
-test('pawapay payouts use the sandbox host, the payout id and the recipient msisdn', function () {
+test('pawapay payouts use v2 on the sandbox host, with the payout id and the recipient as an mmo account', function () {
     $user = User::factory()->create(['api_token' => 'po-11']);
     pawapayPayouts($user);
 
     Http::fake([
-        'api.sandbox.pawapay.io/v1/predict-correspondent' => Http::response(['correspondent' => 'MTN_MOMO_ZMB']),
-        'api.sandbox.pawapay.io/payouts' => Http::response(['payoutId' => 'x', 'status' => 'ACCEPTED']),
+        'api.sandbox.pawapay.io/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        'api.sandbox.pawapay.io/v2/payouts' => Http::response(['payoutId' => 'x', 'status' => 'ACCEPTED']),
     ]);
 
     $id = requestPayout('po-11', ['narration' => 'School fees'])->assertOk()->json('data.transaction_id');
 
-    Http::assertSent(fn (Request $request) => $request->url() === 'https://api.sandbox.pawapay.io/payouts'
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://api.sandbox.pawapay.io/v2/payouts'
         && $request['payoutId'] === $id
         && $request['amount'] === '100'
         && $request['currency'] === 'ZMW'
-        && $request['correspondent'] === 'MTN_MOMO_ZMB'
-        && $request['recipient'] === ['type' => 'MSISDN', 'address' => ['value' => '260977123456']]
-        && $request['statementDescription'] === 'Schoolfees');
+        && $request['recipient'] === ['type' => 'MMO', 'accountDetails' => ['phoneNumber' => '260977123456', 'provider' => 'MTN_MOMO_ZMB']]
+        && $request['customerMessage'] === 'School fees'
+        && ! isset($request['correspondent'], $request['customerTimestamp'], $request['statementDescription']));
 });
 
 test('a pawapay rejection is a definite refusal', function () {
@@ -209,8 +209,8 @@ test('a pawapay rejection is a definite refusal', function () {
     pawapayPayouts($user);
 
     Http::fake([
-        '*/v1/predict-correspondent' => Http::response(['correspondent' => 'MTN_MOMO_ZMB']),
-        '*/payouts' => Http::response(['status' => 'REJECTED', 'rejectionReason' => ['rejectionCode' => 'BALANCE_INSUFFICIENT', 'rejectionMessage' => 'Insufficient balance']]),
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        '*/v2/payouts' => Http::response(['status' => 'REJECTED', 'failureReason' => ['failureCode' => 'INSUFFICIENT_BALANCE', 'failureMessage' => 'Insufficient balance']]),
     ]);
 
     requestPayout('po-12')->assertStatus(422)->assertJsonPath('message', 'Insufficient balance');
@@ -223,8 +223,8 @@ test('a pawapay server error or dropped connection leaves the payout to be verif
     pawapayPayouts($user);
 
     Http::fake([
-        '*/v1/predict-correspondent' => Http::response(['correspondent' => 'MTN_MOMO_ZMB']),
-        '*/payouts' => $payoutResponse(),
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        '*/v2/payouts' => $payoutResponse(),
     ]);
 
     requestPayout('po-13')->assertStatus(202)->assertJsonPath('status', 'pending');
@@ -240,9 +240,9 @@ test('pawapay payout verification maps its statuses', function (array $body, str
     pawapayPayouts($user);
 
     Http::fake([
-        '*/v1/predict-correspondent' => Http::response(['correspondent' => 'MTN_MOMO_ZMB']),
-        '*/payouts' => Http::response(['status' => 'ACCEPTED']),
-        '*/payouts/*' => Http::response($body),
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        '*/v2/payouts' => Http::response(['status' => 'ACCEPTED']),
+        '*/v2/payouts/*' => Http::response($body),
     ]);
 
     $id = requestPayout('po-14')->json('data.transaction_id');
@@ -251,10 +251,13 @@ test('pawapay payout verification maps its statuses', function (array $body, str
         ->postJson('/api/v1/payout/verify', ['transaction_id' => $id])
         ->assertJsonPath('status', $status);
 })->with([
-    'completed' => [[['status' => 'COMPLETED']], 'success'],
-    'failed' => [[['status' => 'FAILED', 'failureReason' => ['failureCode' => 'RECIPIENT_NOT_FOUND']]], 'failed'],
-    'still sending' => [[['status' => 'SUBMITTED']], 'pending'],
-    'never received' => [[], 'failed'],
+    'completed' => [['status' => 'FOUND', 'data' => ['status' => 'COMPLETED']], 'success'],
+    'failed' => [['status' => 'FOUND', 'data' => ['status' => 'FAILED', 'failureReason' => ['failureCode' => 'RECIPIENT_NOT_FOUND', 'failureMessage' => 'Recipient not found']]], 'failed'],
+    'enqueued' => [['status' => 'FOUND', 'data' => ['status' => 'ENQUEUED']], 'pending'],
+    'processing' => [['status' => 'FOUND', 'data' => ['status' => 'PROCESSING']], 'pending'],
+    'in reconciliation' => [['status' => 'FOUND', 'data' => ['status' => 'IN_RECONCILIATION']], 'pending'],
+    // pawaPay accepted it, so NOT_FOUND is a lag, never a loss.
+    'accepted but not found yet' => [['status' => 'NOT_FOUND'], 'pending'],
 ]);
 
 test('sandbox-only drivers are hidden and refused in production', function () {
@@ -284,4 +287,76 @@ test('sandbox drivers are never counted in public coverage', function () {
 
     expect($stats['providers'])->toBe(count(DriverRegistry::classes(includeSandboxOnly: false)))
         ->and(DriverRegistry::classes(includeSandboxOnly: false))->not->toContain(SandboxPayoutController::class);
+});
+
+test('pawapay\'s reason for a failed payout is kept where the transfer and transfers page read it', function () {
+    $user = User::factory()->create(['api_token' => 'po-15']);
+    pawapayPayouts($user);
+
+    Http::fake([
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        '*/v2/payouts' => Http::response(['status' => 'ACCEPTED']),
+        '*/v2/payouts/*' => Http::response(['status' => 'FOUND', 'data' => ['status' => 'FAILED', 'failureReason' => [
+            'failureCode' => 'RECIPIENT_NOT_ALLOWED_TO_RECEIVE', 'failureMessage' => 'The payment would exceed customers maximum allowed balance.',
+        ]]]),
+    ]);
+
+    $id = requestPayout('po-15')->json('data.transaction_id');
+
+    $this->withToken('po-15')->postJson('/api/v1/payout/verify', ['transaction_id' => $id])
+        ->assertJsonPath('data.failure_reason', 'The payment would exceed customers maximum allowed balance.');
+
+    expect(Transaction::sole()->provider_response['message'])->toBe('The payment would exceed customers maximum allowed balance.');
+});
+
+test('a payout pawapay already accepted under the same id is not a refusal', function () {
+    $user = User::factory()->create(['api_token' => 'po-16']);
+    pawapayPayouts($user);
+
+    Http::fake([
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        '*/v2/payouts' => Http::response(['status' => 'DUPLICATE_IGNORED']),
+    ]);
+
+    requestPayout('po-16')->assertOk()->assertJsonPath('data.status', 'pending');
+});
+
+test('a payout whose request got no answer only counts as never received once pawapay would have it', function () {
+    $user = User::factory()->create(['api_token' => 'po-17']);
+    pawapayPayouts($user);
+
+    Http::fake([
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        '*/v2/payouts' => Http::failedConnection(),
+        '*/v2/payouts/*' => Http::response(['status' => 'NOT_FOUND']),
+    ]);
+
+    $id = requestPayout('po-17')->assertStatus(202)->json('data.transaction_id') ?? Transaction::sole()->transaction_id;
+    $verify = fn () => $this->withToken('po-17')->postJson('/api/v1/payout/verify', ['transaction_id' => $id]);
+
+    // Seconds later, pawaPay may simply not have stored it yet: still pending.
+    $verify()->assertJsonPath('status', 'pending');
+    expect(Transaction::sole()->status)->toBe(TransactionStatus::PENDING);
+
+    // Minutes later, pawaPay never got it: failed, so another provider may pay it.
+    $this->travel(3)->minutes();
+    $verify()->assertJsonPath('status', 'failed');
+    expect(Transaction::sole()->status)->toBe(TransactionStatus::FAILED);
+});
+
+test('a payout pawapay accepted is never taken as lost, however long it is not found', function () {
+    $user = User::factory()->create(['api_token' => 'po-18']);
+    pawapayPayouts($user);
+
+    Http::fake([
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260977123456']),
+        '*/v2/payouts' => Http::response(['status' => 'ACCEPTED']),
+        '*/v2/payouts/*' => Http::response(['status' => 'NOT_FOUND']),
+    ]);
+
+    $id = requestPayout('po-18')->json('data.transaction_id');
+    $this->travel(1)->hours();
+
+    $this->withToken('po-18')->postJson('/api/v1/payout/verify', ['transaction_id' => $id])->assertJsonPath('status', 'pending');
+    expect(Transaction::sole()->status)->toBe(TransactionStatus::PENDING);
 });

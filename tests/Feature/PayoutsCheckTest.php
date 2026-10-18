@@ -28,19 +28,19 @@ function pawapaySandbox(User $user, string $environment = 'sandbox'): PaymentPro
 test('a sandbox payout is sent to pawapay\'s completing test number and followed to the end', function () {
     $provider = pawapaySandbox($this->user);
     Http::fake([
-        'api.sandbox.pawapay.io/v1/predict-correspondent' => Http::response(['correspondent' => 'MTN_MOMO_ZMB']),
-        'api.sandbox.pawapay.io/payouts' => Http::response(['status' => 'ACCEPTED']),
-        'api.sandbox.pawapay.io/payouts/*' => Http::sequence()
-            ->push([['status' => 'SUBMITTED']])
-            ->push([['status' => 'COMPLETED']]),
+        'api.sandbox.pawapay.io/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260763456789']),
+        'api.sandbox.pawapay.io/v2/payouts' => Http::response(['status' => 'ACCEPTED']),
+        'api.sandbox.pawapay.io/v2/payouts/*' => Http::sequence()
+            ->push(['status' => 'FOUND', 'data' => ['status' => 'PROCESSING']])
+            ->push(['status' => 'FOUND', 'data' => ['status' => 'COMPLETED']]),
     ]);
 
     $this->artisan('payouts:check', ['provider' => $provider->id])
         ->expectsOutputToContain('Sending ZMW 1 to 260763456789 through pawaPay sandbox')
         ->assertSuccessful();
 
-    Http::assertSent(fn (Request $request) => $request->url() === 'https://api.sandbox.pawapay.io/payouts'
-        && $request['recipient']['address']['value'] === '260763456789'
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://api.sandbox.pawapay.io/v2/payouts'
+        && $request['recipient']['accountDetails']['phoneNumber'] === '260763456789'
         && $request['currency'] === 'ZMW');
     expect(Transaction::sole()->status->value)->toBe('success');
 });
@@ -48,8 +48,8 @@ test('a sandbox payout is sent to pawapay\'s completing test number and followed
 test('a refused sandbox payout fails the check', function () {
     $provider = pawapaySandbox($this->user);
     Http::fake([
-        '*/v1/predict-correspondent' => Http::response(['correspondent' => 'MTN_MOMO_ZMB']),
-        '*/payouts' => Http::response(['status' => 'REJECTED', 'rejectionReason' => ['rejectionMessage' => 'Insufficient balance']]),
+        '*/v2/predict-provider' => Http::response(['country' => 'ZMB', 'provider' => 'MTN_MOMO_ZMB', 'phoneNumber' => '260763456789']),
+        '*/v2/payouts' => Http::response(['status' => 'REJECTED', 'failureReason' => ['failureCode' => 'INSUFFICIENT_BALANCE', 'failureMessage' => 'Insufficient balance']]),
     ]);
 
     $this->artisan('payouts:check', ['provider' => $provider->id])
