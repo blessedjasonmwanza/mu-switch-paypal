@@ -149,6 +149,13 @@ test('a customer pays on the public page and the merchant is settled to its wall
         ->assertInertia(fn (Assert $page) => $page
             ->component('pay/receipt')
             ->where('receipt.headline', 'Payment complete')
+            ->where('receipt.detail', 'Kitwe Crafts has been paid to its mobile-money wallet.')
+            ->where('receipt.steps', [
+                ['label' => 'Paid with PayPal', 'state' => 'done'],
+                ['label' => 'Sending to Kitwe Crafts', 'state' => 'done'],
+                ['label' => 'Kitwe Crafts paid', 'state' => 'done'],
+            ])
+            ->where('receipt.number', strtoupper(substr(str_replace('-', '', $transfer->reference), 0, 10)))
             ->where('receipt.merchant', 'Kitwe Crafts')
             ->where('receipt.price', ['amount' => '2500.00', 'currency' => 'ZMW'])
             ->missing('receipt.recipient'));
@@ -174,7 +181,13 @@ test('if the merchant cannot be settled, the customer is refunded through paypal
     expect($transfer->refresh()->status)->toBe(CrossBorderStatus::REFUNDED);
 
     $this->get(route('pay.receipt', $transfer->reference))
-        ->assertInertia(fn (Assert $page) => $page->where('receipt.headline', 'Refunded to your PayPal account'));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('receipt.headline', 'Refunded to your PayPal account')
+            ->where('receipt.steps', [
+                ['label' => 'Paid with PayPal', 'state' => 'done'],
+                ['label' => 'Sending to Kitwe Crafts', 'state' => 'failed'],
+                ['label' => 'Refunded to you', 'state' => 'done'],
+            ]));
 
     Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/payments/captures/CAPTURE-1/refund'));
 });
@@ -401,4 +414,18 @@ test('only merchant payments can be captured from the pay page', function () {
     [$transfer] = app(CrossBorderTransferService::class)->request($user, ['amount' => '2500', 'mode' => 'target', 'country' => 'ZM', 'account_number' => '0977123456']);
 
     $this->postJson(route('pay.capture', $transfer->reference))->assertNotFound();
+});
+
+test('while the merchant is being paid, the receipt says so step by step', function () {
+    fakeMerchantPaypal();
+    [$transfer] = app(CrossBorderTransferService::class)->collectForMerchant($this->merchant, ['amount' => '100']);
+    $transfer->update(['status' => CrossBorderStatus::PAYING_OUT]);
+
+    $this->get(route('pay.receipt', $transfer->reference))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('receipt.is_final', false)
+            ->where('receipt.headline', 'Payment received')
+            ->where('receipt.detail', "PayPal has your payment. Kitwe Crafts is being paid to its mobile-money wallet, and this page updates as soon as it's done.")
+            ->where('receipt.steps.1', ['label' => 'Sending to Kitwe Crafts', 'state' => 'current'])
+            ->where('receipt.steps.2', ['label' => 'Kitwe Crafts paid', 'state' => 'upcoming']));
 });

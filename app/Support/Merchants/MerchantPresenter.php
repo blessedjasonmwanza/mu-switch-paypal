@@ -121,12 +121,73 @@ final class MerchantPresenter
                 $transfer->status === CrossBorderStatus::REFUNDED => 'Refunded to your PayPal account',
                 default => 'We couldn\'t complete this payment; it will be refunded',
             },
+            'detail' => self::receiptDetail($transfer),
+            'steps' => self::receiptSteps($transfer),
+            'number' => strtoupper(substr(str_replace('-', '', $transfer->reference), 0, 10)),
             'paid' => ['amount' => (string) $transfer->sourceAmount(), 'currency' => $transfer->source_currency],
             // The merchant's price; its commission to the aggregator is between them.
             'price' => ['amount' => (string) Currency::fromMinorUnits($transfer->target_amount_minor + $transfer->commission_minor, $transfer->target_currency), 'currency' => $transfer->target_currency],
             'created_at' => $transfer->created_at?->toIso8601String(),
             // PayPal's own record of the payment, once it's captured.
             'paypal' => $transfer->fundingTransaction ? PaypalReceipt::for($transfer->fundingTransaction) : null,
+        ];
+    }
+
+    /**
+     * What's happening, in a sentence the customer can act on.
+     */
+    private static function receiptDetail(CrossBorderTransfer $transfer): string
+    {
+        $merchant = $transfer->merchant?->name ?? 'The merchant';
+
+        return match ($transfer->status) {
+            CrossBorderStatus::AWAITING_PAYMENT => 'Approve the payment in PayPal to continue.',
+            CrossBorderStatus::FUNDED, CrossBorderStatus::PAYING_OUT => "PayPal has your payment. {$merchant} is being paid to its mobile-money wallet, and this page updates as soon as it's done.",
+            CrossBorderStatus::DELIVERED => "{$merchant} has been paid to its mobile-money wallet.",
+            CrossBorderStatus::PAYMENT_FAILED => 'The PayPal payment wasn\'t completed, so no money was taken.',
+            CrossBorderStatus::PAYOUT_FAILED, CrossBorderStatus::REFUNDING => "{$merchant} couldn't be paid, so your payment is being refunded to your PayPal account.",
+            CrossBorderStatus::REFUNDED => "{$merchant} couldn't be paid, so your payment was refunded in full to your PayPal account.",
+            CrossBorderStatus::REFUND_FAILED => "{$merchant} couldn't be paid and the refund needs attention. {$merchant} has been told; keep this receipt.",
+        };
+    }
+
+    /**
+     * The payment's journey, step by step: paid with PayPal, then the
+     * merchant paid (or the customer refunded).
+     *
+     * @return list<array{label: string, state: 'done'|'current'|'upcoming'|'failed'}>
+     */
+    private static function receiptSteps(CrossBorderTransfer $transfer): array
+    {
+        $merchant = $transfer->merchant?->name ?? 'the merchant';
+        $status = $transfer->status;
+        $refundPath = in_array($status, [CrossBorderStatus::PAYOUT_FAILED, CrossBorderStatus::REFUNDING, CrossBorderStatus::REFUNDED, CrossBorderStatus::REFUND_FAILED], true);
+
+        $paid = match ($status) {
+            CrossBorderStatus::AWAITING_PAYMENT => 'current',
+            CrossBorderStatus::PAYMENT_FAILED => 'failed',
+            default => 'done',
+        };
+
+        $sending = match (true) {
+            in_array($status, [CrossBorderStatus::FUNDED, CrossBorderStatus::PAYING_OUT], true) => 'current',
+            $status === CrossBorderStatus::DELIVERED => 'done',
+            $refundPath => 'failed',
+            default => 'upcoming',
+        };
+
+        $last = $refundPath
+            ? ['label' => 'Refunded to you', 'state' => match ($status) {
+                CrossBorderStatus::REFUNDED => 'done',
+                CrossBorderStatus::REFUND_FAILED => 'failed',
+                default => 'current',
+            }]
+            : ['label' => ucfirst($merchant).' paid', 'state' => $status === CrossBorderStatus::DELIVERED ? 'done' : 'upcoming'];
+
+        return [
+            ['label' => 'Paid with PayPal', 'state' => $paid],
+            ['label' => 'Sending to '.$merchant, 'state' => $sending],
+            $last,
         ];
     }
 }
