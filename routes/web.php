@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\View;
 use Inertia\Inertia;
 
 Route::get('/', fn () => Inertia::render('welcome', [
-    'countries' => Coverage::countries(),
+    'countries' => Coverage::reach(),
     'githubUrl' => 'https://github.com/moneyUnify/mu-switch',
     'stats' => Coverage::stats(),
     'docsOnly' => config('app.docs_only'),

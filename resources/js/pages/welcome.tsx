@@ -7,10 +7,19 @@ import { dashboard, login, register } from '@/routes';
 interface Country {
     code: string;
     name: string;
+    /** Payers there can pay in with PayPal. */
+    paypal?: boolean;
+    /** Mobile money is collected and paid out there. */
+    mobile_money?: boolean;
 }
 
 interface Stats {
+    /** Countries where mobile money is collected and paid out. */
     countries: number;
+    /** Countries payers can pay in from with PayPal. */
+    paypal_countries?: number;
+    /** Both together. */
+    reach?: number;
     providers: number;
     currencies: number;
 }
@@ -34,8 +43,8 @@ function flagEmoji(code: string): string {
 /** Rotate an array so a copy can start at a different offset. */
 function rotate<T>(items: T[], by: number): T[] {
     if (items.length === 0) {
-return items;
-}
+        return items;
+    }
 
     const n = ((by % items.length) + items.length) % items.length;
 
@@ -51,7 +60,19 @@ function CountryPill({ country }: { country: Country }) {
             <span className="truncate text-sm font-medium text-neutral-700 dark:text-white/80">
                 {country.name}
             </span>
-            <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary/80" />
+            {country.mobile_money ? (
+                <span
+                    className="ml-auto shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    title="Mobile money collected and paid out here"
+                >
+                    MoMo
+                </span>
+            ) : (
+                <span
+                    className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary/80"
+                    title="Payers here pay in with PayPal"
+                />
+            )}
         </div>
     );
 }
@@ -275,16 +296,33 @@ export default function Welcome({
                                     without changing your code.
                                 </span>
                             </li>
+                            <li className="flex items-start gap-3">
+                                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                                <span className="text-neutral-700 dark:text-neutral-300">
+                                    Take PayPal payments from{' '}
+                                    {stats.paypal_countries ?? 'PayPal'}{' '}
+                                    countries and settle them to mobile-money
+                                    wallets in {stats.countries}.
+                                </span>
+                            </li>
                         </ul>
 
                         {/* Coverage at a glance */}
-                        <dl className="mt-8 grid max-w-md grid-cols-3 divide-x divide-neutral-200 rounded-xl border border-neutral-200 bg-white/60 py-4 dark:divide-neutral-800 dark:border-neutral-800 dark:bg-white/[0.03]">
+                        <dl className="mt-8 grid max-w-lg grid-cols-2 gap-y-4 rounded-xl border border-neutral-200 bg-white/60 py-4 sm:grid-cols-4 sm:divide-x sm:divide-neutral-200 dark:border-neutral-800 dark:bg-white/[0.03] sm:dark:divide-neutral-800">
+                            <div className="px-4 text-center">
+                                <dt className="text-2xl font-bold text-neutral-900 tabular-nums dark:text-white">
+                                    {stats.reach ?? stats.countries}
+                                </dt>
+                                <dd className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                                    Countries reached
+                                </dd>
+                            </div>
                             <div className="px-4 text-center">
                                 <dt className="text-2xl font-bold text-neutral-900 tabular-nums dark:text-white">
                                     {stats.countries}
                                 </dt>
                                 <dd className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                                    Countries
+                                    Mobile money
                                 </dd>
                             </div>
                             <div className="px-4 text-center">
