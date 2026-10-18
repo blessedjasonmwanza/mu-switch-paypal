@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { AlertDialog, Button, Flex } from '@radix-ui/themes';
+import { Button } from '@radix-ui/themes';
 import {
     Check,
     Copy,
@@ -11,6 +11,14 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -20,6 +28,8 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
+import { copyText } from '@/lib/clipboard';
+import { csrfToken } from '@/lib/csrf';
 import { cn } from '@/lib/utils';
 import linksRoute from '@/routes/merchants/links';
 
@@ -42,16 +52,6 @@ export interface PaymentLinkItem {
     };
 }
 
-function csrf(): string {
-    return (
-        (
-            document.querySelector(
-                'meta[name="csrf-token"]',
-            ) as HTMLMetaElement | null
-        )?.content ?? ''
-    );
-}
-
 async function call<T>(
     url: string,
     method: string,
@@ -67,7 +67,7 @@ async function call<T>(
         headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            'X-CSRF-TOKEN': csrf(),
+            'X-CSRF-TOKEN': csrfToken(),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -79,15 +79,6 @@ async function call<T>(
         message: json.message ?? null,
         errors: json.errors ?? null,
     };
-}
-
-async function copyText(text: string, what = 'Link'): Promise<void> {
-    try {
-        await navigator.clipboard.writeText(text);
-        toast.success(`${what} copied.`);
-    } catch {
-        toast.error('Could not copy.');
-    }
 }
 
 function formatAmount(amount: string, currency: string): string {
@@ -577,45 +568,46 @@ export function MerchantLinks({
                             </ul>
                         )}
                     </div>
+                    {/* Inside the sheet, so it opens above it and stays clickable. */}
+                    <Dialog
+                        open={removing !== null}
+                        onOpenChange={(isOpen) => !isOpen && setRemoving(null)}
+                    >
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>
+                                    Delete “{removing?.label ?? 'this link'}”?
+                                </DialogTitle>
+                                <DialogDescription>
+                                    {removing?.stats.has_payments
+                                        ? 'This link has taken payments, so it will be archived: it stops working and leaves this list, and its payments keep their full history.'
+                                        : 'This link has never taken a payment. It will be deleted and stop working.'}
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter className="gap-2">
+                                <Button
+                                    variant="soft"
+                                    color="gray"
+                                    onClick={() => setRemoving(null)}
+                                    className="cursor-pointer"
+                                >
+                                    Keep it
+                                </Button>
+                                <Button
+                                    color="red"
+                                    onClick={() => removing && remove(removing)}
+                                    disabled={busy !== null}
+                                    className="cursor-pointer"
+                                >
+                                    {removing?.stats.has_payments
+                                        ? 'Archive link'
+                                        : 'Delete link'}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </SheetContent>
             </Sheet>
-
-            <AlertDialog.Root
-                open={removing !== null}
-                onOpenChange={(isOpen) => !isOpen && setRemoving(null)}
-            >
-                <AlertDialog.Content maxWidth="440px">
-                    <AlertDialog.Title>
-                        Delete “{removing?.label ?? 'this link'}”?
-                    </AlertDialog.Title>
-                    <AlertDialog.Description size="2">
-                        {removing?.stats.has_payments
-                            ? 'This link has taken payments, so it will be archived: it stops working and leaves this list, and its payments keep their full history.'
-                            : 'This link has never taken a payment. It will be deleted and stop working.'}
-                    </AlertDialog.Description>
-                    <Flex gap="3" mt="4" justify="end">
-                        <AlertDialog.Cancel>
-                            <Button
-                                variant="soft"
-                                color="gray"
-                                className="cursor-pointer"
-                            >
-                                Keep it
-                            </Button>
-                        </AlertDialog.Cancel>
-                        <Button
-                            color="red"
-                            onClick={() => removing && remove(removing)}
-                            disabled={busy !== null}
-                            className="cursor-pointer"
-                        >
-                            {removing?.stats.has_payments
-                                ? 'Archive link'
-                                : 'Delete link'}
-                        </Button>
-                    </Flex>
-                </AlertDialog.Content>
-            </AlertDialog.Root>
         </>
     );
 }
