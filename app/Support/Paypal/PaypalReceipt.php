@@ -24,7 +24,7 @@ use Throwable;
 final class PaypalReceipt
 {
     /** How long a receipt waits before asking PayPal again. */
-    private const REFRESH_SECONDS = 60;
+    public const REFRESH_SECONDS = 60;
 
     /**
      * The receipt, or null when the transaction isn't a captured PayPal payment.

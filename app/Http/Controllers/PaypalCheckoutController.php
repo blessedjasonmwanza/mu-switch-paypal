@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\TransactionStatus;
 use App\Http\Controllers\Providers\PaypalController;
+use App\Jobs\ReverifyTransaction;
 use App\Models\Transaction;
 use App\Support\Paypal\PaypalReceipt;
 use App\Support\TransactionVerifier;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Uri;
 
 /**
@@ -24,14 +26,21 @@ class PaypalCheckoutController extends Controller
 
     /**
      * The payer approved: capture the order and hand them back.
+     * Settled or already-refunded transactions render instantly from the database
+     * while syncing with PayPal asynchronously in the background.
      */
     public function approved(Request $request, Transaction $transaction, TransactionVerifier $verifier): RedirectResponse|View
     {
         $this->authorizeReturn($request, $transaction);
 
-        $verifier->verify($transaction);
+        if (! $transaction->isFinal()) {
+            $verifier->verify($transaction);
+            $transaction->refresh();
+        } else {
+            $this->reverifyInBackground($transaction);
+        }
 
-        return $this->finish($transaction->refresh());
+        return $this->finish($transaction);
     }
 
     /**
@@ -41,19 +50,34 @@ class PaypalCheckoutController extends Controller
     {
         $this->authorizeReturn($request, $transaction);
 
-        $verifier->verify($transaction);
-        $transaction->refresh();
+        if (! $transaction->isFinal()) {
+            $verifier->verify($transaction);
+            $transaction->refresh();
 
-        if ($transaction->status === TransactionStatus::PENDING) {
-            $transaction->update([
-                'status' => TransactionStatus::FAILED,
-                'provider_response' => [...($transaction->provider_response ?? []), 'cancelled_by_payer' => true],
-            ]);
+            if ($transaction->status === TransactionStatus::PENDING) {
+                $transaction->update([
+                    'status' => TransactionStatus::FAILED,
+                    'provider_response' => [...($transaction->provider_response ?? []), 'cancelled_by_payer' => true],
+                ]);
 
-            $verifier->notifyIfSettled($transaction);
+                $verifier->notifyIfSettled($transaction);
+            }
         }
 
         return $this->finish($transaction);
+    }
+
+    /**
+     * Re-verify settled transactions in the background (at most once a minute),
+     * so that already-captured or refunded receipts render immediately.
+     */
+    private function reverifyInBackground(Transaction $transaction): void
+    {
+        if (! Cache::add("paypal-receipt:{$transaction->id}", true, PaypalReceipt::REFRESH_SECONDS)) {
+            return;
+        }
+
+        ReverifyTransaction::dispatch($transaction);
     }
 
     /**

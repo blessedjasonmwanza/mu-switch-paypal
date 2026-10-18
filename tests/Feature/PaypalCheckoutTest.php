@@ -2,12 +2,16 @@
 
 use App\Enums\TransactionStatus;
 use App\Http\Controllers\Providers\DpoController;
+use App\Jobs\ReverifyTransaction;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 
 // PayPal calls retry with a pause; don't actually wait in tests.
 beforeEach(fn () => Sleep::fake());
@@ -89,4 +93,72 @@ test('return links only work for paypal transactions', function () {
     ]);
 
     $this->get(paypalReturnUrl(pendingPaypalTransaction($dpo)))->assertNotFound();
+});
+
+test('an already settled or final transaction renders immediately and dispatches background verification', function () {
+    Queue::fake();
+    Http::fake();
+    Cache::flush();
+
+    $order = paypalOrder('ORDER-1', 'COMPLETED', 'COMPLETED');
+    $order['purchase_units'][0]['payments']['captures'][0] += [
+        'amount' => ['currency_code' => 'USD', 'value' => '25.00'],
+        'create_time' => '2026-10-17T19:38:42Z',
+    ];
+
+    $transaction = pendingPaypalTransaction(paypalProvider(User::factory()->create()), [
+        'status' => TransactionStatus::SUCCESS,
+        'provider_response' => ['order' => $order],
+    ]);
+
+    $this->get(paypalReturnUrl($transaction))
+        ->assertOk()
+        ->assertSee('Payment complete')
+        ->assertSee('USD 25.00');
+
+    Http::assertNothingSent();
+    Queue::assertPushed(ReverifyTransaction::class, fn (ReverifyTransaction $job) => $job->transaction->is($transaction));
+
+    // A second visit within a minute uses cache and does not re-dispatch
+    Queue::fake();
+    $this->get(paypalReturnUrl($transaction))->assertOk();
+    Queue::assertNotPushed(ReverifyTransaction::class);
+});
+
+test('an already refunded transaction renders refund outcome immediately without blocking', function () {
+    Queue::fake();
+    Http::fake();
+    Cache::flush();
+
+    $order = paypalOrder('ORDER-1', 'COMPLETED', 'COMPLETED');
+    $order['purchase_units'][0]['payments']['captures'][0] += [
+        'amount' => ['currency_code' => 'USD', 'value' => '25.00'],
+        'create_time' => '2026-10-17T19:38:42Z',
+    ];
+
+    $provider = paypalProvider(User::factory()->create());
+    $transaction = pendingPaypalTransaction($provider, [
+        'status' => TransactionStatus::SUCCESS,
+        'provider_response' => ['order' => $order],
+    ]);
+
+    Transaction::create([
+        'transaction_id' => (string) Str::uuid(),
+        'provider_transaction_id' => 'REFUND-1',
+        'customer_id' => $transaction->customer_id,
+        'amount' => '25.00',
+        'currency' => 'USD',
+        'country' => $transaction->country,
+        'status' => TransactionStatus::SUCCESS,
+        'direction' => 'debit',
+        'refund_of_id' => $transaction->id,
+        'payment_provider_id' => $provider->id,
+    ]);
+
+    $this->get(paypalReturnUrl($transaction))
+        ->assertOk()
+        ->assertSee('Payment refunded')
+        ->assertSee('USD 25.00');
+
+    Http::assertNothingSent();
 });
