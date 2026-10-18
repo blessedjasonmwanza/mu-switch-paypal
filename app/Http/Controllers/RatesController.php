@@ -18,7 +18,7 @@ class RatesController extends Controller
     public function index(Request $request, FxQuoter $quoter): Response
     {
         $baseCurrency = strtoupper((string) $request->input('base', 'USD'));
-        $matrix = $quoter->matrix($baseCurrency);
+        $matrix = $quoter->matrix($baseCurrency, $request->user()->id);
 
         $activeQuote = null;
         if ($quoteId = $request->session()->get('active_fx_quote_id')) {
@@ -37,6 +37,7 @@ class RatesController extends Controller
             'quoteTtlMinutes' => (int) config('moneyunify_paypal.fx.quote_ttl_minutes', 10),
             'supportedCurrencies' => $quoter->getRateProvider()->supportedCurrencies(),
             'activeQuote' => $activeQuote,
+            'rateSource' => $quoter->rateSourceFor($request->user()->id),
         ]);
     }
 

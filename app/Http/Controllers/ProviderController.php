@@ -8,6 +8,7 @@ use App\Support\Currency;
 use App\Support\DriverRegistry;
 use App\Support\Ledger\LedgerBalance;
 use App\Support\Market;
+use App\Support\Paypal\PaypalFxRates;
 use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -204,6 +205,9 @@ class ProviderController extends Controller
             'is_active' => $validated['is_active'],
             'logo_url' => $validated['logo_url'] ?? null,
         ]);
+
+        // New credentials or settings: ask PayPal about its FX afresh.
+        app(PaypalFxRates::class)->forget($provider);
 
         return redirect()->route('providers.index');
     }

@@ -566,6 +566,7 @@ class CrossBorderTransferService
                 'fx_rate' => (string) $fx->effectiveRate,
                 'fx_margin_percent' => (string) $fx->marginPercent,
                 'fx_margin_minor' => Currency::toMinorUnits($fx->marginAmount, $fx->sourceCurrency),
+                'fx_rate_source' => $fx->isFx() ? $fx->rateSource : null,
                 'payer_email' => $input['payer_email'] ?? null,
                 'status' => CrossBorderStatus::AWAITING_PAYMENT,
                 ...$overrides,

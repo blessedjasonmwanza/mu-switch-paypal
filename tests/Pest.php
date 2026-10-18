@@ -76,6 +76,8 @@ function paypalProvider(User $user, array $config = []): PaymentProvider
             'environment' => 'sandbox',
             'webhook_id' => 'WH-123',
             'supported_countries' => ['ZM', 'KE'],
+            // Tests opt in to PayPal FX explicitly (see PaypalFxTest).
+            'fx_rates' => 'moneyunify',
             ...$config,
         ],
         'is_active' => true,

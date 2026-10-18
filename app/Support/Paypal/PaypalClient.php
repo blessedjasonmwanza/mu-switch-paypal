@@ -118,6 +118,28 @@ class PaypalClient
     }
 
     /**
+     * PayPal's exchange rates (FX as a Service) from a currency the account
+     * holds into each quote currency, with the `fx_id` that locks a rate to
+     * an order.
+     *
+     * @param  list<string>  $quoteCurrencies
+     * @return list<array<string, mixed>> PayPal's `exchange_rate_quotes`
+     *
+     * @see https://developer.paypal.com/docs/checkout/fx-as-a-service/integrate/
+     */
+    public function quoteExchangeRates(string $baseCurrency, array $quoteCurrencies): array
+    {
+        $response = $this->send('POST', '/v2/pricing/quote-exchange-rates', [
+            'quote_items' => array_map(fn (string $currency): array => [
+                'base_currency' => strtoupper($baseCurrency),
+                'quote_currency' => strtoupper($currency),
+            ], array_values($quoteCurrencies)),
+        ]);
+
+        return array_values((array) ($response['exchange_rate_quotes'] ?? []));
+    }
+
+    /**
      * Ask PayPal whether a webhook delivery is genuine.
      *
      * The raw event body is forwarded untouched, since re-encoding it can

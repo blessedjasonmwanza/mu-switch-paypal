@@ -11,7 +11,10 @@ use RuntimeException;
  */
 class PaypalException extends RuntimeException
 {
-    public function __construct(string $message, public readonly int $status = 0, public readonly ?string $issue = null)
+    /**
+     * @param  ?string  $actionUrl  where PayPal says the account can fix it (e.g. activate a feature)
+     */
+    public function __construct(string $message, public readonly int $status = 0, public readonly ?string $issue = null, public readonly ?string $actionUrl = null)
     {
         parent::__construct($message);
     }
@@ -28,6 +31,7 @@ class PaypalException extends RuntimeException
                 ?? 'PayPal request failed',
             $response->status(),
             $response->json('details.0.issue') ?? $response->json('name') ?? $response->json('error'),
+            $response->json('details.0.links.0.href'),
         );
     }
 
@@ -45,6 +49,14 @@ class PaypalException extends RuntimeException
     public function isNotFound(): bool
     {
         return $this->status === 404;
+    }
+
+    /**
+     * The account isn't set up for the feature (e.g. FX as a Service).
+     */
+    public function isNotProvisioned(): bool
+    {
+        return in_array($this->issue, ['FEATURE_NOT_PROVISIONED', 'NOT_AUTHORIZED', 'PERMISSION_DENIED'], true) || $this->status === 403;
     }
 
     /**

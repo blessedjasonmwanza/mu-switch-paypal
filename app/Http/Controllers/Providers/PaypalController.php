@@ -15,6 +15,7 @@ use App\Support\Currency;
 use App\Support\Fx\FxQuoter;
 use App\Support\Paypal\PaypalClient;
 use App\Support\Paypal\PaypalException;
+use App\Support\Paypal\PaypalFxRates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -87,6 +88,23 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
             'rules' => 'string|in:enabled,disabled',
             'required' => false,
             'help' => 'Lets your AI agents use PayPal\'s MCP tools with these credentials. Access tokens are created and refreshed automatically, so there is nothing to paste. Disabled means agents get no PayPal tools.',
+        ],
+        [
+            'key' => 'fx_rates',
+            'label' => 'Exchange rates',
+            'type' => 'text',
+            'options' => ['paypal', 'moneyunify'],
+            'rules' => 'string|in:paypal,moneyunify',
+            'required' => false,
+            'help' => 'paypal uses PayPal\'s own exchange rates (FX as a Service) for quotes and locks them on orders, once FX is enabled on this PayPal business account; until then, and if PayPal can\'t answer, MoneyUnify\'s rates are used. moneyunify always uses MoneyUnify\'s rates.',
+        ],
+        [
+            'key' => 'fx_settlement_currency',
+            'label' => 'PayPal settlement currency (optional)',
+            'type' => 'text',
+            'required' => false,
+            'rules' => 'string|size:3|alpha',
+            'help' => 'The currency this PayPal account holds payments in, e.g. USD. Payments in another currency are converted into it at PayPal\'s locked rate. Defaults to USD.',
         ],
     ];
 
@@ -197,10 +215,26 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         $transaction->paymentProvider()->associate($this->provider);
         $transaction->save();
 
+        // With PayPal FX, PayPal converts what the payer pays into the account's
+        // settlement currency at a rate locked now (its fx_id), not at capture.
+        $paypalFx = $this->lockedPaypalRate($chargeCurrency);
+        $payload = $this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with'), $paypalFx['fx_id'] ?? null);
+
         try {
-            $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with')), $transaction->transaction_id);
+            $order = $this->client->createOrder($payload, $transaction->transaction_id);
         } catch (PaypalException $e) {
-            return $this->failTransaction($transaction, $e->getMessage(), $e->status >= 500 ? 502 : 422);
+            if ($paypalFx === null || $e->issue !== 'FX_RATE_CHANGE_DUE_TO_MARKET_EVENT') {
+                return $this->failTransaction($transaction, $e->getMessage(), $e->status >= 500 ? 502 : 422);
+            }
+
+            // PayPal suspended the locked rate (a market event): PayPal converts at capture instead.
+            $paypalFx = null;
+
+            try {
+                $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with')), $transaction->transaction_id.'-fx');
+            } catch (PaypalException $retry) {
+                return $this->failTransaction($transaction, $retry->getMessage(), $retry->status >= 500 ? 502 : 422);
+            }
         }
 
         $checkoutUrl = self::checkoutUrl($order);
@@ -214,6 +248,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
             'provider_response' => [
                 'order' => $order,
                 ...($fxQuote ? ['fx' => $fxQuote->toArray()] : []),
+                ...($paypalFx ? ['paypal_fx' => $paypalFx] : []),
             ],
         ]);
 
@@ -400,15 +435,16 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
      *
      * @return array<string, mixed>
      */
-    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail, mixed $brandName = null, mixed $payWith = null): array
+    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail, mixed $brandName = null, mixed $payWith = null, ?string $fxId = null): array
     {
         return [
             'intent' => 'CAPTURE',
-            'purchase_units' => [[
+            'purchase_units' => [array_filter([
                 'reference_id' => $transaction->transaction_id,
                 'custom_id' => $transaction->transaction_id,
                 'amount' => ['currency_code' => $transaction->currency, 'value' => $amount],
-            ]],
+                'payment_instruction' => $fxId ? ['payee_receivable_fx_rate_id' => $fxId] : null,
+            ])],
             'payment_source' => [
                 'paypal' => array_filter([
                     'email_address' => $payerEmail,
@@ -425,6 +461,36 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
                     ]),
                 ]),
             ],
+        ];
+    }
+
+    /**
+     * PayPal's locked rate from the charged currency into the account's
+     * settlement currency, when PayPal FX is on and the two differ.
+     *
+     * @return array{fx_id: string, rate: string, charge_currency: string, settlement_currency: string, expires_at: ?string}|null
+     */
+    private function lockedPaypalRate(string $chargeCurrency): ?array
+    {
+        $settlement = strtoupper((string) ($this->provider?->config['fx_settlement_currency'] ?? '') ?: 'USD');
+
+        if (! $this->provider || $settlement === $chargeCurrency || ! PaypalFxRates::wanted($this->provider)) {
+            return null;
+        }
+
+        $quote = app(PaypalFxRates::class)->quotes($this->provider, $settlement, [$chargeCurrency])[$chargeCurrency] ?? null;
+
+        if (! $quote || ! filled($quote['fx_id'])) {
+            return null;
+        }
+
+        return [
+            'fx_id' => (string) $quote['fx_id'],
+            // 1 settlement currency = this many charged currency.
+            'rate' => (string) $quote['rate'],
+            'charge_currency' => $chargeCurrency,
+            'settlement_currency' => $settlement,
+            'expires_at' => $quote['expires_at'],
         ];
     }
 

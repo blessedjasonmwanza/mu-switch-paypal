@@ -13,6 +13,8 @@ use Illuminate\Support\Carbon;
  * Locks the effective exchange rate, converted amounts, and margin for 10 minutes
  * (configurable) to protect both the customer and switch against market volatility.
  * A quote belongs to the account that requested it; only that account can use it.
+ * Its base rate comes from PayPal's FX when the account has it, otherwise from
+ * MoneyUnify's rate table (`rateSource`).
  */
 final class FxQuote
 {
@@ -29,7 +31,14 @@ final class FxQuote
         public readonly CarbonInterface $quotedAt,
         public readonly CarbonInterface $expiresAt,
         public readonly ?int $ownerId = null,
+        public readonly string $rateSource = self::SOURCE_MONEYUNIFY,
     ) {}
+
+    /** The base rate came from PayPal's FX (the account's PayPal business account). */
+    public const SOURCE_PAYPAL = 'paypal';
+
+    /** The base rate came from MoneyUnify's own rate table. */
+    public const SOURCE_MONEYUNIFY = 'moneyunify';
 
     /**
      * Whether this quote may be used by the given account.
@@ -104,6 +113,7 @@ final class FxQuote
             'margin_percent' => (string) $this->marginPercent,
             'margin_amount' => (string) $this->marginAmount,
             'is_fx' => $this->isFx(),
+            'rate_source' => $this->rateSource,
             'quoted_at' => $this->quotedAt->toIso8601String(),
             'expires_at' => $this->expiresAt->toIso8601String(),
             'expires_in_seconds' => $this->expiresInSeconds(),
@@ -142,6 +152,7 @@ final class FxQuote
             quotedAt: Carbon::parse((string) $data['quoted_at']),
             expiresAt: Carbon::parse((string) $data['expires_at']),
             ownerId: isset($data['owner_id']) ? (int) $data['owner_id'] : null,
+            rateSource: (string) ($data['rate_source'] ?? self::SOURCE_MONEYUNIFY),
         );
     }
 }

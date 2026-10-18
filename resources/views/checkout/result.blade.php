@@ -252,6 +252,9 @@
                         @endif
                         <div class="row"><dt>PayPal transaction ID</dt><dd class="mono">{{ $receipt['paypal_transaction_id'] }}</dd></div>
                         <div class="row"><dt>PayPal order ID</dt><dd class="mono">{{ $receipt['paypal_order_id'] }}</dd></div>
+                        @if ($receipt['conversion'] ?? null)
+                            <div class="row"><dt>PayPal conversion</dt><dd>{{ $receipt['conversion']['rate'] }}{{ $receipt['conversion']['locked'] ? ' · locked' : '' }}</dd></div>
+                        @endif
                         @if ($receipt['seller_protection'])
                             <div class="row"><dt>Seller protection</dt><dd>{{ $receipt['seller_protection'] }}</dd></div>
                         @endif

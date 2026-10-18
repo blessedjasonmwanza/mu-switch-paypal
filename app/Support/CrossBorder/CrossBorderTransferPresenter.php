@@ -54,6 +54,7 @@ final class CrossBorderTransferPresenter
                 'effective_rate' => (string) $transfer->fx_rate,
                 'margin_percent' => (string) $transfer->fx_margin_percent,
                 'margin_amount' => $money($transfer->fx_margin_minor, $transfer->source_currency),
+                'rate_source' => $transfer->fx_rate_source,
             ],
             'funding' => [
                 'provider' => $transfer->fundingProvider?->name,

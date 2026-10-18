@@ -75,7 +75,7 @@ class DemoSeeder extends Seeder
                 'name' => 'PayPal (demo history)',
                 'class' => PaypalController::class,
                 // Placeholder keys for the simulated history only; they're removed below.
-                'config' => ['client_id' => 'demo', 'client_secret' => 'demo', 'environment' => 'sandbox', 'supported_countries' => ['ZM']],
+                'config' => ['client_id' => 'demo', 'client_secret' => 'demo', 'environment' => 'sandbox', 'supported_countries' => ['ZM'], 'fx_rates' => 'moneyunify'],
                 'is_active' => true,
             ]);
 
@@ -110,7 +110,7 @@ class DemoSeeder extends Seeder
             $this->at($start->copy()->addDays(6)->addHours(1), fn () => $this->send($transfers, $user, '600', '0966551111', 'Bwalya', null, 'Airtime'));
 
             // The history stays; the placeholder keys go, so nothing ever calls PayPal with them.
-            $paypal->update(['is_active' => false, 'config' => ['environment' => 'sandbox', 'supported_countries' => ['ZM']]]);
+            $paypal->update(['is_active' => false, 'config' => ['environment' => 'sandbox', 'supported_countries' => ['ZM'], 'fx_rates' => 'moneyunify']]);
         } finally {
             Carbon::setTestNow();
         }

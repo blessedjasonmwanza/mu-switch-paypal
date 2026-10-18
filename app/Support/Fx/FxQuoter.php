@@ -9,6 +9,7 @@ use App\Support\Fx\Exceptions\FxQuoteExpiredException;
 use App\Support\Fx\Exceptions\FxQuoteNotFoundException;
 use App\Support\Fx\Exceptions\UnsupportedCurrencyPairException;
 use App\Support\Market;
+use App\Support\Paypal\PaypalFxRates;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Illuminate\Support\Facades\Cache;
@@ -18,6 +19,9 @@ use InvalidArgumentException;
 /**
  * Foreign exchange quoter. Quotes conversions between funding and payout
  * currencies, locks rates for 10 minutes, and calculates platform margins.
+ *
+ * The base rate is PayPal's own (FX as a Service) when the quoting account's
+ * PayPal business account has it enabled, otherwise MoneyUnify's rate table.
  */
 class FxQuoter
 {
@@ -31,7 +35,10 @@ class FxQuoter
      */
     private const WORKING_SCALE = 12;
 
-    public function __construct(private readonly FxRateProviderInterface $rateProvider) {}
+    public function __construct(
+        private readonly FxRateProviderInterface $rateProvider,
+        private readonly ?PaypalFxRates $paypalRates = null,
+    ) {}
 
     /**
      * Quote by source amount (e.g. "I want to send 100 USD. How much ZMW lands?").
@@ -84,10 +91,7 @@ class FxQuoter
             return $quote;
         }
 
-        $baseRate = $this->rateProvider->getRate($from, $to);
-        if ($baseRate === null) {
-            throw new UnsupportedCurrencyPairException($from, $to);
-        }
+        [$baseRate, $rateSource] = $this->baseRate($from, $to, $ownerId);
 
         $margin = $marginPercent ?? (float) config('moneyunify_paypal.fx.margin_percent', 1.5);
         $marginDecimal = FeeCalculator::money((string) $margin);
@@ -123,6 +127,7 @@ class FxQuoter
             quotedAt: $quotedAt,
             expiresAt: $expiresAt,
             ownerId: $ownerId,
+            rateSource: $rateSource,
         );
 
         $this->store($quote);
@@ -181,10 +186,7 @@ class FxQuoter
             return $quote;
         }
 
-        $baseRate = $this->rateProvider->getRate($from, $to);
-        if ($baseRate === null) {
-            throw new UnsupportedCurrencyPairException($from, $to);
-        }
+        [$baseRate, $rateSource] = $this->baseRate($from, $to, $ownerId);
 
         $margin = $marginPercent ?? (float) config('moneyunify_paypal.fx.margin_percent', 1.5);
         $marginDecimal = FeeCalculator::money((string) $margin);
@@ -223,6 +225,7 @@ class FxQuoter
             quotedAt: $quotedAt,
             expiresAt: $expiresAt,
             ownerId: $ownerId,
+            rateSource: $rateSource,
         );
 
         $this->store($quote);
@@ -270,14 +273,17 @@ class FxQuoter
     }
 
     /**
-     * Get a comprehensive rates matrix from a base currency.
+     * Get a comprehensive rates matrix from a base currency: PayPal's rates
+     * for the account when it has PayPal FX, MoneyUnify's for the rest.
      *
-     * @return array<string, array{currency: string, base_rate: float, effective_rate: float, inverse_rate: float, decimals: int, margin_percent: float, country_code: string|null, country_name: string|null}>
+     * @return array<string, array{currency: string, base_rate: float, effective_rate: float, inverse_rate: float, decimals: int, margin_percent: float, country_code: string|null, country_name: string|null, rate_source: string}>
      */
-    public function matrix(string $baseCurrency = 'USD'): array
+    public function matrix(string $baseCurrency = 'USD', ?int $ownerId = null): array
     {
         $base = strtoupper(trim($baseCurrency));
         $currencies = $this->rateProvider->supportedCurrencies();
+        $provider = $this->paypalRates?->providerFor($ownerId);
+        $paypal = $provider ? $this->paypalRates->quotes($provider, $base, $currencies) : [];
         $margin = (float) config('moneyunify_paypal.fx.margin_percent', 1.5);
         $marginFactor = 1.0 - ($margin / 100.0);
 
@@ -299,7 +305,7 @@ class FxQuoter
                 continue;
             }
 
-            $rate = $this->rateProvider->getRate($base, $currency);
+            $rate = $paypal[$currency]['rate'] ?? $this->rateProvider->getRate($base, $currency);
             if ($rate === null) {
                 continue;
             }
@@ -322,15 +328,66 @@ class FxQuoter
                 'margin_percent' => $margin,
                 'country_code' => $countryInfo['country_code'],
                 'country_name' => $countryInfo['country_name'],
+                'rate_source' => isset($paypal[$currency]) ? FxQuote::SOURCE_PAYPAL : FxQuote::SOURCE_MONEYUNIFY,
             ];
         }
 
         return $matrix;
     }
 
+    /**
+     * Whether quotes for this account use PayPal's FX, and why not if they don't.
+     *
+     * @return array{source: string, state: string, message: ?string, activation_url: ?string, provider: ?string}
+     */
+    public function rateSourceFor(?int $ownerId): array
+    {
+        $provider = $this->paypalRates?->providerFor($ownerId);
+
+        if (! $provider) {
+            return ['source' => FxQuote::SOURCE_MONEYUNIFY, 'state' => 'no_paypal', 'message' => null, 'activation_url' => null, 'provider' => null];
+        }
+
+        // Asking once for USD→ZMW tells us whether PayPal answers for this account.
+        $this->paypalRates->rate($provider, 'USD', 'ZMW');
+        $status = $this->paypalRates->status($provider);
+
+        return [
+            'source' => $status['state'] === 'enabled' ? FxQuote::SOURCE_PAYPAL : FxQuote::SOURCE_MONEYUNIFY,
+            ...$status,
+            'provider' => $provider->name,
+        ];
+    }
+
     public function getRateProvider(): FxRateProviderInterface
     {
         return $this->rateProvider;
+    }
+
+    /**
+     * The base rate for a pair and where it came from: PayPal for an account
+     * with PayPal FX, MoneyUnify's table otherwise (or if PayPal can't quote).
+     *
+     * @return array{0: BigDecimal, 1: string}
+     *
+     * @throws UnsupportedCurrencyPairException
+     */
+    private function baseRate(string $from, string $to, ?int $ownerId): array
+    {
+        $provider = $this->paypalRates?->providerFor($ownerId);
+        $paypal = $provider ? $this->paypalRates->rate($provider, $from, $to) : null;
+
+        if ($paypal !== null) {
+            return [$paypal, FxQuote::SOURCE_PAYPAL];
+        }
+
+        $rate = $this->rateProvider->getRate($from, $to);
+
+        if ($rate === null) {
+            throw new UnsupportedCurrencyPairException($from, $to);
+        }
+
+        return [$rate, FxQuote::SOURCE_MONEYUNIFY];
     }
 
     private function store(FxQuote $quote): void

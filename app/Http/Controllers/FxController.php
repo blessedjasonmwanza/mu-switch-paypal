@@ -47,10 +47,13 @@ class FxController extends Controller
         ]);
 
         $base = strtoupper($validated['base'] ?? 'USD');
-        $matrix = $quoter->matrix($base);
+        $matrix = $quoter->matrix($base, $request->user()->id);
+        $source = $quoter->rateSourceFor($request->user()->id);
 
         return ApiResponse::success('Exchange rates', [
             'base_currency' => $base,
+            'rate_source' => $source['source'],
+            'paypal_fx' => ['state' => $source['state'], 'activation_url' => $source['activation_url']],
             'rates' => $matrix,
         ]);
     }

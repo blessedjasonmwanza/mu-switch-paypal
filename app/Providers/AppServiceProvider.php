@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Support\Fx\Contracts\FxRateProviderInterface;
 use App\Support\Fx\FxQuoter;
 use App\Support\Fx\Providers\StaticFxRateProvider;
+use App\Support\Paypal\PaypalFxRates;
 use App\Support\ProviderCallLogger;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Events\ConnectionFailed;
@@ -37,7 +38,11 @@ class AppServiceProvider extends ServiceProvider
             fn () => new StaticFxRateProvider(config('moneyunify_paypal.fx', []))
         );
 
-        $this->app->singleton(FxQuoter::class);
+        // Quotes use PayPal's FX for accounts that have it, MoneyUnify's rates otherwise.
+        $this->app->singleton(FxQuoter::class, fn ($app) => new FxQuoter(
+            $app->make(FxRateProviderInterface::class),
+            $app->make(PaypalFxRates::class),
+        ));
     }
 
     /**

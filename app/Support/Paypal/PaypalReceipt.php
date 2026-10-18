@@ -89,6 +89,8 @@ final class PaypalReceipt
                 default => null,
             },
             'reference' => $payment->transaction_id,
+            // PayPal's own conversion into the account's currency, when it converted.
+            'conversion' => self::conversion($capture, data_get($payment->provider_response, 'paypal_fx.fx_id') !== null),
             'delivery' => $transfer ? [
                 'recipient_gets' => (string) $transfer->targetAmount().' '.$transfer->target_currency,
                 'status' => $transfer->status->label(),
@@ -116,6 +118,28 @@ final class PaypalReceipt
 
             return false;
         }
+    }
+
+    /**
+     * The rate PayPal converted the payment at, from the capture. What the
+     * account received after PayPal's fee is the merchant's business, so
+     * it isn't shown.
+     *
+     * @param  array<string, mixed>  $capture
+     * @return array{rate: string, locked: bool}|null
+     */
+    private static function conversion(array $capture, bool $locked): ?array
+    {
+        $rate = data_get($capture, 'seller_receivable_breakdown.exchange_rate');
+
+        if (! is_array($rate) || ! isset($rate['value'], $rate['source_currency'], $rate['target_currency'])) {
+            return null;
+        }
+
+        return [
+            'rate' => "1 {$rate['source_currency']} = {$rate['value']} {$rate['target_currency']}",
+            'locked' => $locked,
+        ];
     }
 
     /**

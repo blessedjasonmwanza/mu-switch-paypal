@@ -41,6 +41,7 @@ final class CrossBorderQuote
                 'effective_rate' => (string) $fx->effectiveRate,
                 'margin_percent' => (string) $fx->marginPercent,
                 'margin_amount' => (string) $fx->marginAmount,
+                'rate_source' => $fx->rateSource,
             ],
             // Provider fees are paid by the operator from its own accounts, not added for the sender.
             'operator_fees' => [
