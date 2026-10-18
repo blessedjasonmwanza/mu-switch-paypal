@@ -44,7 +44,9 @@ export function getCurrencyColor(currency: string, index = 0): { stroke: string;
     if (CURRENCY_COLORS[currency]) {
         return CURRENCY_COLORS[currency];
     }
+
     const color = PALETTE[index % PALETTE.length];
+
     return { stroke: color, fill: color };
 }
 
@@ -81,6 +83,7 @@ export function ActivityAreaChart({
                     {hasCurrencies &&
                         currencies.map((c, idx) => {
                             const color = getCurrencyColor(c.currency, idx);
+
                             return (
                                 <linearGradient
                                     key={c.currency}
@@ -106,16 +109,26 @@ export function ActivityAreaChart({
                     axisLine={false}
                     tickFormatter={(v: number) => {
                         if (metric === 'volume') {
-                            if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-                            if (v >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+                            if (v >= 1_000_000) {
+return `${(v / 1_000_000).toFixed(1)}M`;
+}
+
+                            if (v >= 1_000) {
+return `${(v / 1_000).toFixed(0)}k`;
+}
+
                             return `${v}`;
                         }
+
                         return `${v}`;
                     }}
                 />
                 <Tooltip
                     content={({ active, payload, label }) => {
-                        if (!active || !payload || !payload.length) return null;
+                        if (!active || !payload || !payload.length) {
+return null;
+}
+
                         const point = payload[0].payload as ActivityPoint;
 
                         return (
