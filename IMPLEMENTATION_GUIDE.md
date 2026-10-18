@@ -244,12 +244,14 @@ class MoneyUnifyPaypalAgent implements Agent, Conversational, HasTools
 - **Assistant tab:** a chat with `SendMoneyAgent`, with an approve/reject card for transfers and a Pay with PayPal button (`resources/js/components/send-money-assistant.tsx`).
 - **Transfers:** a searchable, paginated list with a progress bar (paid → sending → delivered, or the refund path), a timeline and **Check now**. It polls while a transfer is in flight, and `cross-border:refresh` runs every minute to move transfers forward.
 
-**Not done yet:** the public `pay/{transfer}` page, PayPal JS SDK v6 buttons, and corridor KPIs on the dashboard.
+**How payers pay:** PayPal's hosted checkout. The server creates the Orders v2 order and sends the payer to its approval link, with a **Pay with PayPal** or **Debit or credit card** (guest checkout) choice. There's no PayPal JS SDK on our pages: every PayPal call is made server-side through the REST APIs.
+
+**Not done yet:** corridor KPIs on the dashboard. (Merchants' public pay pages, `pay/{merchant}` and `pay/l/{link}`, are built.)
 
 
 - **`resources/js/pages/paypal-transfers/index.tsx`** has two panes:
   - **Chat (left):** the agent conversation, streamed. Pending approvals render as an approve/reject card.
-  - **Live transfer card (right):** the quote, a "Pay with PayPal" button (PayPal **JS SDK v6** or the approval link), and a timeline of the events from `paypal_transfer_events`. Poll with Inertia polling while the transfer is in flight.
+  - **Live transfer card (right):** the quote, a "Pay with PayPal" button (the order's PayPal approval link), and a timeline of the events from `paypal_transfer_events`. Poll with Inertia polling while the transfer is in flight.
 - **`paypal-transfers/history`**: a table of transfers with status, corridor, amount and provider used.
 - **Public `pay/{transfer}` page.** A sender who arrives from a shared link sees the quote and pays. No account needed.
 - **Dashboard.** Add corridor KPIs: volume by corridor, delivery success rate, median time to deliver, and refunds.

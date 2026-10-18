@@ -187,7 +187,8 @@ you can run the whole flow, PayPal in and mobile money out, without moving
 real money. It needs no credentials. It's only available when `APP_ENV` isn't
 `production`, and it's never counted as real payout coverage.
 
-1. **Sign up** and open **Providers**.
+1. **Sign up** (or use the demo account from `composer setup --demo-data`, see
+   [Local Setup](#local-setup)) and open **Providers**.
 2. **Add PayPal**: your sandbox app's client ID and secret, with environment
    `sandbox` (from [developer.paypal.com](https://developer.paypal.com/dashboard/applications)).
 3. **Add Simulated Payouts**: pick the countries to deliver to (Zambia by
@@ -214,7 +215,9 @@ Each run shows up across the platform:
 - the PayPal-verified receipt;
 - the ledger entries, including the illustrative 1% payout fee;
 - the balances and float alerts on **Treasury**;
-- every provider call on **Logs**.
+- every provider call on **Logs**;
+- an email to the payer, when they gave one, once the money is delivered or
+  refunded (`MAIL_MAILER=log` writes it to `storage/logs` locally).
 
 Refunds on PayPal's side are real sandbox refunds. Swap in Lenco or pawaPay
 when you want real local delivery.
@@ -235,6 +238,8 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] Merchants for aggregators: onboarding, pay links, merchant API, commission, settlement to mobile money
 - [x] Guest card checkout through PayPal, for payers without a PayPal account
 - [x] PayPal-verified receipts with a signed permanent link
+- [x] Payer emails: transfer or merchant payment delivered, and refunds completed
+- [x] Demo data: `composer setup --demo-data`
 - [ ] MCP server
 - [ ] Hosted demo on Render
 
@@ -426,6 +431,23 @@ composer setup
 
    > **Using MySQL/PostgreSQL instead of SQLite?** Edit the `DB_*` values in `.env`
    > before running `composer setup` (or run `php artisan migrate` again afterward).
+
+   **Want a ready-made demo?** Add `--demo-data`:
+
+```bash
+composer setup --demo-data
+```
+
+   This also adds a demo account (`demo@moneyunify.test`, password `password`) with
+   a week of activity: PayPal-funded transfers delivered to mobile money, two
+   refunded transfers, a merchant with a pay link and settled payments, an
+   assistant conversation, the ledger and treasury balances. It's made by the
+   app's own flows with PayPal's replies simulated, so nothing reaches PayPal and
+   no money moves. Payouts use [Simulated Payouts](#try-it-end-to-end-judges-and-testers).
+   To make new payments, add your PayPal sandbox app on the **Providers** page,
+   or set `PAYPAL_SANDBOX_CLIENT_ID` and `PAYPAL_SANDBOX_CLIENT_SECRET` in `.env`
+   first and it's added for you. On an existing install, run `php artisan demo:seed`.
+   Demo data is never added when `APP_ENV=production`.
 
 3. Start the development environment (runs the PHP server, Vite, queue worker, and log viewer concurrently):
 
