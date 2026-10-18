@@ -17,6 +17,7 @@
   - [How it works](#how-it-works)
   - [Why an agent, and why it's safe](#why-an-agent-and-why-its-safe)
   - [Built with](#built-with)
+  - [Try it end to end (judges and testers)](#try-it-end-to-end-judges-and-testers)
   - [Build status](#build-status)
 - [Introduction and Objective](#introduction-and-objective)
   - [What does MoneyUnify do?](#what-does-moneyunify-do)
@@ -163,7 +164,7 @@ keys. These rules are enforced in code, not in the prompt:
 
 | | |
 | --- | --- |
-| **PayPal** | Orders v2 (create, capture), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; works alongside the PayPal MCP server |
+| **PayPal** | Orders v2 (create, capture, guest card checkout), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; works alongside the PayPal MCP server |
 | **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): a Send Money agent with tool calling and human approval before any transfer, conversation memory, and a treasury agent that suggests float top-ups |
 | **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's MCP tools (a MoneyUnify MCP server is next) |
 | **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay |
@@ -177,6 +178,46 @@ To run the AI features, each account adds one or more AI providers on the **AI &
 Agents** page, in failover order, with the server's `.env` as the fallback. PayPal MCP connects
 automatically through the account's PayPal provider. See
 [AI & MCP Setup](prezet/content/ai-and-mcp.md).
+
+### Try it end to end (judges and testers)
+
+Mobile-money payout providers rarely offer a sandbox (Lenco has none), so the
+switch ships a **Simulated Payouts** provider. With it and a PayPal sandbox app,
+you can run the whole flow, PayPal in and mobile money out, without moving
+real money. It needs no credentials. It's only available when `APP_ENV` isn't
+`production`, and it's never counted as real payout coverage.
+
+1. **Sign up** and open **Providers**.
+2. **Add PayPal**: your sandbox app's client ID and secret, with environment
+   `sandbox` (from [developer.paypal.com](https://developer.paypal.com/dashboard/applications)).
+3. **Add Simulated Payouts**: pick the countries to deliver to (Zambia by
+   default). Leave **Refuse numbers ending in** empty to use `0000`.
+4. **Send money** on the **Send Money** page, by the form or by asking the AI
+   assistant (for example *"Send K50 to 0977123456"*). Pay with a PayPal
+   sandbox buyer account, or choose **Debit or credit card** to pay as a guest.
+5. **Or collect for a merchant**: add one on **Merchants**, create a pay link
+   and pay it as a customer.
+
+The recipient's number decides what the simulated payout does, so every path
+can be shown on demand:
+
+| Recipient number ends in | What happens |
+| --- | --- |
+| anything else, e.g. `0977123456` | Delivered |
+| `0000` | Refused, so the switch falls back to the next payout provider (or refunds the sender through PayPal if there's none) |
+| `9999` | No definite answer, so the switch verifies the payout before deciding |
+| `1111` | Accepted, then fails on verification, so the sender is refunded through PayPal |
+
+Each run shows up across the platform:
+
+- the transfer's timeline on **Send Money**;
+- the PayPal-verified receipt;
+- the ledger entries, including the illustrative 1% payout fee;
+- the balances and float alerts on **Treasury**;
+- every provider call on **Logs**.
+
+Refunds on PayPal's side are real sandbox refunds. Swap in Lenco or pawaPay
+when you want real local delivery.
 
 ### Build status
 
@@ -192,6 +233,8 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] Send Money page and AI assistant: quote, approve, pay with PayPal, follow delivery
 - [x] Refunds: full and partial, from the API and the dashboard, plus refunds made in PayPal
 - [x] Merchants for aggregators: onboarding, pay links, merchant API, commission, settlement to mobile money
+- [x] Guest card checkout through PayPal, for payers without a PayPal account
+- [x] PayPal-verified receipts with a signed permanent link
 - [ ] MCP server
 - [ ] Hosted demo on Render
 
