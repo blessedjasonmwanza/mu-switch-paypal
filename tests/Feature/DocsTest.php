@@ -220,3 +220,8 @@ test('the pawapay v2 driver is documented', function () {
 test('the coverage docs count paypal\'s markets', function () {
     $this->get('/docs/api/coverage')->assertOk()->assertSee('201 markets')->assertSee('204 countries reached');
 });
+
+test('the openapi spec is linked from the docs', function () {
+    $this->get('/docs/api/overview')->assertOk()->assertSee('/openapi.yaml', false);
+    $this->get('/docs/api/request-payment')->assertOk()->assertSee('pay_with')->assertDontSee('one of `ZM`, `MW`', false);
+});

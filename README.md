@@ -594,6 +594,13 @@ parameters, responses, and integration examples. In short: your application send
 a single authenticated request to `POST /api/v1/payment/request`, and the switch
 routes it across your active providers with automatic fallback.
 
+**OpenAPI spec.** The whole API (payments, refunds, payouts, transfers,
+merchants, pay links and FX) is described in an OpenAPI 3.1 spec at
+[`public/openapi.yaml`](public/openapi.yaml), served by every deployment at
+`/openapi.yaml`. Import it into Postman, Insomnia or Swagger UI, or generate a
+typed client from it. A test checks it against the API's routes, enums and real
+responses, so it doesn't drift from the code.
+
 ## Authors
 
 - 👤 **Blessed Jason Mwanza**

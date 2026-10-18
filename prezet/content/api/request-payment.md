@@ -30,7 +30,7 @@ Authorization: Bearer YOUR_API_TOKEN
 | --- | --- | --- | --- |
 | `amount` | number | required, numeric, `>= 0.01` | The amount to collect. |
 | `account_number` | string | required | The payer's account / mobile-money number. |
-| `country` | string | required, 2 letters, one of `ZM`, `MW` | ISO country code used for provider routing. |
+| `country` | string | required, 2 letters, a supported market | ISO country code used for provider routing. See [Coverage](/docs/api/coverage) for the 32 markets. |
 
 ### Optional fields
 
@@ -40,10 +40,12 @@ Authorization: Bearer YOUR_API_TOKEN
 | `currency` | string | nullable, 3 letters | Charge in this currency instead of the country's own (e.g. `USD` via PayPal). Only providers that can charge it are tried, so a fallback never switches currency. |
 | `email` | string | nullable, valid email | The payer's email, passed to providers that accept one (PayPal pre-fills its login with it). |
 | `return_url` | string | nullable, valid URL | For hosted checkouts (PayPal): where the payer is sent after paying or cancelling, with `transaction_id` and `status` appended to the query string. |
+| `pay_with` | string | nullable, `paypal` or `card` | PayPal only: `card` opens PayPal on its guest debit or credit card form, for payers without a PayPal account. |
+| `allow_fx` | boolean | nullable | Allow providers that charge in another currency (e.g. PayPal for an African currency). |
+| `fx_quote_id` | string | nullable | Use this locked [FX quote](/docs/api/fx) (implies `allow_fx`). |
 
-> The supported `country` values reflect the providers shipped with the
-> platform. As you add providers and drivers for other markets, the accepted set
-> grows accordingly.
+> A country is accepted when it's one of the switch's markets; a payment only
+> goes through if one of your active providers serves it.
 
 ## Example request
 
