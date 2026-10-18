@@ -129,6 +129,7 @@ class MerchantPayController extends Controller
         try {
             $input = $this->input($request, $merchant, $link, extra: [
                 'payer_email' => 'nullable|email',
+                'pay_with' => 'nullable|in:paypal,card',
                 'reference' => 'nullable|string|max:100',
             ]);
 

@@ -310,3 +310,23 @@ test('the customer sees the merchant\'s name on paypal checkout', function () {
     Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/checkout/orders')
         && $request['payment_source']['paypal']['experience_context']['brand_name'] === 'Kitwe Crafts');
 });
+
+test('a customer without a paypal account can choose to pay by card through paypal', function () {
+    fakeMerchantPaypal();
+
+    $this->post(route('pay.store', $this->merchant), ['amount' => 100, 'pay_with' => 'card']);
+
+    Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/checkout/orders')
+        && $request['payment_source']['paypal']['experience_context']['landing_page'] === 'GUEST_CHECKOUT');
+});
+
+test('paying with a paypal account keeps paypal\'s usual checkout', function () {
+    fakeMerchantPaypal();
+
+    $this->post(route('pay.store', $this->merchant), ['amount' => 100, 'pay_with' => 'paypal']);
+    $this->post(route('pay.store', $this->merchant), ['amount' => 100, 'pay_with' => 'cash'])->assertSessionHasErrors('pay_with');
+
+    Http::assertSentCount(2); // one token and one order
+    Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/checkout/orders')
+        && ! array_key_exists('landing_page', $request['payment_source']['paypal']['experience_context']));
+});

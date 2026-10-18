@@ -106,6 +106,7 @@ class MerchantApiController extends Controller
         $input = $request->validate([
             ...$this->paymentRules($model),
             'payer_email' => 'nullable|email',
+            'pay_with' => 'nullable|in:paypal,card',
             'reference' => 'nullable|string|max:100',
             'return_url' => 'nullable|url',
         ]);

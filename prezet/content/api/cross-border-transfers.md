@@ -123,6 +123,7 @@ Takes every quote field, plus:
 | `network` | string | nullable | The recipient's network, when the payout provider can't detect it. |
 | `narration` | string | nullable, max 100 | Shown to the recipient where the provider supports it. |
 | `payer_email` | string | nullable, email | Pre-fills the sender's PayPal login. |
+| `pay_with` | string | nullable, `paypal` or `card` | `card` opens PayPal on its guest debit or credit card form, for senders without a PayPal account. Defaults to `paypal`. |
 | `return_url` | string | nullable, URL | Where PayPal sends the sender after paying. |
 
 Send an `Idempotency-Key` header to make retries safe: the same key returns

@@ -5,6 +5,7 @@ use App\Http\Controllers\Providers\SandboxPayoutController;
 use App\Models\CrossBorderTransfer;
 use App\Models\PaymentProvider;
 use App\Models\User;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
@@ -172,4 +173,15 @@ test('a transfer can be checked now, but only by its owner', function () {
 
 test('guests cannot open the send money page', function () {
     $this->get(route('send.index'))->assertRedirect(route('login'));
+});
+
+test('a sender without a paypal account can pay by card through paypal', function () {
+    sendMoneyProviders($this->user);
+    fakeSendMoneyPaypal();
+    $this->actingAs($this->user);
+
+    sendMoney(['pay_with' => 'card'])->assertRedirect('https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1');
+
+    Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/checkout/orders')
+        && $request['payment_source']['paypal']['experience_context']['landing_page'] === 'GUEST_CHECKOUT');
 });

@@ -1,5 +1,12 @@
 import { Head, useForm } from '@inertiajs/react';
-import { ArrowDown, Loader2, Lock, ShieldCheck, Store } from 'lucide-react';
+import {
+    ArrowDown,
+    CreditCard,
+    Loader2,
+    Lock,
+    ShieldCheck,
+    Store,
+} from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import InputError from '@/components/input-error';
@@ -69,6 +76,7 @@ export default function PayMerchant({
     const [quote, setQuote] = useState<Quote | null>(null);
     const [quoteError, setQuoteError] = useState<string | null>(null);
     const [isQuoting, setIsQuoting] = useState(false);
+    const [payingWith, setPayingWith] = useState<'paypal' | 'card'>('paypal');
     const canPay = merchant.is_active && payCurrencies.length > 0;
     const fixed = link?.fixed_amount ?? false;
     const quoteUrl = link
@@ -133,8 +141,15 @@ export default function PayMerchant({
 
     const shownQuote = Number(amount) > 0 ? quote : null;
 
-    const submit = (event: FormEvent) => {
+    const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        // Both buttons go through PayPal; "card" opens its guest card form.
+        const submitter = (event.nativeEvent as SubmitEvent)
+            .submitter as HTMLButtonElement | null;
+        const payWith = submitter?.value === 'card' ? 'card' : 'paypal';
+
+        setPayingWith(payWith);
+        form.transform((data) => ({ ...data, pay_with: payWith }));
         form.post(
             link ? payLink.store.url(link.code) : pay.store.url(merchant.slug),
         );
@@ -147,7 +162,7 @@ export default function PayMerchant({
                 <main className="w-full max-w-md">
                     <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                         <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-neutral-900 text-lg font-semibold text-white dark:bg-neutral-100 dark:text-neutral-900">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2d6fbe] text-lg font-semibold text-white shadow-xs">
                                 {merchant.name.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
@@ -386,10 +401,12 @@ export default function PayMerchant({
 
                                 <button
                                     type="submit"
+                                    value="paypal"
                                     disabled={!shownQuote || form.processing}
                                     className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#FFC439] text-sm font-semibold text-[#111] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    {form.processing ? (
+                                    {form.processing &&
+                                    payingWith === 'paypal' ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                     ) : (
                                         <img
@@ -403,9 +420,26 @@ export default function PayMerchant({
                                         : 'Pay with PayPal'}
                                 </button>
 
+                                <button
+                                    type="submit"
+                                    value="card"
+                                    disabled={!shownQuote || form.processing}
+                                    data-test="pay-with-card"
+                                    className="-mt-1 flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-neutral-900 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                                >
+                                    {form.processing &&
+                                    payingWith === 'card' ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <CreditCard className="h-4 w-4" />
+                                    )}
+                                    Debit or credit card
+                                </button>
+
                                 <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-neutral-500">
                                     <ShieldCheck className="h-3.5 w-3.5" />
-                                    You approve the payment on PayPal. If it
+                                    No PayPal account needed: PayPal charges
+                                    your card securely. If the payment
                                     can&apos;t reach {merchant.name}, PayPal
                                     refunds you.
                                 </p>

@@ -463,3 +463,17 @@ test('verifying an fx transaction includes is_fx and fx_rate in the response', f
         ->assertJsonPath('data.is_fx', true)
         ->assertJsonPath('data.fx_rate', 0.03581818);
 });
+
+test('the payment api can open paypal on its guest card form', function () {
+    $user = User::factory()->create(['api_token' => 'pp-guest']);
+    paypalProvider($user);
+
+    fakePaypal(['*/v2/checkout/orders' => Http::response(paypalOrder(), 201)]);
+
+    $this->withToken('pp-guest')->postJson('/api/v1/payment/request', [
+        'amount' => 25, 'account_number' => 'payer@example.com', 'country' => 'ZM', 'currency' => 'USD', 'pay_with' => 'card',
+    ])->assertOk();
+
+    Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/checkout/orders')
+        && $request['payment_source']['paypal']['experience_context']['landing_page'] === 'GUEST_CHECKOUT');
+});

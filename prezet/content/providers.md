@@ -559,6 +559,20 @@ reports, and the transaction is marked **Actual**. If your PayPal rate differs,
 set a `fee_schedule` on the provider. Use [Quote a Payment](/docs/api/quote-payment)
 to see the fees before charging.
 
+### Guest card checkout
+
+Payers don't need a PayPal account. Pass `"pay_with": "card"` to
+[Request a Payment](/docs/api/request-payment), a cross-border transfer or a
+merchant charge, and PayPal opens on its **guest debit or credit card form**
+(`landing_page: GUEST_CHECKOUT`) instead of its login. The pay links and the
+Send Money page offer both: **Pay with PayPal** and **Debit or credit card**.
+
+The card is charged by PayPal, so nothing else changes: the same capture,
+webhooks, refunds, receipt and payout. Where PayPal can't offer guest checkout
+(the payer's country, or **PayPal account optional** is off in the business
+account's *Website preferences*), PayPal shows its usual login, and the payment
+goes through as it always does.
+
 ### PayPal-verified receipts
 
 After paying, the payer sees a receipt built from **PayPal's own record** of

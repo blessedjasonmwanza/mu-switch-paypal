@@ -50,6 +50,12 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
     public const DEFAULT_LOGO = '/paypal.png';
 
     /**
+     * `pay_with` value that opens PayPal on its guest debit or credit card
+     * form, so payers without a PayPal account can still pay through PayPal.
+     */
+    public const PAY_WITH_CARD = 'card';
+
+    /**
      * Currencies PayPal can charge. Requests must name one via `currency`.
      */
     public const SUPPORTED_CURRENCIES = [
@@ -192,7 +198,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         $transaction->save();
 
         try {
-            $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name')), $transaction->transaction_id);
+            $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with')), $transaction->transaction_id);
         } catch (PaypalException $e) {
             return $this->failTransaction($transaction, $e->getMessage(), $e->status >= 500 ? 502 : 422);
         }
@@ -386,7 +392,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
      *
      * @return array<string, mixed>
      */
-    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail, mixed $brandName = null): array
+    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail, mixed $brandName = null, mixed $payWith = null): array
     {
         return [
             'intent' => 'CAPTURE',
@@ -398,14 +404,17 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
             'payment_source' => [
                 'paypal' => array_filter([
                     'email_address' => $payerEmail,
-                    'experience_context' => [
+                    'experience_context' => array_filter([
                         // The business the payer sees on PayPal: a merchant's name when collecting for one.
                         'brand_name' => Str::limit(is_string($brandName) && trim($brandName) !== '' ? trim($brandName) : (string) config('app.name'), 127, ''),
+                        // "card" opens PayPal on its guest card form, for payers without a PayPal account.
+                        // Where PayPal can't offer guest checkout, it shows its usual login instead.
+                        'landing_page' => $payWith === self::PAY_WITH_CARD ? 'GUEST_CHECKOUT' : null,
                         'user_action' => 'PAY_NOW',
                         'shipping_preference' => 'NO_SHIPPING',
                         'return_url' => URL::signedRoute('paypal.checkout.return', ['transaction' => $transaction->transaction_id]),
                         'cancel_url' => URL::signedRoute('paypal.checkout.cancel', ['transaction' => $transaction->transaction_id]),
-                    ],
+                    ]),
                 ]),
             ],
         ];

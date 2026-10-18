@@ -180,3 +180,9 @@ test('pay links are documented', function () {
 test('paypal-verified receipts are documented', function () {
     $this->get('/docs/providers')->assertOk()->assertSee('PayPal-verified receipts', false)->assertSee('/receipts/paypal/', false);
 });
+
+test('guest card checkout is documented', function () {
+    $this->get('/docs/providers')->assertOk()->assertSee('Guest card checkout')->assertSee('GUEST_CHECKOUT');
+    $this->get('/docs/api/merchants')->assertOk()->assertSee('pay_with', false);
+    $this->get('/docs/api/cross-border-transfers')->assertOk()->assertSee('pay_with', false);
+});

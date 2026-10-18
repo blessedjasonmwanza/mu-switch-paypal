@@ -49,6 +49,7 @@ class CrossBorderTransferController extends Controller
             'network' => 'nullable|string|max:50',
             'narration' => 'nullable|string|max:100',
             'payer_email' => 'nullable|email',
+            'pay_with' => 'nullable|in:paypal,card',
             'return_url' => 'nullable|url',
         ]);
 

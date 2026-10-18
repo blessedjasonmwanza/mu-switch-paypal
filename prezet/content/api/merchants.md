@@ -56,6 +56,7 @@ The response includes the merchant's `pay_url`, its public pay link.
 | `source_currency` | string | nullable | What the customer pays in with PayPal. Defaults to `USD`. Must be a currency your PayPal account collects. |
 | `settle_currency` | string | nullable | What the merchant is settled in. Defaults to the merchant's currency; must be one your payout providers settle in its country. |
 | `payer_email` | string | charge only, nullable | Pre-fills the customer's PayPal login. |
+| `pay_with` | string | charge only, nullable | `paypal` (default) or `card`. `card` opens PayPal on its guest debit or credit card form, for customers without a PayPal account. See [Guest card checkout](/docs/providers#guest-card-checkout). |
 | `reference` | string | charge only, nullable | Your order or invoice reference. |
 | `return_url` | string | charge only, nullable | Where PayPal sends the customer afterwards. Defaults to MoneyUnify's live receipt page. |
 
