@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import AiCredentialController from '@/actions/App/Http/Controllers/AiCredentialController';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { copyText } from '@/lib/clipboard';
 import { index as aiIndex } from '@/routes/ai';
 import merchantsRoute from '@/routes/merchants';
 import providersRoute from '@/routes/providers';
@@ -157,15 +157,6 @@ function KeyBadge({ credential }: { credential: Credential }) {
     }
 
     return <Badge variant="destructive">No key, skipped</Badge>;
-}
-
-async function copyText(text: string, what: string): Promise<void> {
-    try {
-        await navigator.clipboard.writeText(text);
-        toast.success(`${what} copied.`);
-    } catch {
-        toast.error('Could not copy.');
-    }
 }
 
 /**
