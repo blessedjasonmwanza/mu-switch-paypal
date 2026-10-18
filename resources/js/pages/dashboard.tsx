@@ -14,9 +14,17 @@ import {
     TrendingUp,
     XCircle,
 } from 'lucide-react';
-import { useState  } from 'react';
-import type {ReactNode} from 'react';
-import { ActivityAreaChart, getCurrencyColor, type ActivityPoint, type TrendCurrency } from '@/components/activity-area-chart';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { toast } from 'sonner';
+import {
+    ActivityAreaChart,
+    getCurrencyColor,
+} from '@/components/activity-area-chart';
+import type {
+    ActivityPoint,
+    TrendCurrency,
+} from '@/components/activity-area-chart';
 import { TableFooter } from '@/components/table-footer';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -186,7 +194,7 @@ function StatCard({
     footer: ReactNode;
 }) {
     return (
-        <Card className="flex flex-col justify-between gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border h-full">
+        <Card className="flex h-full flex-col justify-between gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border">
             <div>
                 <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
@@ -233,10 +241,10 @@ function VolumeStatCard({
     }
 
     return (
-        <Card className="flex flex-col justify-between gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border h-full">
+        <Card className="flex h-full flex-col justify-between gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border">
             <div>
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex min-w-0 items-center gap-1.5">
                         <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
                             Volume Processed
                         </span>
@@ -244,7 +252,7 @@ function VolumeStatCard({
                             {currencies.length} currencies
                         </span>
                     </div>
-                    <span className="text-neutral-400 shrink-0">
+                    <span className="shrink-0 text-neutral-400">
                         <TrendingUp className="h-4 w-4" />
                     </span>
                 </div>
@@ -252,21 +260,25 @@ function VolumeStatCard({
                 <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1">
                     {currencies.slice(0, 4).map((c) => {
                         const hasVolume = c.value > 0;
-                        const cleanAmount = formatMoney(c.value, c.currency).replace(
+                        const cleanAmount = formatMoney(
+                            c.value,
+                            c.currency,
+                        ).replace(
                             new RegExp(`^${c.currency}[\\s\\u00A0]*`),
                             '',
                         );
+
                         return (
                             <div
                                 key={c.currency}
-                                className="flex items-center justify-between gap-1.5 py-0.5 min-w-0"
+                                className="flex min-w-0 items-center justify-between gap-1.5 py-0.5"
                             >
-                                <span className="font-mono text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 shrink-0">
+                                <span className="shrink-0 font-mono text-[10px] font-semibold text-neutral-400 dark:text-neutral-500">
                                     {c.currency}
                                 </span>
                                 <span
                                     className={cn(
-                                        'tabular-nums truncate text-xs',
+                                        'truncate text-xs tabular-nums',
                                         hasVolume
                                             ? 'font-bold text-neutral-900 dark:text-neutral-100'
                                             : 'font-normal text-neutral-400 dark:text-neutral-500',
@@ -305,7 +317,9 @@ export default function Dashboard({
     const [loading, setLoading] = useState(false);
     const [showToken, setShowToken] = useState(false);
     const [chartMetric, setChartMetric] = useState<'count' | 'volume'>('count');
-    const [selectedChartCurrency, setSelectedChartCurrency] = useState<string | null>(null);
+    const [selectedChartCurrency, setSelectedChartCurrency] = useState<
+        string | null
+    >(null);
     const [txSearch, setTxSearch] = useState(transactionFilters.q ?? '');
     const [provSearch, setProvSearch] = useState(providerFilters.q ?? '');
 
@@ -522,11 +536,13 @@ export default function Dashboard({
                                 {trendCurrencies.length > 1 && (
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedChartCurrency(null)}
+                                        onClick={() =>
+                                            setSelectedChartCurrency(null)
+                                        }
                                         className={cn(
                                             'rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors',
                                             selectedChartCurrency === null
-                                                ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 shadow-xs'
+                                                ? 'bg-neutral-900 text-white shadow-xs dark:bg-neutral-100 dark:text-neutral-900'
                                                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700',
                                         )}
                                     >
@@ -534,18 +550,26 @@ export default function Dashboard({
                                     </button>
                                 )}
                                 {trendCurrencies.map((c, idx) => {
-                                    const color = getCurrencyColor(c.currency, idx);
-                                    const isSelected = selectedChartCurrency === c.currency;
+                                    const color = getCurrencyColor(
+                                        c.currency,
+                                        idx,
+                                    );
+                                    const isSelected =
+                                        selectedChartCurrency === c.currency;
                                     const isDimmed =
-                                        selectedChartCurrency !== null && !isSelected;
+                                        selectedChartCurrency !== null &&
+                                        !isSelected;
 
                                     return (
                                         <button
                                             key={c.currency}
                                             type="button"
                                             onClick={() =>
-                                                setSelectedChartCurrency((prev) =>
-                                                    prev === c.currency ? null : c.currency,
+                                                setSelectedChartCurrency(
+                                                    (prev) =>
+                                                        prev === c.currency
+                                                            ? null
+                                                            : c.currency,
                                                 )
                                             }
                                             className={cn(
@@ -553,18 +577,29 @@ export default function Dashboard({
                                                 isSelected
                                                     ? 'bg-neutral-900 text-white shadow-xs dark:bg-neutral-100 dark:text-neutral-900'
                                                     : isDimmed
-                                                      ? 'opacity-40 hover:opacity-80 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
-                                                      : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
+                                                      ? 'bg-neutral-100 text-neutral-600 opacity-40 hover:opacity-80 dark:bg-neutral-800 dark:text-neutral-400'
+                                                      : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
                                             )}
                                         >
                                             <span
-                                                className="h-2 w-2 rounded-full shrink-0"
-                                                style={{ backgroundColor: color.stroke }}
+                                                className="h-2 w-2 shrink-0 rounded-full"
+                                                style={{
+                                                    backgroundColor:
+                                                        color.stroke,
+                                                }}
                                             />
-                                            <span className="font-semibold">{c.currency}</span>
-                                            <span className="text-[11px] opacity-80 tabular-nums">
-                                                ({c.count} {c.count === 1 ? 'txn' : 'txns'} &middot;{' '}
-                                                {formatMoney(c.volume, c.currency)})
+                                            <span className="font-semibold">
+                                                {c.currency}
+                                            </span>
+                                            <span className="text-[11px] tabular-nums opacity-80">
+                                                ({c.count}{' '}
+                                                {c.count === 1 ? 'txn' : 'txns'}{' '}
+                                                &middot;{' '}
+                                                {formatMoney(
+                                                    c.volume,
+                                                    c.currency,
+                                                )}
+                                                )
                                             </span>
                                         </button>
                                     );
