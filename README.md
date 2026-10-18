@@ -14,6 +14,7 @@
   - [The problem](#the-problem)
   - [The solution](#the-solution)
   - [For aggregators, DFSPs, FSPs and operators](#for-aggregators-dfsps-fsps-and-operators)
+  - [Operating model and compliance](#operating-model-and-compliance)
   - [How it works](#how-it-works)
   - [Why an agent, and why it's safe](#why-an-agent-and-why-its-safe)
   - [Built with](#built-with)
@@ -132,6 +133,34 @@ in), and gets:
 PayPal gains a new way to serve the businesses and families of a whole
 continent; operators gain new inbound volume into their wallets; merchants get
 paid by the world in the money they already use.
+
+### Operating model and compliance
+
+**MoneyUnify is an engine, not a payment service.** It's the technology that
+businesses and developers deploy to run payments: as an aggregator collecting
+and settling for merchants, as an operator, DFSP or FSP extending its services,
+or simply for their own e-commerce. It solves the silo problem: instead of
+integrating PayPal, an FX source and every mobile-money operator one by one,
+developers integrate MoneyUnify once and route across all of them.
+
+Like a web browser, which is a platform and not responsible for what each
+business does with it, MoneyUnify doesn't hold anyone's money, doesn't onboard
+customers, and isn't a licensed party in the flow. **The business that deploys
+it is**, using its own PayPal business account and its own provider contracts:
+
+| The deploying business (integrator, aggregator, operator, DFSP) is responsible for | MoneyUnify, the engine, provides |
+| --- | --- |
+| Licences and authorisations to collect, hold, convert and pay out money in each market | Routing across the providers it has contracts with, with fallback that never pays twice |
+| KYC/KYB of its customers and merchants, and sanctions screening | Configurable spending caps per transfer and per day (`TRANSFER_MAX_PER_TRANSACTION_USD`, `TRANSFER_MAX_DAILY_USD`) |
+| AML/CFT monitoring and reporting | An audit trail: every API and MCP request and every provider call logged (secrets redacted), a timeline per transfer, and a double-entry ledger |
+| Consumer protection, disputes and refunds policy | Full and partial refunds, and automatic PayPal refunds when delivery fails |
+| Data protection for its users | Payer emails masked on receipts; merchant MCP keys stored only as a hash and shown once; tokens, keys and secrets redacted from request logs |
+| Its agreements with PayPal (including FX as a Service) and each payout provider | Human approval before an AI agent starts a transfer; the payer approves every payment on PayPal |
+
+PayPal and the mobile-money operators also apply their own checks to the
+accounts on their platforms. MoneyUnify doesn't include KYC or sanctions
+screening; a deploying business adds the checks its licence requires, using
+its own providers.
 
 ### How it works
 
