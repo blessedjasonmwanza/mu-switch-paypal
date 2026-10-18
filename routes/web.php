@@ -60,6 +60,8 @@ if (! config('app.docs_only_routes')) {
         Route::get('merchants', [MerchantController::class, 'index'])->name('merchants.index');
         Route::post('merchants', [MerchantController::class, 'store'])->name('merchants.store');
         Route::put('merchants/{merchant:id}', [MerchantController::class, 'update'])->name('merchants.update');
+        Route::post('merchants/{merchant:id}/mcp-key', [MerchantController::class, 'issueMcpKey'])->middleware('throttle:10,1')->name('merchants.mcp-key.store');
+        Route::delete('merchants/{merchant:id}/mcp-key', [MerchantController::class, 'revokeMcpKey'])->name('merchants.mcp-key.destroy');
         Route::prefix('merchants/{merchant}/links')->name('merchants.links.')->controller(PaymentLinkController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');

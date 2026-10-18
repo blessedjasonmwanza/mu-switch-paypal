@@ -4,6 +4,7 @@ import {
     ArrowDown,
     ArrowUp,
     Bot,
+    Copy,
     Pencil,
     Plug,
     Plus,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import AiCredentialController from '@/actions/App/Http/Controllers/AiCredentialController';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +34,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { index as aiIndex } from '@/routes/ai';
+import merchantsRoute from '@/routes/merchants';
 import providersRoute from '@/routes/providers';
 
 type KeySource = 'dashboard' | 'env' | null;
@@ -69,6 +72,7 @@ interface Props {
         provider: string | null;
         environment: string | null;
     };
+    moneyunifyMcp: { operator: string; merchant: string };
 }
 
 const selectClassName =
@@ -155,11 +159,109 @@ function KeyBadge({ credential }: { credential: Credential }) {
     return <Badge variant="destructive">No key, skipped</Badge>;
 }
 
+async function copyText(text: string, what: string): Promise<void> {
+    try {
+        await navigator.clipboard.writeText(text);
+        toast.success(`${what} copied.`);
+    } catch {
+        toast.error('Could not copy.');
+    }
+}
+
+/**
+ * How to connect an AI assistant or an app to MoneyUnify over MCP: the
+ * operator server with the account's API token, and the merchant server
+ * with each merchant's own key.
+ */
+function MoneyUnifyMcpCard({
+    endpoints,
+}: {
+    endpoints: { operator: string; merchant: string };
+}) {
+    const config = JSON.stringify(
+        {
+            mcpServers: {
+                moneyunify: {
+                    type: 'http',
+                    url: endpoints.operator,
+                    headers: { Authorization: 'Bearer YOUR_API_TOKEN' },
+                },
+            },
+        },
+        null,
+        2,
+    );
+
+    return (
+        <Card data-test="moneyunify-mcp">
+            <CardHeader>
+                <CardTitle>MoneyUnify MCP</CardTitle>
+                <CardDescription>
+                    Connect any AI assistant or app to your switch. Agents can
+                    collect payments, start transfers, pay out, refund, run your
+                    merchants and read FX and treasury, through the same rules
+                    as the API.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-neutral-600 dark:text-neutral-400">
+                <div className="space-y-1.5">
+                    <div className="text-xs font-medium text-neutral-900 dark:text-neutral-100">
+                        Operator server
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <code className="min-w-0 flex-1 truncate rounded-md bg-neutral-100 px-2 py-1.5 text-xs dark:bg-neutral-800">
+                            {endpoints.operator}
+                        </code>
+                        <Button
+                            size="1"
+                            variant="soft"
+                            color="gray"
+                            className="cursor-pointer"
+                            onClick={() => copyText(endpoints.operator, 'URL')}
+                        >
+                            <Copy className="h-3 w-3" />
+                        </Button>
+                    </div>
+                    <p className="text-xs">
+                        Sign in with your API token (on the dashboard) as a
+                        Bearer token. For example, in an MCP client&apos;s
+                        config:
+                    </p>
+                    <pre className="overflow-x-auto rounded-md bg-neutral-100 p-2 text-[11px] leading-relaxed dark:bg-neutral-800">
+                        {config}
+                    </pre>
+                </div>
+                <div className="space-y-1.5">
+                    <div className="text-xs font-medium text-neutral-900 dark:text-neutral-100">
+                        Merchant server
+                    </div>
+                    <code className="block truncate rounded-md bg-neutral-100 px-2 py-1.5 text-xs dark:bg-neutral-800">
+                        {endpoints.merchant}
+                    </code>
+                    <p className="text-xs">
+                        Each merchant connects with its own key, so it only
+                        reaches its own payments, pay links and settlements.
+                        Issue keys from the{' '}
+                        <Link
+                            href={merchantsRoute.index.url()}
+                            className="text-foreground underline underline-offset-4"
+                        >
+                            Merchants
+                        </Link>{' '}
+                        page.
+                    </p>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function AiAgents({
     providers,
     credentials,
     envDefault,
     paypalMcp,
+    moneyunifyMcp,
 }: Props) {
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [editing, setEditing] = useState<Credential | null>(null);
@@ -417,6 +519,8 @@ export default function AiAgents({
                         )}
                     </CardContent>
                 </Card>
+
+                <MoneyUnifyMcpCard endpoints={moneyunifyMcp} />
             </div>
 
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>

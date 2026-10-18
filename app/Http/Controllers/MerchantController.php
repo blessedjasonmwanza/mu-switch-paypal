@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\ApiResponse;
 use App\Contracts\PayoutProviderInterface;
 use App\Enums\CrossBorderStatus;
 use App\Models\CrossBorderTransfer;
@@ -16,6 +17,7 @@ use App\Support\Merchants\MerchantPresenter;
 use App\Support\Merchants\MerchantRegistry;
 use App\Support\ProviderRouter;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -49,6 +51,7 @@ class MerchantController extends Controller
                     ...MerchantPresenter::merchant($merchant, withStats: true),
                     'settlement_currencies' => $settleIn[$merchant->country] ??= $currencies->settlementCurrencies($user, $merchant->country),
                     'links_count' => $merchant->payment_links_count,
+                    'mcp' => self::mcpAccess($merchant),
                 ]),
             'payCurrencies' => $currencies->payCurrencies($user),
             'filters' => ['q' => $search ?: null],
@@ -66,7 +69,48 @@ class MerchantController extends Controller
                     'commission' => (string) Currency::fromMinorUnits($transfer->commission_minor, $transfer->target_currency),
                 ]),
             'countries' => $this->payoutCountries($user),
+            'mcpEndpoint' => route('mcp.merchant'),
         ]);
+    }
+
+    /**
+     * Give the merchant a new MCP key, for its own apps or AI assistant. The
+     * key is returned this once; any earlier key stops working.
+     */
+    public function issueMcpKey(Request $request, Merchant $merchant): JsonResponse
+    {
+        abort_unless($merchant->user_id === $request->user()->id, 404);
+
+        $key = $merchant->issueMcpKey();
+
+        return ApiResponse::success(__('New MCP key for :name. Copy it now: it won\'t be shown again.', ['name' => $merchant->name]), [
+            'key' => $key,
+            'endpoint' => route('mcp.merchant'),
+            ...self::mcpAccess($merchant),
+        ]);
+    }
+
+    public function revokeMcpKey(Request $request, Merchant $merchant): JsonResponse
+    {
+        abort_unless($merchant->user_id === $request->user()->id, 404);
+
+        $merchant->revokeMcpKey();
+
+        return ApiResponse::success(__(':name\'s MCP key no longer works.', ['name' => $merchant->name]), self::mcpAccess($merchant));
+    }
+
+    /**
+     * Whether the merchant has an MCP key, without the key itself.
+     *
+     * @return array{enabled: bool, hint: ?string, issued_at: ?string}
+     */
+    private static function mcpAccess(Merchant $merchant): array
+    {
+        return [
+            'enabled' => $merchant->mcp_key_hash !== null,
+            'hint' => $merchant->mcp_key_hint,
+            'issued_at' => $merchant->mcp_key_issued_at?->toIso8601String(),
+        ];
     }
 
     public function store(Request $request): RedirectResponse

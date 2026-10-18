@@ -6,6 +6,8 @@ import { useState } from 'react';
 import MerchantController from '@/actions/App/Http/Controllers/MerchantController';
 import InputError from '@/components/input-error';
 import { MerchantLinks } from '@/components/merchant-links';
+import { MerchantMcpAccess } from '@/components/merchant-mcp-access';
+import type { McpAccess } from '@/components/merchant-mcp-access';
 import type { PageMeta } from '@/components/table-footer';
 import { TableSearch } from '@/components/table-search';
 import { Card } from '@/components/ui/card';
@@ -40,6 +42,7 @@ interface Merchant {
     pay_url: string;
     settlement_currencies: string[];
     links_count: number;
+    mcp: McpAccess;
     stats: {
         payments: number;
         settled: string;
@@ -91,6 +94,7 @@ interface Props {
     impact: Impact;
     recent: Settlement[];
     countries: Array<{ code: string; name: string; currency: string | null }>;
+    mcpEndpoint: string;
 }
 
 const ONLY = ['merchants', 'filters', 'impact', 'recent', 'payCurrencies'];
@@ -151,6 +155,7 @@ export default function Merchants({
     impact,
     recent,
     countries,
+    mcpEndpoint,
 }: Props) {
     const [editing, setEditing] = useState<Merchant | 'new' | null>(null);
     const form = useForm({ ...emptyForm, country: countries[0]?.code ?? '' });
@@ -401,6 +406,13 @@ export default function Merchants({
                                                 merchant.settlement_currencies
                                             }
                                             reloadOnly={ONLY}
+                                        />
+                                        <MerchantMcpAccess
+                                            merchantId={merchant.id}
+                                            merchantName={merchant.name}
+                                            access={merchant.mcp}
+                                            endpoint={mcpEndpoint}
+                                            reloadOnly={['merchants']}
                                         />
                                         <Button
                                             size="1"

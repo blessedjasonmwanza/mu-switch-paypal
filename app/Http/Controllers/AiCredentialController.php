@@ -58,6 +58,7 @@ class AiCredentialController extends Controller
                 'hasKey' => $envDefault->hasKey(),
             ],
             'paypalMcp' => PaypalMcp::statusFor($user),
+            'moneyunifyMcp' => ['operator' => route('mcp.operator'), 'merchant' => route('mcp.merchant')],
         ]);
     }
 
