@@ -196,3 +196,11 @@ test('paypal fx is documented', function () {
     $this->get('/docs/api/fx')->assertOk()->assertSee('PayPal FX')->assertSee('FX_RATE_CHANGE_DUE_TO_MARKET_EVENT');
     $this->get('/docs/providers')->assertOk()->assertSee('PayPal FX (exchange rates)', false);
 });
+
+test('the mcp servers are documented', function () {
+    $this->get('/docs/mcp')->assertOk()
+        ->assertSee('/mcp/operator')
+        ->assertSee('/mcp/merchant')
+        ->assertSee('charge_merchant_customer')
+        ->assertSee('One switch, three ways to run it');
+});

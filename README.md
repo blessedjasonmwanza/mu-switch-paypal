@@ -83,9 +83,10 @@ countries**. Every transfer is a new local payout through the mobile-money
 networks the switch already integrates. Merchants and freelancers get paid by
 PayPal customers straight into the wallet they actually use.
 
-Next, the same capabilities will be exposed as an **MCP server**, so any AI
-agent, including one already using PayPal's MCP server, can quote corridors
-and pay out to mobile money.
+The same capabilities are exposed as **MCP servers**, so any AI agent,
+including one already using PayPal's MCP server, can quote corridors, collect,
+pay out and settle merchants on mobile money. See
+[MCP Servers](prezet/content/mcp.md).
 
 ### For aggregators, DFSPs, FSPs and operators
 
@@ -120,6 +121,13 @@ in), and gets:
 - **Trust built in.** A locked exchange rate, automatic PayPal refunds when a
   settlement fails, refunds from the dashboard or API, and a double-entry
   ledger with float alerts so payout accounts never run dry.
+
+- **One switch, used three ways.** Run it as your own payment tool (collect,
+  pay out, refund, send transfers from your platform), as a gateway that
+  collects and settles for other merchants, or both. Each way is open to AI
+  agents and apps over MCP: the operator server for the operator, and a merchant
+  server where each merchant connects with its own key and sees only its own
+  payments.
 
 PayPal gains a new way to serve the businesses and families of a whole
 continent; operators gain new inbound volume into their wallets; merchants get
@@ -173,7 +181,7 @@ keys. These rules are enforced in code, not in the prompt:
 | --- | --- |
 | **PayPal** | Orders v2 (create, capture, guest card checkout), FX as a Service (exchange-rate quotes, rates locked to orders with `fx_id`), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; works alongside the PayPal MCP server |
 | **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): a Send Money agent with tool calling and human approval before any transfer, conversation memory, and a treasury agent that suggests float top-ups |
-| **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's MCP tools (a MoneyUnify MCP server is next) |
+| **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's MCP tools, and two MoneyUnify MCP servers: one for operators (21 tools: payments, payouts, refunds, transfers, merchants, FX, treasury) and one for each merchant (its own key, scoped to its own payments and pay links) |
 | **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay |
 | **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest |
 
@@ -248,7 +256,7 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] PayPal-verified receipts with a signed permanent link
 - [x] Payer emails: transfer or merchant payment delivered, and refunds completed
 - [x] Demo data: `composer setup --demo-data`
-- [ ] MCP server
+- [x] MCP servers: operator (API token) and merchant (per-merchant key), over the same actions as the REST API
 - [ ] Hosted demo on Render
 
 ## Introduction and Objective
