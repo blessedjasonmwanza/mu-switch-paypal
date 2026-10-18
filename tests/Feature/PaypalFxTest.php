@@ -230,3 +230,20 @@ test('the receipt shows the rate paypal converted the payment at', function () {
 
     expect($receipt['conversion'])->toBe(['rate' => '1 EUR = 1.0989 USD', 'locked' => true]);
 });
+
+test('checking again forgets what paypal said, so the next quote asks paypal afresh', function () {
+    Http::fake([
+        '*/v1/oauth2/token' => Http::response(['access_token' => 'A21-paypal-token', 'expires_in' => 32400]),
+        '*/v2/pricing/quote-exchange-rates' => Http::sequence()
+            ->push(['name' => 'NOT_AUTHORIZED', 'details' => [['issue' => 'FEATURE_NOT_PROVISIONED']]], 403)
+            ->push(['exchange_rate_quotes' => [['quote_amount' => ['currency_code' => 'ZMW', 'value' => '26.80'], 'exchange_rate' => '26.80000000', 'fx_id' => 'FX-1']]]),
+    ]);
+    $quoter = app(FxQuoter::class);
+
+    expect($quoter->quote('USD', 'ZMW', 100, ownerId: $this->user->id)->rateSource)->toBe('moneyunify');
+
+    // PayPal has since enabled FX on the business account.
+    $this->actingAs($this->user)->from(route('rates.index'))->post(route('rates.paypal-fx.check'))->assertRedirect(route('rates.index'));
+
+    expect($quoter->quote('USD', 'ZMW', 100, ownerId: $this->user->id)->rateSource)->toBe('paypal');
+});

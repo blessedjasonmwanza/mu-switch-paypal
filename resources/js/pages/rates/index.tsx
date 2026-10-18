@@ -27,6 +27,7 @@ import {
 import { DisabledTooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import ratesRoute from '@/routes/rates';
+import paypalFxRoute from '@/routes/rates/paypal-fx';
 
 interface RateItem {
     currency: string;
@@ -526,12 +527,20 @@ function CorridorQuotePopover({
     );
 }
 
+/** PayPal's guide to FX as a Service: who can get it and how. */
+const PAYPAL_FX_GUIDE =
+    'https://developer.paypal.com/docs/checkout/fx-as-a-service/';
+
 /**
  * Where this account's rates come from: PayPal's FX when its PayPal business
- * account has FX as a Service, otherwise MoneyUnify's rate table, with the
- * way to switch PayPal FX on.
+ * account has FX as a Service, otherwise MoneyUnify's rate table. PayPal
+ * enables FX for the business account, so the guide comes first; PayPal's
+ * own activation page is offered once the user says FX is already on.
  */
 function PaypalFxNotice({ rateSource }: { rateSource: RateSource }) {
+    const [alreadyEnabled, setAlreadyEnabled] = useState(false);
+    const [checking, setChecking] = useState(false);
+
     if (rateSource.state === 'no_paypal') {
         return null;
     }
@@ -557,34 +566,108 @@ function PaypalFxNotice({ rateSource }: { rateSource: RateSource }) {
         );
     }
 
+    const checkAgain = () =>
+        router.post(
+            paypalFxRoute.check.url(),
+            {},
+            {
+                preserveScroll: true,
+                onStart: () => setChecking(true),
+                onFinish: () => setChecking(false),
+            },
+        );
+
+    if (rateSource.state === 'off') {
+        return (
+            <div
+                className="rounded-xl border border-sidebar-border/70 bg-neutral-50 px-4 py-3 text-xs text-neutral-600 dark:border-sidebar-border dark:bg-neutral-900/50 dark:text-neutral-400"
+                data-test="paypal-fx-notice"
+            >
+                <span className="font-semibold text-neutral-800 dark:text-neutral-200">
+                    Using MoneyUnify rates.
+                </span>{' '}
+                {rateSource.provider} is set to MoneyUnify&apos;s rates. Set its{' '}
+                <span className="font-medium">Exchange rates</span> to paypal on
+                the Providers page to use PayPal FX.
+            </div>
+        );
+    }
+
     return (
         <div
-            className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
             data-test="paypal-fx-notice"
         >
-            <p>
-                <span className="font-semibold">
-                    {rateSource.state === 'off'
-                        ? 'Using MoneyUnify rates.'
-                        : rateSource.state === 'unavailable'
-                          ? 'PayPal FX is unavailable right now.'
-                          : 'Use PayPal’s exchange rates.'}
-                </span>{' '}
-                {rateSource.state === 'off'
-                    ? `${rateSource.provider} is set to MoneyUnify's rates. Switch its Exchange rates setting to paypal on the Providers page.`
-                    : rateSource.state === 'unavailable'
-                      ? "Quotes use MoneyUnify's rates until PayPal answers again."
-                      : `Enable FX as a Service on the PayPal business account behind ${rateSource.provider}, and quotes switch to PayPal's rates automatically. Until then, MoneyUnify's rates are used.`}
-            </p>
-            {rateSource.activation_url && (
-                <a
-                    href={rateSource.activation_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 rounded-full bg-amber-900 px-3 py-1.5 text-center font-semibold text-amber-50 hover:opacity-90 dark:bg-amber-200 dark:text-amber-950"
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                    <span className="font-semibold">
+                        {rateSource.state === 'unavailable'
+                            ? 'PayPal FX is unavailable right now.'
+                            : 'Use PayPal’s exchange rates.'}
+                    </span>{' '}
+                    {rateSource.state === 'unavailable'
+                        ? "Quotes use MoneyUnify's rates until PayPal answers again."
+                        : `PayPal enables FX as a Service for the business account behind ${rateSource.provider} (ask PayPal or your account manager). Once it's on, quotes switch to PayPal's rates automatically; until then, MoneyUnify's rates are used.`}
+                </p>
+                <div className="flex shrink-0 items-center gap-2">
+                    <a
+                        href={PAYPAL_FX_GUIDE}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full bg-amber-900 px-3 py-1.5 text-center font-semibold text-amber-50 hover:opacity-90 dark:bg-amber-200 dark:text-amber-950"
+                    >
+                        How to get PayPal FX
+                    </a>
+                    {!alreadyEnabled && (
+                        <button
+                            type="button"
+                            onClick={() => setAlreadyEnabled(true)}
+                            className="cursor-pointer rounded-full border border-amber-300 px-3 py-1.5 font-semibold hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40"
+                        >
+                            It&apos;s already enabled
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {alreadyEnabled && (
+                <div
+                    className="mt-3 flex flex-col gap-2 border-t border-amber-200 pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/50"
+                    data-test="paypal-fx-enabled-help"
                 >
-                    Enable PayPal FX
-                </a>
+                    <p>
+                        If PayPal has enabled FX as a Service for this business
+                        account, check again. If PayPal still says it isn&apos;t
+                        on, open PayPal&apos;s FX page while signed in to that
+                        business account.
+                    </p>
+                    <div className="flex shrink-0 items-center gap-2">
+                        {rateSource.activation_url && (
+                            <a
+                                href={rateSource.activation_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-full border border-amber-300 px-3 py-1.5 text-center font-semibold hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40"
+                            >
+                                Open PayPal&apos;s FX page
+                            </a>
+                        )}
+                        <button
+                            type="button"
+                            onClick={checkAgain}
+                            disabled={checking}
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-amber-900 px-3 py-1.5 font-semibold text-amber-50 hover:opacity-90 disabled:opacity-60 dark:bg-amber-200 dark:text-amber-950"
+                        >
+                            <RefreshCw
+                                className={cn(
+                                    'h-3 w-3',
+                                    checking && 'animate-spin',
+                                )}
+                            />
+                            Check again
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

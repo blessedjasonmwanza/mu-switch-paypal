@@ -61,10 +61,12 @@ XAF and ZAR.
 - **Turning it off.** Set the PayPal provider's **Exchange rates** to
   `moneyunify`.
 
-To enable it in the sandbox, open **FX as a Service** in the sandbox business
-account (the **Exchange Rates** page links to it when it's off). In live,
-PayPal approves FX as a Service for the business account under its FX
-agreement. The PayPal rate converts PayPal's own leg; the mobile-money payout
+**Getting it.** PayPal enables FX as a Service for the business account, under
+its FX agreement: ask PayPal, or your PayPal account manager. That applies to
+sandbox business accounts too; a sandbox account without it gets
+`FEATURE_NOT_PROVISIONED`. Once PayPal has turned it on, choose **It's already
+enabled → Check again** on the **Exchange Rates** page (or wait up to 30
+minutes) and quotes switch to PayPal's rates. The PayPal rate converts PayPal's own leg; the mobile-money payout
 is paid from your float at the rate you locked.
 
 ## Authentication

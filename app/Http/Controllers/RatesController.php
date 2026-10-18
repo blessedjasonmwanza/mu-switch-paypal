@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\ApiResponse;
 use App\Support\Fx\Exceptions\UnsupportedCurrencyPairException;
 use App\Support\Fx\FxQuoter;
+use App\Support\Paypal\PaypalFxRates;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,6 +41,19 @@ class RatesController extends Controller
             'activeQuote' => $activeQuote,
             'rateSource' => $quoter->rateSourceFor($request->user()->id),
         ]);
+    }
+
+    /**
+     * Ask PayPal again whether FX is enabled on the account's PayPal business
+     * account, e.g. right after PayPal turned it on.
+     */
+    public function checkPaypalFx(Request $request, PaypalFxRates $paypalFx): RedirectResponse
+    {
+        if ($provider = $paypalFx->providerFor($request->user()->id)) {
+            $paypalFx->forget($provider);
+        }
+
+        return back();
     }
 
     /**

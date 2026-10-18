@@ -84,6 +84,7 @@ if (! config('app.docs_only_routes')) {
 
         Route::get('rates', [RatesController::class, 'index'])->name('rates.index');
         Route::post('rates/quote', [RatesController::class, 'quote'])->middleware(LogApiRequests::class)->name('rates.quote');
+        Route::post('rates/paypal-fx/check', [RatesController::class, 'checkPaypalFx'])->middleware('throttle:10,1')->name('rates.paypal-fx.check');
 
         Route::get('treasury', [TreasuryController::class, 'index'])->name('treasury.index');
         Route::put('treasury/float-rules', [FloatRuleController::class, 'upsert'])->name('treasury.float-rules.upsert');
