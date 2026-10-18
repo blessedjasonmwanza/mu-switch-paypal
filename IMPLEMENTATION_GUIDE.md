@@ -37,22 +37,23 @@ flowchart LR
     S[Sender<br/>chat UI / Claude Desktop] -->|natural language| A[MoneyUnifyPaypalAgent<br/>laravel/ai + tools]
     A -->|QuoteCorridor| Q[TransferQuoter<br/>FX + ProviderFees]
     A -->|CreateFundingOrder<br/>approval required| PP[(PayPal<br/>Orders v2)]
-    A -.->|PayPal MCP tools<br/>invoices, orders| PPM[PayPal MCP server]
+    A -.->|read-only PayPal tools<br/>orders, transactions, refunds| PPM[PayPal Agent Toolkit<br/>@paypal/mcp, local stdio]
     PP -->|buyer approves| S
     PP -->|webhook PAYMENT.CAPTURE.COMPLETED| W[Webhook controller<br/>signature verified]
     W --> J[DisburseCrossBorderTransfer job]
     J -->|requestPayout + fallback| SW[MoneyUnify Switch<br/>payout routing]
     SW --> P1[pawaPay] & P2[MTN MoMo] & P3[Airtel Money] & P4[Lenco ...]
     J -->|all providers failed| R[PayPal refund]
-    M[MoneyUnify MCP server<br/>laravel/mcp] --> Q & SW
-    X[External agents<br/>Claude, ChatGPT] --> M
+    M[MoneyUnify MCP servers<br/>operator + merchant] --> Q & SW
+    X[External agents<br/>Claude, ChatGPT, apps] --> M
+    FX[PayPal FX as a Service] -.->|base rate when enabled| Q
 ```
 
 Three layers, each usable on its own:
 
 1. **Switch layer (existing, extended).** PayPal becomes a collection driver, and the switch gains **payouts** with the same fallback and cost-aware routing it already has for collections.
 2. **Transfer layer (new).** A `CrossBorderTransfer` links a PayPal funding leg to a mobile-money payout leg. It covers quotes, the state machine, webhooks and refunds.
-3. **Agent layer (new).** A Laravel AI SDK agent whose tools sit behind server-side guardrails. It can also use PayPal's MCP tools. A MoneyUnify MCP server lets *any* agent use MoneyUnify alongside PayPal's own MCP server.
+3. **Agent layer (new).** Laravel AI SDK agents whose tools sit behind server-side guardrails. The Send Money agent also gets PayPal's Agent Toolkit (read-only tools). Two MoneyUnify MCP servers, one for operators and one per merchant, let *any* agent or app use MoneyUnify, alongside PayPal's own tools.
 
 All business logic lives in plain services (`FxQuoter`, `ProviderRouter`, `PayoutDispatcher`, `CrossBorderTransferService`). AI tools and MCP tools are thin adapters over those services, so the agent, the MCP server, the HTTP API and the tests all exercise the same code.
 
@@ -148,21 +149,23 @@ awaiting_payment → funded → paying_out → delivered
 
 **Who pays the fees.** The sender pays exactly the quoted amount and the recipient gets exactly the quoted amount. Provider fees are paid by the operator and shown as `operator_fees`. The operator's income is the FX margin.
 
-**Not done yet:**
-- Linking the transfer to the AI conversation that created it (`conversation_id`), which comes with the agent (§4.6).
-- Notifying the sender and the recipient.
-- A transfer UI with a live timeline (§4.8).
+**Since built:** the transfer is linked to the AI conversation that started it (`conversation_id`, §4.6); the sender is emailed when it's delivered or refunded (`PayerNotifier`, §4.11); the Send Money page shows a live timeline (§4.8).
 
-### 4.6 The AI agent (Laravel AI SDK) 🟡
+**Proven end to end in the sandboxes (2026-10-18):** a PayPal sandbox payment at PayPal's FX rate (USD 1.02 for ZMW 20.00) was captured and paid out through pawaPay's sandbox to `260763456789` (delivered six seconds after capture); a second to `260763456079` was refused by pawaPay ("The payment would exceed customers maximum allowed balance.") and refunded through PayPal automatically, with balanced ledger entries for both.
+
+**Not done yet:** notifying the recipient (only the sender is emailed).
+
+### 4.6 The AI agent (Laravel AI SDK) ✅
 
 **Built (2026-10-15) as `App\Ai\Agents\SendMoneyAgent`** (Promptable, `RemembersConversations`, `HasTools`, account AI credentials with failover):
-- Tools in `app/Ai/Tools`: `ListCorridors`, `QuoteTransfer`, `StartTransfer` (**`Approvable`, always requires approval**, with the recipient and amount as the reason) and `GetTransferStatus`. All are thin adapters over `CrossBorderTransferService` (§4.5). PayPal's MCP tools are added when PayPal MCP is on, and the SDK requires approval for each one.
+- Tools in `app/Ai/Tools`: `ListCorridors`, `QuoteTransfer`, `StartTransfer` (**`Approvable`, always requires approval**, with the recipient and amount as the reason) and `GetTransferStatus`. All are thin adapters over `CrossBorderTransferService` (§4.5). PayPal's **Agent Toolkit** tools are added when PayPal MCP is on, read-only only (`get_`, `list_`, `show_`, `search_`, `retrieve_`, `track_`, e.g. `get_order`, `list_transactions`, `get_refund`, `list_disputes`), so the assistant can read PayPal's record but never move or refund money through PayPal. They come from PayPal's official MCP server (`@paypal/mcp` 1.8.1, built on `@paypal/agent-toolkit`), run locally over stdio (`PAYPAL_MCP_TRANSPORT=local`): PayPal's hosted sandbox server answered only over SSE (`/http` returned 404), which the MCP client doesn't speak. Verified live: 28 tools listed, and `get_order` returned a captured sandbox order.
+- Grounding: `TransferIntent` lets the agent quote or start a transfer only for an amount and a number the user typed in this conversation (a failed turn once turned "3 kwacha" into USD 20; it can't now). One conversation per session, with an AI-written title, and **Recent conversations** (paginated) under the form.
 - Guardrails in code: `TransferLimits` enforces `TRANSFER_MAX_PER_TRANSACTION_USD` and `TRANSFER_MAX_DAILY_USD` for **every** cross-border transfer (API, dashboard or agent). Tools only see the account's providers and transfers, and a conversation can only be continued by its owner (`VerifiesConversationOwnership`).
 - Audit: transfers carry `origin` (`api`, `dashboard`, `agent`) and the agent's `conversation_id`.
 - Endpoints: `POST /send/assistant` (message) and `POST /send/assistant/decide` (approve or reject the pending tool calls, resumed with `Decisions`).
 - Tests: `tests/Feature/SendMoneyAgentTest.php`.
 
-**Not done yet:** streaming replies, `ExplainRouting`, the "first-time recipient" approval reason, the `PaymentsAnalystAgent`, and a MoneyUnify MCP server (§4.7). The plan below is kept for reference.
+**Not done yet:** streaming replies, `ExplainRouting`, the "first-time recipient" approval reason and the `PaymentsAnalystAgent`. (The MoneyUnify MCP servers, §4.7, are built.) The plan below is kept for reference.
 
 
 `config/ai.php`, `config/mcp.php` and the `agent_conversations` migration are already published. Keys are set in `.env`, as described in `prezet/content/ai-and-mcp.md`.
@@ -231,30 +234,30 @@ class MoneyUnifyPaypalAgent implements Agent, Conversational, HasTools
 3. Proactive recovery: "the first provider timed out, I rerouted through Lenco, delivered in 40s".
 4. Merchant-side **Ask your payments**: "why did payouts to Uganda fail yesterday?". This uses a second, read-only agent (`PaymentsAnalystAgent`) over `transactions` and `provider_logs`, with structured output (`HasStructuredOutput`) for tables and charts.
 
-### 4.7 MoneyUnify MCP server (`laravel/mcp`)
+### 4.7 MoneyUnify MCP servers (`laravel/mcp`) ✅
 
-- `php artisan make:mcp-server MoneyUnifyServer`, plus one `php artisan make:mcp-tool` per capability. The capabilities are `list_corridors`, `quote_corridor`, `request_payment`, `verify_payment`, `request_payout` and `get_transfer_status`. Each MCP tool calls the same services as the AI tools.
-- Register it in `routes/ai.php`: `Mcp::web('/mcp/moneyunify', MoneyUnifyServer::class)`, behind `auth:sanctum` so it uses the existing API token.
-- **Example:** in Claude Desktop, connect **PayPal's MCP server** and **MoneyUnify's MCP server** side by side. Ask, for example, "invoice my client in PayPal, and when it's paid, send 60% to my supplier's M-Pesa." The agent combines both servers. MoneyUnify extends PayPal's agent ecosystem rather than competing with it.
+**Built (2026-10-18)** in `app/Mcp`, registered in `routes/ai.php`. Every tool calls the same controller action as the REST API (`SwitchTool::forward`), so validation, routing, fallback, limits, idempotency and logging are identical.
+- **Operator** (`/mcp/operator`, the account's API token, `AuthenticateMcpOperator`): 21 tools for direct payments (quote, collect, check, refund), payouts, transfers (quote, start, check, list), the merchant gateway (onboard, update, charge, settlements, pay links), FX (rates with `rate_source`, locked quotes) and treasury balances.
+- **Merchant** (`/mcp/merchant`, a per-merchant `mu_mk_` key, hashed, issued, replaced or revoked from **Merchants → AI & apps**, `AuthenticateMcpMerchant`): 9 tools scoped to that merchant (profile, quote, charge, payments, check payment, pay links). Another merchant's data reads as not found.
+- Each client has its own limit (`throttle:mcp`, 120 a minute per server and token). Tools carry MCP read-only and destructive hints; the servers' instructions require confirming amounts and passing `idempotency_key`.
+- Verified over real HTTP: handshake, `tools/list` (21) and `quote_transfer` returning PayPal's FX rate. Tests: `tests/Feature/MoneyUnifyMcpTest.php`. Docs: `prezet/content/mcp.md`.
 
-### 4.8 UI (Inertia + React) 🟡
+### 4.8 UI (Inertia + React) ✅
 
 **Built (2026-10-15):** the **Send Money** page (`resources/js/pages/send/index.tsx`, `SendMoneyController`), in the sidebar:
 - **Form tab:** a live quote as you type (rate, margin, route, estimated fees, lock countdown), then **Pay with PayPal**, which starts the transfer and redirects to PayPal checkout. The sender returns to the page afterwards.
 - **Assistant tab:** a chat with `SendMoneyAgent`, with an approve/reject card for transfers and a Pay with PayPal button (`resources/js/components/send-money-assistant.tsx`).
 - **Transfers:** a searchable, paginated list with a progress bar (paid → sending → delivered, or the refund path), a timeline and **Check now**. It polls while a transfer is in flight, and `cross-border:refresh` runs every minute to move transfers forward.
 
-**How payers pay:** PayPal's hosted checkout. The server creates the Orders v2 order and sends the payer to its approval link, with a **Pay with PayPal** or **Debit or credit card** (guest checkout) choice. There's no PayPal JS SDK on our pages: every PayPal call is made server-side through the REST APIs.
+**How payers pay:**
+- **Merchant pay pages** show **PayPal's own button from the JS SDK v6** (`PaypalSdkButton`): `createInstance` with the collecting account's public client ID, `findEligibleMethods`, a one-time payment session started from the click, the order created on our server (`POST /pay/{merchant}/order`, no return links) and captured after approval (`POST /pay/receipt/{reference}/capture`). Verified live: the sandbox SDK (6.68.0) loaded and rendered its button. If it can't load, or the order belongs to another PayPal app, the page falls back to the classic redirect.
+- **Send Money page** and the API use PayPal's hosted checkout (redirect to the approval link).
+- Both offer **Debit or credit card**: PayPal's guest card checkout (`landing_page: GUEST_CHECKOUT`) for payers without a PayPal account.
 
 **Not done yet:** corridor KPIs on the dashboard. (Merchants' public pay pages, `pay/{merchant}` and `pay/l/{link}`, are built.)
 
 
-- **`resources/js/pages/paypal-transfers/index.tsx`** has two panes:
-  - **Chat (left):** the agent conversation, streamed. Pending approvals render as an approve/reject card.
-  - **Live transfer card (right):** the quote, a "Pay with PayPal" button (the order's PayPal approval link), and a timeline of the events from `paypal_transfer_events`. Poll with Inertia polling while the transfer is in flight.
-- **`paypal-transfers/history`**: a table of transfers with status, corridor, amount and provider used.
-- **Public `pay/{transfer}` page.** A sender who arrives from a shared link sees the quote and pays. No account needed.
-- **Dashboard.** Add corridor KPIs: volume by corridor, delivery success rate, median time to deliver, and refunds.
+The original plan (separate `paypal-transfers` pages and a public `pay/{transfer}` page) was replaced by the Send Money page and the merchants' pay pages above.
 
 ### 4.8b Refunds and merchant settlement for aggregators ✅
 
@@ -274,19 +277,28 @@ Agents are tested with the SDK's fakes, so no real model calls happen in CI. Use
 
 | Test file | Covers |
 |---|---|
-| `tests/Feature/PaypalPaymentTest.php` | OAuth, order creation (with `Http::fake`), `checkout_url` in the response, capture on verify, idempotency header |
-| `tests/Feature/PaypalWebhookTest.php` | Signature verification pass and fail, duplicate events ignored, capture-completed dispatches the payout |
-| `tests/Feature/PayoutRouterTest.php` | Payout fallback, cost-aware ordering, `direction = debit` |
-| `tests/Feature/CrossBorderTransferTest.php` ✅ | State machine transitions, delivery, refund when the payout fails, idempotency, quote ownership |
-| `tests/Feature/MoneyUnifyPaypalAgentTest.php` | Pending approval on `CreateFundingOrder`, approve/reject decisions resume correctly, spending-cap refusal, new-recipient approval reason, each tool's output shape |
-| `tests/Feature/McpServerTest.php` | Tools listed and callable with a valid token, rejected without one |
+| `tests/Feature/PaypalPaymentTest.php`, `PaypalCheckoutTest.php`, `PaypalWebhookTest.php` | OAuth, orders (`Http::fake`), `checkout_url`, guest card checkout, capture on return and verify, webhook signatures and duplicates |
+| `tests/Feature/PaypalFxTest.php` | PayPal FX quotes, caching, inversion and cross rates, fallback when not provisioned, locked `fx_id` on orders, market-event retry, quick try when PayPal is slow, warm-up command |
+| `tests/Feature/PaypalReceiptTest.php`, `RefundTest.php` | PayPal-verified receipts, signed links, refunds (full, partial, from PayPal), a failed lookup never wiping a settled payment |
+| `tests/Feature/CrossBorderTransferTest.php`, `SendMoneyPageTest.php`, `SendMoneyAgentTest.php`, `Unit/TransferIntentTest.php` | The transfer state machine, delivery, refund on a failed payout, idempotency, the Send page, the agent's approvals, grounding and send-only guardrails |
+| `tests/Feature/PayoutTest.php`, `PawapayPaymentTest.php`, `LencoPayoutTest.php`, `PayoutsCheckTest.php` | Payout fallback, pawaPay v2 requests and statuses (incl. NOT_FOUND rules), Lenco, the sandbox-only payout check |
+| `tests/Feature/MerchantTest.php`, `PaymentLinkTest.php` | Merchants, pay links, settlement, commission, the JS SDK order and capture endpoints |
+| `tests/Feature/MoneyUnifyMcpTest.php`, `AiProviderChainTest.php` | Both MCP servers over HTTP and in-process, merchant isolation, per-client rate limits, key issue and revoke; the Agent Toolkit transport |
+| `tests/Feature/PayerNotificationTest.php`, `DemoSeederTest.php`, `DocsTest.php` | Payer emails, demo data, and that the docs describe what's built |
 
-Run them with `php artisan test --compact --filter=...`, and run `vendor/bin/pint --dirty --format agent` before each commit.
+630 tests pass (plus 1 skipped) as of 2026-10-18. Run them with `php artisan test --compact --filter=...`, and run `vendor/bin/pint --dirty --format agent` before each commit.
 
-### 4.10 Docs and housekeeping
+### 4.10 Docs and housekeeping ✅
 
-- Add `public/paypal.png`.
-- Update the "13 providers" counts in `README.md`, `public/llms.txt`, `public/llms-full.txt` and `prezet/content/*.md`.
-- Add a PayPal section to `prezet/content/providers.md`, plus new docs pages `api/payouts.md`, `moneyunify-paypal.md` and `mcp.md`.
-- Add `ANTHROPIC_API_KEY` and the PayPal sandbox keys to `.env.example`.
-- Keep the README "Built with" section accurate.
+- `public/paypal.png`, a PayPal section in `prezet/content/providers.md`, and the pages `api/payouts.md`, `api/fx.md`, `api/merchants.md`, `api/refunds.md`, `api/cross-border-transfers.md`, `merchants.md`, `ai-and-mcp.md` and `mcp.md`.
+- PayPal sandbox keys, `PAYPAL_SANDBOX_*` and `PAWAPAY_SANDBOX_TOKEN` (for demo data), and the MCP settings in `.env.example`.
+- The README "Built with" section and build status are kept to what's built and verified.
+
+### 4.11 Since the plan ✅
+
+Built after the original plan, each with tests and docs:
+- **PayPal FX as a Service:** quotes use PayPal's own rate for accounts whose business account has it (`PaypalFxRates`), with `rate_source` everywhere, `fx_id` locked on orders in another currency, and MoneyUnify's rates as the fallback. Live on our sandbox: USD→ZMW 20.0335 and USD→KES 133.5385 (2026-10-18). Rates are fetched ahead of time (`paypal-fx:warm`, every 30 minutes) and PayPal gets one quick try, so quotes never wait on a slow PayPal.
+- **PayPal-verified receipts** with a signed permanent link, and **payer emails** when money is delivered or refunded.
+- **pawaPay API v2** (`/v2/deposits`, `/v2/payouts`, `/v2/predict-provider`), verified against pawaPay's sandbox: payouts to its test numbers completed, failed (with pawaPay's reason kept) and stayed pending as documented, and a deposit completed. A payout pawaPay accepted is never treated as lost.
+- **Demo data:** `composer setup --demo-data` (or `php artisan demo:seed`) creates a demo account with a week of activity through the real flows; never in production.
+- **Sandbox payout check:** `php artisan payouts:check {provider}` sends one small payout through a sandbox provider and follows it (refuses live accounts).

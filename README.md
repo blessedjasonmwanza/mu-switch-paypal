@@ -182,7 +182,7 @@ keys. These rules are enforced in code, not in the prompt:
 | **PayPal** | JS SDK v6 (PayPal's own button on merchant pay pages: the payer approves in PayPal's window without leaving the page), Orders v2 (create, capture, guest card checkout), FX as a Service (exchange-rate quotes, rates locked to orders with `fx_id`), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; PayPal's Agent Toolkit for our agents (PayPal's official `@paypal/mcp` server, built on `@paypal/agent-toolkit`, run locally) |
 | **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): a Send Money agent with tool calling and human approval before any transfer, conversation memory, and a treasury agent that suggests float top-ups |
 | **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's Agent Toolkit tools (read-only for the Send Money assistant: `get_order`, `list_transactions`, `get_refund`, `list_disputes`…), and two MoneyUnify MCP servers: one for operators (21 tools: payments, payouts, refunds, transfers, merchants, FX, treasury) and one for each merchant (its own key, scoped to its own payments and pay links) |
-| **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay |
+| **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay (API v2, tested against pawaPay's sandbox) |
 | **App** | Laravel 13, Inertia + React 19, Tailwind 4, Pest |
 
 > **Test safely.** Develop against PayPal's sandbox, pawaPay's sandbox or the
@@ -279,6 +279,10 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] Payer emails: transfer or merchant payment delivered, and refunds completed
 - [x] Demo data: `composer setup --demo-data`
 - [x] MCP servers: operator (API token) and merchant (per-merchant key), over the same actions as the REST API
+- [x] PayPal's JS SDK v6 button on merchant pay pages
+- [x] PayPal's Agent Toolkit for the assistant (PayPal's official MCP server, read-only tools)
+- [x] pawaPay API v2 for collections and payouts
+- [x] Proven end to end in the sandboxes: a PayPal payment delivered to mobile money through pawaPay, and a refused payout refunded through PayPal automatically
 - [ ] Hosted demo on Render
 
 ## Introduction and Objective
