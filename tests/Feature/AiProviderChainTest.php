@@ -134,3 +134,34 @@ test('paypal mcp is off when neither the account nor .env sets it up', function 
     expect(PaypalMcp::statusFor($user)['source'])->toBeNull()
         ->and(PaypalMcp::clientFor($user))->toBeNull();
 });
+
+test('by default agents run paypal\'s agent toolkit mcp server locally, with the account\'s token and environment', function () {
+    $server = tempnam(sys_get_temp_dir(), 'paypal-mcp');
+    config(['services.paypal.mcp_transport' => 'local', 'services.paypal.mcp_server' => $server, 'services.paypal.mcp_node' => '/usr/local/bin/node']);
+    Http::fake(['*/v1/oauth2/token' => Http::response(['access_token' => 'A21-paypal-token', 'expires_in' => 32400])]);
+
+    $user = User::factory()->create();
+    paypalProvider($user);
+
+    $client = PaypalMcp::clientFor($user);
+    $recipe = (fn () => $this->transport->recipe())->call($client);
+
+    expect(PaypalMcp::usesLocalServer())->toBeTrue()
+        ->and($recipe)->toMatchArray([
+            'command' => '/usr/local/bin/node',
+            'args' => [$server, '--tools=all'],
+            'env' => ['PAYPAL_ACCESS_TOKEN' => 'A21-paypal-token', 'PAYPAL_ENVIRONMENT' => 'SANDBOX'],
+        ]);
+
+    unlink($server);
+});
+
+test('without the local server installed, agents use paypal\'s hosted mcp server', function () {
+    config(['services.paypal.mcp_transport' => 'local', 'services.paypal.mcp_server' => '/nowhere/index.js']);
+
+    $user = User::factory()->create();
+    paypalProvider($user);
+
+    expect(PaypalMcp::usesLocalServer())->toBeFalse()
+        ->and(PaypalMcp::clientFor($user))->toBeInstanceOf(WebClient::class);
+});

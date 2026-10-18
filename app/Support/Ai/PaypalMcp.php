@@ -11,9 +11,15 @@ use Laravel\Mcp\Client;
 use Laravel\Mcp\Facades\Mcp;
 
 /**
- * PayPal's MCP server for an account's agents. It authenticates with the
- * account's PayPal provider. Turning MCP off on that provider switches it off
- * entirely; only accounts without a PayPal provider fall back to .env.
+ * PayPal's Agent Toolkit for an account's agents, through PayPal's MCP
+ * server. It authenticates with the account's PayPal provider. Turning MCP off
+ * on that provider switches it off entirely; only accounts without a PayPal
+ * provider fall back to .env.
+ *
+ * By default it runs PayPal's official MCP server (@paypal/mcp, built on
+ *
+ * @paypal/agent-toolkit) locally over stdio. PayPal's hosted server only
+ * answers over SSE in the sandbox, which the MCP client doesn't speak.
  */
 class PaypalMcp
 {
@@ -33,6 +39,14 @@ class PaypalMcp
 
         if ($provider = self::enabledProvider($providers)) {
             $paypal = PaypalClient::fromConfig($provider->config);
+
+            if (self::usesLocalServer()) {
+                // A fresh access token for each run, from the provider's cached OAuth flow.
+                return Client::local((string) config('services.paypal.mcp_node', 'node'), [self::localServerPath(), '--tools=all'], [
+                    'PAYPAL_ACCESS_TOKEN' => $paypal->accessToken(),
+                    'PAYPAL_ENVIRONMENT' => $paypal->environment()->agentToolkitName(),
+                ])->withTimeout(60);
+            }
 
             // Tokens come from the provider's cached OAuth flow, so they never go stale.
             return Client::web($paypal->environment()->mcpUrl())
@@ -99,6 +113,20 @@ class PaypalMcp
     private static function disabledProvider(Collection $providers): ?PaymentProvider
     {
         return $providers->first(fn (PaymentProvider $provider): bool => ($provider->config['mcp'] ?? null) === 'disabled');
+    }
+
+    /**
+     * Whether agents run PayPal's official MCP server locally (the default),
+     * which needs @paypal/mcp installed (npm install) and Node.js.
+     */
+    public static function usesLocalServer(): bool
+    {
+        return config('services.paypal.mcp_transport', 'local') === 'local' && is_file(self::localServerPath());
+    }
+
+    public static function localServerPath(): string
+    {
+        return (string) config('services.paypal.mcp_server', base_path('node_modules/@paypal/mcp/dist/index.js'));
     }
 
     private static function envConfigured(): bool

@@ -21,6 +21,14 @@ enum PaypalEnvironment: string
     /**
      * PayPal's MCP server (Streamable HTTP) for this environment.
      */
+    /**
+     * The PAYPAL_ENVIRONMENT value PayPal's Agent Toolkit MCP server expects.
+     */
+    public function agentToolkitName(): string
+    {
+        return $this === self::LIVE ? 'PRODUCTION' : 'SANDBOX';
+    }
+
     public function mcpUrl(): string
     {
         return match ($this) {

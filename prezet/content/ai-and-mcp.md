@@ -101,19 +101,42 @@ part of the normal migrations:
 php artisan migrate
 ```
 
-## Connect PayPal's MCP server
+## Connect PayPal's Agent Toolkit
 
-PayPal runs an MCP server that exposes PayPal actions (invoices, orders,
-disputes and more) as tools an AI agent can call.
+PayPal's [Agent Toolkit](https://github.com/paypal/agent-toolkit) exposes PayPal
+actions (orders, refunds, transactions, disputes, invoices, subscriptions and
+more) as tools an AI agent can call, through PayPal's MCP server.
+
+### How it runs
+
+By default, agents run **PayPal's official MCP server**, `@paypal/mcp` (built
+on `@paypal/agent-toolkit`), locally over stdio. It's installed with the app's
+npm packages (`npm install`, which `composer setup` runs) and needs Node.js 18+.
+Each run gets a fresh access token and the provider's environment
+(`PAYPAL_ENVIRONMENT` `SANDBOX` or `PRODUCTION`).
+
+| `.env` | Default | Description |
+| --- | --- | --- |
+| `PAYPAL_MCP_TRANSPORT` | `local` | `local` runs PayPal's MCP server from `node_modules`. `remote` uses PayPal's hosted server over streamable HTTP. |
+| `PAYPAL_MCP_NODE` | `node` | The Node.js binary, e.g. `/usr/bin/node` when the web server's `PATH` doesn't include Node. |
+
+Why local by default: PayPal's hosted sandbox server answers only over SSE
+(`/sse`); its streamable HTTP endpoint (`https://mcp.sandbox.paypal.com/http`)
+returned 404 when we checked, and the MCP client here speaks streamable HTTP and
+stdio, not SSE. If `@paypal/mcp` isn't installed, agents use the hosted server.
+
+The Send Money assistant only gets PayPal's **read-only** tools (names starting
+`get_`, `list_`, `show_`, `search_`, `retrieve_` or `track_`), such as
+`get_order`, `list_transactions`, `get_refund` and `list_disputes`, so it can
+check PayPal's own record but never move or refund money through PayPal.
 
 ### From the dashboard (automatic)
 
 If the account has an **active PayPal provider** on the
-[Providers](/docs/providers) page, nothing else is needed. Its agents connect to
-PayPal's MCP server with that provider's credentials:
+[Providers](/docs/providers) page, nothing else is needed. Its agents use the
+Agent Toolkit with that provider's credentials:
 
-- The server matches the provider's environment: sandbox
-  (`https://mcp.sandbox.paypal.com/http`) or live (`https://mcp.paypal.com/http`).
+- The environment matches the provider's: sandbox or live.
 - Access tokens are fetched and refreshed automatically, so they never expire
   mid-use.
 - With several PayPal providers, the oldest active one with MCP enabled is used.

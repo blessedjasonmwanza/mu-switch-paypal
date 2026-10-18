@@ -461,10 +461,11 @@ export default function AiAgents({
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>PayPal MCP</CardTitle>
+                        <CardTitle>PayPal Agent Toolkit</CardTitle>
                         <CardDescription>
-                            Lets your agents use PayPal&apos;s tools, such as
-                            invoices and orders.
+                            Lets your agents use PayPal&apos;s own tools, such
+                            as orders, refunds, transactions and disputes,
+                            through PayPal&apos;s MCP server.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="text-sm text-neutral-600 dark:text-neutral-400">

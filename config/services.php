@@ -33,8 +33,21 @@ return [
     'paypal' => [
         'connect_timeout' => (int) env('PAYPAL_CONNECT_TIMEOUT', 20),
         // Added to the demo account by `php artisan demo:seed` (optional).
+        // How agents reach PayPal's Agent Toolkit: "local" runs PayPal's official
+        // MCP server (@paypal/mcp, from node_modules) over stdio; "remote" uses
+        // PayPal's hosted MCP server over streamable HTTP.
+        'mcp_transport' => env('PAYPAL_MCP_TRANSPORT', 'local'),
+        // The Node.js binary for the local server (Node 18+).
+        'mcp_node' => env('PAYPAL_MCP_NODE', 'node'),
+        // PayPal's MCP server entry point; installed by npm install.
+        'mcp_server' => env('PAYPAL_MCP_SERVER', base_path('node_modules/@paypal/mcp/dist/index.js')),
         'sandbox_client_id' => env('PAYPAL_SANDBOX_CLIENT_ID'),
         'sandbox_client_secret' => env('PAYPAL_SANDBOX_CLIENT_SECRET'),
+    ],
+
+    'pawapay' => [
+        // Added to the demo account by `php artisan demo:seed` (optional).
+        'sandbox_token' => env('PAWAPAY_SANDBOX_TOKEN'),
     ],
 
     'postmark' => [

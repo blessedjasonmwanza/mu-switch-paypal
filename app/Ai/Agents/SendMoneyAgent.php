@@ -50,6 +50,12 @@ class SendMoneyAgent implements Agent, Conversational, HasTools
      */
     private const READ_ONLY_PAYPAL_TOOL = '/^(get|list|show|search|retrieve|track)_/i';
 
+    /**
+     * Seconds a PayPal Agent Toolkit call may take. The tool list comes from
+     * the local server at once; calls wait on PayPal, which can be slow.
+     */
+    private const PAYPAL_TOOL_TIMEOUT = 45;
+
     public function __construct(private readonly User $owner, private readonly ?TransferIntent $intent = null) {}
 
     public function instructions(): Stringable|string
@@ -107,12 +113,12 @@ class SendMoneyAgent implements Agent, Conversational, HasTools
             if ($provider && $client) {
                 ProviderCallContext::set($provider);
                 try {
-                    $paypal = $client->withTimeout(10)->withCache()->tools(default: []);
+                    $paypal = $client->withTimeout(self::PAYPAL_TOOL_TIMEOUT)->withCache()->tools(default: []);
                 } finally {
                     ProviderCallContext::clear();
                 }
             } else {
-                $paypal = $client?->withTimeout(10)->withCache()->tools(default: []);
+                $paypal = $client?->withTimeout(self::PAYPAL_TOOL_TIMEOUT)->withCache()->tools(default: []);
             }
         } catch (Throwable $e) {
             report($e);
