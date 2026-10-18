@@ -15,8 +15,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import { useState  } from 'react';
-import type {ReactNode} from 'react';
-import { toast } from 'sonner';
+import type { ReactNode } from 'react';
 import { ActivityAreaChart } from '@/components/activity-area-chart';
 import { TableFooter } from '@/components/table-footer';
 import { Badge } from '@/components/ui/badge';
@@ -43,12 +42,19 @@ interface Stat {
     change: number | null;
 }
 
+interface CurrencyVolume {
+    currency: string;
+    value: number;
+    change: number | null;
+    count: number;
+}
+
 interface DashboardProps {
     apiToken: string | null;
     currency: string;
     hasProviders: boolean;
     stats: {
-        volume: Stat;
+        volume: Stat & { currencies?: CurrencyVolume[] };
         transactions: Stat;
         successRate: Stat;
         activeProviders: { value: number; total: number };
@@ -122,6 +128,7 @@ function formatMoney(amount: number, currency: string): string {
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency,
+            currencyDisplay: 'narrowSymbol',
             maximumFractionDigits: amount >= 1000 ? 0 : 2,
         }).format(amount);
     } catch {
@@ -183,18 +190,103 @@ function StatCard({
     footer: ReactNode;
 }) {
     return (
-        <Card className="gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border">
-            <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-                    {title}
-                </span>
-                <span className="text-neutral-400">{icon}</span>
-            </div>
-            <div className="mt-3 text-xl font-bold tracking-tight tabular-nums">
-                {value}
+        <Card className="flex flex-col justify-between gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border h-full">
+            <div>
+                <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                        {title}
+                    </span>
+                    <span className="text-neutral-400">{icon}</span>
+                </div>
+                <div className="mt-3 text-xl font-bold tracking-tight tabular-nums">
+                    {value}
+                </div>
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                 {footer}
+            </div>
+        </Card>
+    );
+}
+
+function VolumeStatCard({
+    currencies,
+    fallbackValue,
+    fallbackCurrency,
+    fallbackChange,
+}: {
+    currencies?: CurrencyVolume[];
+    fallbackValue: number;
+    fallbackCurrency: string;
+    fallbackChange: number | null;
+}) {
+    if (!currencies || currencies.length <= 1) {
+        return (
+            <StatCard
+                title="Volume Processed"
+                value={formatMoney(fallbackValue, fallbackCurrency)}
+                icon={<TrendingUp className="h-4 w-4" />}
+                footer={
+                    <>
+                        <TrendPill change={fallbackChange} />
+                        <span>vs previous 30d</span>
+                    </>
+                }
+            />
+        );
+    }
+
+    return (
+        <Card className="flex flex-col justify-between gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border h-full">
+            <div>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                            Volume Processed
+                        </span>
+                        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                            {currencies.length} currencies
+                        </span>
+                    </div>
+                    <span className="text-neutral-400 shrink-0">
+                        <TrendingUp className="h-4 w-4" />
+                    </span>
+                </div>
+
+                <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1">
+                    {currencies.slice(0, 4).map((c) => {
+                        const hasVolume = c.value > 0;
+                        const cleanAmount = formatMoney(c.value, c.currency).replace(
+                            new RegExp(`^${c.currency}[\\s\\u00A0]*`),
+                            '',
+                        );
+                        return (
+                            <div
+                                key={c.currency}
+                                className="flex items-center justify-between gap-1.5 py-0.5 min-w-0"
+                            >
+                                <span className="font-mono text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 shrink-0">
+                                    {c.currency}
+                                </span>
+                                <span
+                                    className={cn(
+                                        'tabular-nums truncate text-xs',
+                                        hasVolume
+                                            ? 'font-bold text-neutral-900 dark:text-neutral-100'
+                                            : 'font-normal text-neutral-400 dark:text-neutral-500',
+                                    )}
+                                >
+                                    {cleanAmount}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                <TrendPill change={fallbackChange} />
+                <span>vs previous 30d</span>
             </div>
         </Card>
     );
@@ -327,16 +419,11 @@ export default function Dashboard({
 
                 {/* KPI cards */}
                 <div className="grid auto-rows-min gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    <StatCard
-                        title="Volume Processed"
-                        value={formatMoney(stats.volume.value, currency)}
-                        icon={<TrendingUp className="h-4 w-4" />}
-                        footer={
-                            <>
-                                <TrendPill change={stats.volume.change} />
-                                <span>vs previous 30d</span>
-                            </>
-                        }
+                    <VolumeStatCard
+                        currencies={stats.volume.currencies}
+                        fallbackValue={stats.volume.value}
+                        fallbackCurrency={currency}
+                        fallbackChange={stats.volume.change}
                     />
                     <StatCard
                         title="Transactions"

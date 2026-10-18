@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\TransactionStatus;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
+use App\Support\Market;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -89,6 +90,7 @@ class DashboardController extends Controller
             'volume' => [
                 'value' => round((float) $current['volume'], 2),
                 'change' => $this->percentChange((float) $current['volume'], (float) $previous['volume']),
+                'currencies' => $this->topCurrenciesVolume($providerIds, $periodStart, $previousStart, $providers),
             ],
             'transactions' => [
                 'value' => (int) $current['total'],
@@ -107,6 +109,76 @@ class DashboardController extends Controller
                 'change' => $this->percentChange((float) $current['failed'], (float) $previous['failed']),
             ],
         ];
+    }
+
+    /**
+     * Top 3 or 4 currencies by transaction volume / activity for multi-currency KPI.
+     *
+     * @param  Collection<int, int>  $providerIds
+     * @param  Collection<int, PaymentProvider>  $providers
+     * @return list<array{currency: string, value: float, change: ?float, count: int}>
+     */
+    private function topCurrenciesVolume(Collection $providerIds, Carbon $periodStart, Carbon $previousStart, Collection $providers): array
+    {
+        $currentByCurrency = Transaction::query()
+            ->whereIn('payment_provider_id', $providerIds)
+            ->whereBetween('created_at', [$periodStart, Carbon::now()])
+            ->where('status', TransactionStatus::SUCCESS->value)
+            ->selectRaw('currency, coalesce(sum(amount), 0) as volume, count(*) as count')
+            ->groupBy('currency')
+            ->orderByDesc('volume')
+            ->get()
+            ->keyBy('currency');
+
+        $previousByCurrency = Transaction::query()
+            ->whereIn('payment_provider_id', $providerIds)
+            ->whereBetween('created_at', [$previousStart, $periodStart])
+            ->where('status', TransactionStatus::SUCCESS->value)
+            ->selectRaw('currency, coalesce(sum(amount), 0) as volume')
+            ->groupBy('currency')
+            ->pluck('volume', 'currency');
+
+        $allTimeCurrencies = Transaction::query()
+            ->whereIn('payment_provider_id', $providerIds)
+            ->selectRaw('currency, count(*) as count')
+            ->groupBy('currency')
+            ->orderByDesc('count')
+            ->pluck('currency');
+
+        $providerCurrencies = collect();
+        foreach ($providers as $provider) {
+            if (! empty($provider->config['supported_countries'])) {
+                foreach ((array) $provider->config['supported_countries'] as $country) {
+                    if ($curr = Market::currency((string) $country)) {
+                        $providerCurrencies->push($curr);
+                    }
+                }
+            }
+        }
+
+        $fallbackCurrencies = collect(['USD', 'ZMW', 'KES', 'EUR']);
+
+        $orderedCodes = $currentByCurrency->keys()
+            ->concat($allTimeCurrencies)
+            ->concat($providerCurrencies)
+            ->concat($fallbackCurrencies)
+            ->unique()
+            ->take(4)
+            ->values();
+
+        return $orderedCodes->map(function (string $code) use ($currentByCurrency, $previousByCurrency): array {
+            $row = $currentByCurrency->get($code);
+            $vol = (float) ($row->volume ?? 0.0);
+            $count = (int) ($row->count ?? 0);
+            $prevVol = (float) ($previousByCurrency->get($code) ?? 0.0);
+
+            return [
+                'currency' => $code,
+                'value' => round($vol, 2),
+                'change' => $this->percentChange($vol, $prevVol),
+                'count' => $count,
+            ];
+        })->all();
     }
 
     /**
