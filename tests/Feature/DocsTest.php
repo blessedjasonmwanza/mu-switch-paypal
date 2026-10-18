@@ -212,3 +212,7 @@ test('paypal\'s js sdk button is documented', function () {
 test('paypal\'s agent toolkit setup is documented', function () {
     $this->get('/docs/ai-and-mcp')->assertOk()->assertSee('Agent Toolkit')->assertSee('PAYPAL_MCP_TRANSPORT')->assertSee('@paypal/mcp');
 });
+
+test('the pawapay v2 driver is documented', function () {
+    $this->get('/docs/providers')->assertOk()->assertSee('pawaPay API v2')->assertSee('/v2/payouts')->assertDontSee('predict-correspondent');
+});

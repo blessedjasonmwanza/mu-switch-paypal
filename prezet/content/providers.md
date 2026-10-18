@@ -332,19 +332,30 @@ Bearer API token, so you provide:
 | --- | --- |
 | **API Token** | Your pawaPay API token (sent as `Authorization: Bearer …`). |
 
-For each collection the driver first calls pawaPay's **predict-correspondent**
-endpoint to determine which mobile-money operator ("correspondent", e.g.
-`MTN_MOMO_ZMB`) the payer's number belongs to, then initiates the deposit
-(`POST /deposits`) — which sends an **STK/USSD push straight to the payer's
-handset**. The collection starts **pending** (status `ACCEPTED`); verification
-polls the deposit status (`GET /deposits/{depositId}` → `COMPLETED` → success,
-`FAILED` → failed, otherwise pending). As with every provider, a call needs only
-the country, phone number and amount.
+The driver uses **pawaPay API v2**. For each collection it first calls
+pawaPay's **predict-provider** endpoint (`POST /v2/predict-provider`) to find
+which mobile-money provider the payer's number belongs to (e.g.
+`MTN_MOMO_ZMB`) and get the number back sanitised, then initiates the deposit
+(`POST /v2/deposits`, the payer as an `MMO` account), which sends a **push
+prompt straight to the payer's handset**. The collection starts **pending**
+(status `ACCEPTED`); verification polls the deposit status
+(`GET /v2/deposits/{depositId}`: `COMPLETED` is success, `FAILED` is failed,
+anything else, or not found yet, stays pending). As with every provider, a call
+needs only the country, phone number and amount.
 
-> **Operator selection.** pawaPay routes to a specific operator by its
-> correspondent code. The driver derives it automatically from the phone number
-> (pawaPay's own prediction), so no per-market configuration is needed; a caller
-> may still pass an explicit `correspondent` to override it.
+> **Provider selection.** pawaPay routes to a specific provider by its code.
+> The driver derives it from the phone number (pawaPay's own prediction), so no
+> per-market configuration is needed; a caller may still pass `provider` (or
+> the older `correspondent`) to override it.
+
+**Payouts** (`POST /v2/payouts`) use our transaction id as the `payoutId`, so a
+repeated request is ignored by pawaPay (`DUPLICATE_IGNORED`) instead of paying
+twice. A refusal's `failureReason` is kept and shown on the transfer. A payout
+pawaPay accepted is never treated as lost; one whose request got no answer only
+counts as never received (`NOT_FOUND`) after two minutes, so a slow pawaPay
+can't lead to a second payout elsewhere. The text shown to the recipient
+(`customerMessage`) is the narration, cut to pawaPay's 4 to 22 letters, digits
+and spaces.
 
 To enable it, add a provider in the dashboard, choose the **pawaPay** driver,
 paste your API token, and tick the markets you serve.
