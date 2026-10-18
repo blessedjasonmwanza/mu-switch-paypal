@@ -228,11 +228,12 @@ test('recent conversations show who sent what, and only to their owner', functio
 
     $this->actingAs($this->user)->get(route('send.index'))
         ->assertInertia(fn ($page) => $page
-            ->where('conversations.0.id', $conversation)
-            ->where('conversations.0.title', 'Send money')
-            ->where('conversations.0.first_message', 'Send K2,500 to 0977123456')
-            ->where('conversations.0.by.email', $this->user->email)
-            ->where('conversations.0.messages', 2));
+            ->where('conversations.data.0.id', $conversation)
+            ->where('conversations.data.0.title', 'Send money')
+            ->where('conversations.data.0.first_message', 'Send K2,500 to 0977123456')
+            ->where('conversations.data.0.by.email', $this->user->email)
+            ->where('conversations.data.0.messages', 2)
+            ->where('conversations.per_page', 10));
 
     $this->getJson(route('send.assistant.conversation', $conversation))
         ->assertOk()
@@ -268,4 +269,23 @@ test('a transfer started after approval comes back with its pay link, also when 
     $this->getJson(route('send.assistant.conversation', $conversation))
         ->assertJsonPath('data.transfers.0.reference', $transfer->reference)
         ->assertJsonPath('data.transfers.0.checkout_url', $response->json('data.transfer.checkout_url'));
+});
+
+test('recent conversations are listed ten at a time', function () {
+    foreach (range(1, 12) as $minutes) {
+        $id = agentConversation($this->user);
+        DB::table('agent_conversations')->where('id', $id)->update(['title' => "Conversation {$minutes}", 'updated_at' => now()->subMinutes($minutes)]);
+    }
+
+    $this->actingAs($this->user)->get(route('send.index'))
+        ->assertInertia(fn ($page) => $page
+            ->has('conversations.data', 10)
+            ->where('conversations.data.0.title', 'Conversation 1')
+            ->where('conversations.total', 12)
+            ->where('conversations.last_page', 2));
+
+    $this->get(route('send.index', ['conversations_page' => 2]))
+        ->assertInertia(fn ($page) => $page
+            ->has('conversations.data', 2)
+            ->where('conversations.data.1.title', 'Conversation 12'));
 });

@@ -6,6 +6,7 @@ import {
     ArrowUpRight,
     CheckCircle2,
     Clock,
+    CreditCard,
     Loader2,
     Lock,
     RefreshCw,
@@ -19,7 +20,7 @@ import { useEffect, useMemo, useState } from 'react';
 import SendMoneyController from '@/actions/App/Http/Controllers/SendMoneyController';
 import InputError from '@/components/input-error';
 import { RecentConversations } from '@/components/recent-conversations';
-import type { ConversationSummary } from '@/components/recent-conversations';
+import type { ConversationPage } from '@/components/recent-conversations';
 import { SendMoneyAssistant } from '@/components/send-money-assistant';
 import type { ResumedConversation } from '@/components/send-money-assistant';
 import { TableFooter } from '@/components/table-footer';
@@ -108,7 +109,7 @@ interface Props {
     sourceCurrencies: string[];
     returned: string | null;
     aiReady: boolean;
-    conversations: ConversationSummary[];
+    conversations: ConversationPage;
 }
 
 const ONLY = ['transfers', 'filters', 'returned', 'conversations'];
@@ -266,6 +267,7 @@ export default function SendMoney({
     const target = countries.find((c) => c.code === country)?.currency ?? '';
 
     const [quote, setQuote] = useState<Quote | null>(null);
+    const [payingWith, setPayingWith] = useState<'paypal' | 'card'>('paypal');
     const [quoteError, setQuoteError] = useState<string | null>(null);
     const [isQuoting, setIsQuoting] = useState(false);
     const [now, setNow] = useState(() => Date.now());
@@ -385,8 +387,22 @@ export default function SendMoney({
     const getCountryName = (code: string) =>
         countries.find((c) => c.code === code)?.name ?? code;
 
-    const submit = (event: FormEvent) => {
+    const cannotPay =
+        !ready ||
+        !shownQuote ||
+        secondsLeft === 0 ||
+        !form.data.account_number ||
+        form.processing;
+
+    const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        // Both buttons go through PayPal; "card" opens its guest card form.
+        const submitter = (event.nativeEvent as SubmitEvent)
+            .submitter as HTMLButtonElement | null;
+        const payWith = submitter?.value === 'card' ? 'card' : 'paypal';
+
+        setPayingWith(payWith);
+        form.transform((data) => ({ ...data, pay_with: payWith }));
         form.post(SendMoneyController.store.url());
     };
 
@@ -836,8 +852,7 @@ export default function SendMoney({
                                         </div>
                                         <div className="col-span-2 space-y-1 sm:col-span-1">
                                             <Label htmlFor="send-payer">
-                                                Sender&apos;s PayPal email
-                                                (optional)
+                                                Sender&apos;s email (optional)
                                             </Label>
                                             <Input
                                                 id="send-payer"
@@ -859,43 +874,62 @@ export default function SendMoney({
                                         </div>
                                     </div>
 
-                                    <Button
-                                        type="submit"
-                                        size="3"
-                                        style={{ width: '100%' }}
-                                        className="cursor-pointer gap-2"
-                                        disabled={
-                                            !ready ||
-                                            !shownQuote ||
-                                            secondsLeft === 0 ||
-                                            !form.data.account_number ||
-                                            form.processing
-                                        }
-                                    >
-                                        {form.processing ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <img
-                                                src="/paypal.png"
-                                                alt=""
-                                                className="h-4 w-4 rounded-sm bg-white object-contain"
-                                            />
-                                        )}
-                                        {shownQuote
-                                            ? `Pay ${formatMoney(shownQuote.sender_pays)} with PayPal`
-                                            : 'Pay with PayPal'}
-                                    </Button>
+                                    <div className="flex flex-col gap-3">
+                                        <Button
+                                            type="submit"
+                                            value="paypal"
+                                            size="3"
+                                            style={{ width: '100%' }}
+                                            className="cursor-pointer gap-2"
+                                            disabled={cannotPay}
+                                        >
+                                            {form.processing &&
+                                            payingWith === 'paypal' ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <img
+                                                    src="/paypal.png"
+                                                    alt=""
+                                                    className="h-4 w-4 rounded-sm bg-white object-contain"
+                                                />
+                                            )}
+                                            {shownQuote
+                                                ? `Pay ${formatMoney(shownQuote.sender_pays)} with PayPal`
+                                                : 'Pay with PayPal'}
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            value="card"
+                                            size="3"
+                                            variant="outline"
+                                            color="gray"
+                                            highContrast
+                                            style={{ width: '100%' }}
+                                            className="cursor-pointer gap-2"
+                                            disabled={cannotPay}
+                                            data-test="pay-with-card"
+                                        >
+                                            {form.processing &&
+                                            payingWith === 'card' ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <CreditCard className="h-4 w-4" />
+                                            )}
+                                            Debit or credit card
+                                        </Button>
+                                    </div>
                                     <p className="text-center text-[11px] text-neutral-500">
                                         The sender approves the payment on
-                                        PayPal. Nothing is sent until PayPal
-                                        confirms it.
+                                        PayPal, with a PayPal account or as a
+                                        guest by card. Nothing is sent until
+                                        PayPal confirms it.
                                     </p>
                                 </form>
                             )}
                         </Card>
 
                         <RecentConversations
-                            conversations={conversations}
+                            page={conversations}
                             onContinue={(conversation) => {
                                 setResume(conversation);
                                 setTab('assistant');
@@ -903,8 +937,8 @@ export default function SendMoney({
                         />
                     </div>
 
-                    <Card className="gap-0 border border-sidebar-border/70 p-5 xl:col-span-7 dark:border-sidebar-border">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <Card className="gap-0 overflow-hidden border border-sidebar-border/70 p-0 xl:col-span-7 dark:border-sidebar-border">
+                        <div className="card-header-raised flex flex-col gap-3 px-5 pt-5 pb-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <h2 className="text-sm font-semibold">
                                     Transfers
@@ -923,177 +957,191 @@ export default function SendMoney({
                             />
                         </div>
 
-                        {transfers.data.length === 0 ? (
-                            <div className="flex flex-col items-center py-12 text-center text-sm text-neutral-500">
-                                <Send className="mb-2 h-6 w-6 text-neutral-400" />
-                                {filters.q
-                                    ? `No transfers match “${filters.q}”.`
-                                    : 'No transfers yet. Quote one on the left.'}
-                            </div>
-                        ) : (
-                            <ul className="mt-4 divide-y divide-sidebar-border/50 dark:divide-sidebar-border/70">
-                                {transfers.data.map((transfer) => (
-                                    <li
-                                        key={transfer.reference}
-                                        className={cn(
-                                            'py-3.5 transition-colors',
-                                            transfer.reference === returned &&
-                                                '-mx-2 rounded-lg bg-blue-50/60 px-2 dark:bg-blue-950/20',
-                                        )}
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2 text-sm">
-                                                    <span
-                                                        aria-hidden
-                                                        className="text-base"
-                                                    >
-                                                        {countryFlag(
-                                                            transfer.recipient
-                                                                .country,
-                                                        )}
-                                                    </span>
-                                                    <span className="truncate font-medium text-neutral-900 dark:text-neutral-100">
+                        <div className="px-5 pb-5">
+                            {transfers.data.length === 0 ? (
+                                <div className="flex flex-col items-center py-12 text-center text-sm text-neutral-500">
+                                    <Send className="mb-2 h-6 w-6 text-neutral-400" />
+                                    {filters.q
+                                        ? `No transfers match “${filters.q}”.`
+                                        : 'No transfers yet. Quote one on the left.'}
+                                </div>
+                            ) : (
+                                <ul className="mt-1 divide-y divide-sidebar-border/50 dark:divide-sidebar-border/70">
+                                    {transfers.data.map((transfer) => (
+                                        <li
+                                            key={transfer.reference}
+                                            className={cn(
+                                                'py-3.5 transition-colors',
+                                                transfer.reference ===
+                                                    returned &&
+                                                    '-mx-2 rounded-lg bg-blue-50/60 px-2 dark:bg-blue-950/20',
+                                            )}
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                                                        <span
+                                                            aria-hidden
+                                                            className="text-base"
+                                                        >
+                                                            {countryFlag(
+                                                                transfer
+                                                                    .recipient
+                                                                    .country,
+                                                            )}
+                                                        </span>
+                                                        <span className="truncate font-medium text-neutral-900 dark:text-neutral-100">
+                                                            {transfer.recipient
+                                                                .name ??
+                                                                transfer
+                                                                    .recipient
+                                                                    .account_number}
+                                                        </span>
+                                                        <span
+                                                            className={cn(
+                                                                'rounded-md px-2 py-0.5 text-[11px] font-medium',
+                                                                statusTone[
+                                                                    transfer
+                                                                        .status
+                                                                ],
+                                                            )}
+                                                        >
+                                                            {
+                                                                transfer.status_label
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-0.5 text-xs text-neutral-500">
                                                         {transfer.recipient
-                                                            .name ??
-                                                            transfer.recipient
-                                                                .account_number}
-                                                    </span>
-                                                    <span
-                                                        className={cn(
-                                                            'rounded-md px-2 py-0.5 text-[11px] font-medium',
-                                                            statusTone[
-                                                                transfer.status
-                                                            ],
+                                                            .name &&
+                                                            `${transfer.recipient.account_number} · `}
+                                                        {formatMoney(
+                                                            transfer.sender_pays,
+                                                        )}{' '}
+                                                        via{' '}
+                                                        {transfer.funding
+                                                            .provider ??
+                                                            'PayPal'}
+                                                        {transfer.payout
+                                                            ?.provider &&
+                                                            ` → ${transfer.payout.provider}`}
+                                                        {' · '}
+                                                        {timeAgo(
+                                                            transfer.created_at,
                                                         )}
-                                                    >
-                                                        {transfer.status_label}
-                                                    </span>
+                                                    </div>
                                                 </div>
-                                                <div className="mt-0.5 text-xs text-neutral-500">
-                                                    {transfer.recipient.name &&
-                                                        `${transfer.recipient.account_number} · `}
-                                                    {formatMoney(
-                                                        transfer.sender_pays,
-                                                    )}{' '}
-                                                    via{' '}
-                                                    {transfer.funding
-                                                        .provider ?? 'PayPal'}
-                                                    {transfer.payout
-                                                        ?.provider &&
-                                                        ` → ${transfer.payout.provider}`}
-                                                    {' · '}
-                                                    {timeAgo(
-                                                        transfer.created_at,
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="shrink-0 text-right">
-                                                <div className="text-sm font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
-                                                    {formatMoney(
-                                                        transfer.recipient_gets,
-                                                    )}
-                                                </div>
-                                                <div className="text-[11px] text-neutral-500 tabular-nums">
-                                                    @{' '}
-                                                    {Number(
-                                                        transfer.fx
-                                                            .effective_rate,
-                                                    ).toLocaleString('en-US', {
-                                                        maximumFractionDigits: 4,
-                                                    })}
+                                                <div className="shrink-0 text-right">
+                                                    <div className="text-sm font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
+                                                        {formatMoney(
+                                                            transfer.recipient_gets,
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[11px] text-neutral-500 tabular-nums">
+                                                        @{' '}
+                                                        {Number(
+                                                            transfer.fx
+                                                                .effective_rate,
+                                                        ).toLocaleString(
+                                                            'en-US',
+                                                            {
+                                                                maximumFractionDigits: 4,
+                                                            },
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <div className="mt-2.5 flex items-center justify-between gap-3">
-                                            <div className="max-w-xs flex-1 sm:max-w-sm">
-                                                <Progress
-                                                    status={transfer.status}
-                                                />
-                                            </div>
-                                            <div className="flex shrink-0 items-center gap-1.5">
-                                                <Button
-                                                    size="1"
-                                                    variant="soft"
-                                                    color="gray"
-                                                    onClick={() =>
-                                                        setSelectedTransfer(
-                                                            transfer,
-                                                        )
-                                                    }
-                                                    className="cursor-pointer gap-1 text-[11px]"
-                                                >
-                                                    <Clock className="h-3 w-3 text-neutral-500" />
-                                                    <span>Timeline</span>
-                                                    <span className="text-[10px] text-neutral-400">
-                                                        (
-                                                        {
-                                                            transfer.timeline
-                                                                .length
-                                                        }
-                                                        )
-                                                    </span>
-                                                </Button>
-                                                {!transfer.is_final && (
+                                            <div className="mt-2.5 flex items-center justify-between gap-3">
+                                                <div className="max-w-xs flex-1 sm:max-w-sm">
+                                                    <Progress
+                                                        status={transfer.status}
+                                                    />
+                                                </div>
+                                                <div className="flex shrink-0 items-center gap-1.5">
                                                     <Button
                                                         size="1"
                                                         variant="soft"
                                                         color="gray"
                                                         onClick={() =>
-                                                            verify(
-                                                                transfer.reference,
+                                                            setSelectedTransfer(
+                                                                transfer,
                                                             )
                                                         }
                                                         className="cursor-pointer gap-1 text-[11px]"
                                                     >
-                                                        <RefreshCw className="h-3 w-3" />
-                                                        Check now
+                                                        <Clock className="h-3 w-3 text-neutral-500" />
+                                                        <span>Timeline</span>
+                                                        <span className="text-[10px] text-neutral-400">
+                                                            (
+                                                            {
+                                                                transfer
+                                                                    .timeline
+                                                                    .length
+                                                            }
+                                                            )
+                                                        </span>
                                                     </Button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {transfer.failure_reason && (
-                                            <div className="mt-2 flex items-start justify-between gap-2 rounded-md bg-amber-50/70 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                                                <div className="flex min-w-0 items-start gap-1.5">
-                                                    {transfer.status ===
-                                                    'refunded' ? (
-                                                        <Undo2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                                                    ) : (
-                                                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                                    {!transfer.is_final && (
+                                                        <Button
+                                                            size="1"
+                                                            variant="soft"
+                                                            color="gray"
+                                                            onClick={() =>
+                                                                verify(
+                                                                    transfer.reference,
+                                                                )
+                                                            }
+                                                            className="cursor-pointer gap-1 text-[11px]"
+                                                        >
+                                                            <RefreshCw className="h-3 w-3" />
+                                                            Check now
+                                                        </Button>
                                                     )}
-                                                    <span className="line-clamp-1">
-                                                        {
-                                                            transfer.failure_reason
-                                                        }
-                                                    </span>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setSelectedTransfer(
-                                                            transfer,
-                                                        )
-                                                    }
-                                                    className="shrink-0 cursor-pointer text-[11px] font-medium underline underline-offset-2 hover:text-amber-950 dark:hover:text-amber-100"
-                                                >
-                                                    Details
-                                                </button>
                                             </div>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
 
-                        <TableFooter
-                            page={transfers}
-                            only={ONLY}
-                            perPageKey="perPage"
-                            pageName="page"
-                            perPageOptions={perPageOptions}
-                        />
+                                            {transfer.failure_reason && (
+                                                <div className="mt-2 flex items-start justify-between gap-2 rounded-md bg-amber-50/70 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                                                    <div className="flex min-w-0 items-start gap-1.5">
+                                                        {transfer.status ===
+                                                        'refunded' ? (
+                                                            <Undo2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                                        ) : (
+                                                            <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                                        )}
+                                                        <span className="line-clamp-1">
+                                                            {
+                                                                transfer.failure_reason
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setSelectedTransfer(
+                                                                transfer,
+                                                            )
+                                                        }
+                                                        className="shrink-0 cursor-pointer text-[11px] font-medium underline underline-offset-2 hover:text-amber-950 dark:hover:text-amber-100"
+                                                    >
+                                                        Details
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+
+                            <TableFooter
+                                page={transfers}
+                                only={ONLY}
+                                perPageKey="perPage"
+                                pageName="page"
+                                perPageOptions={perPageOptions}
+                            />
+                        </div>
                     </Card>
                 </div>
             </div>

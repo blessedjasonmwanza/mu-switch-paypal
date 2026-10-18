@@ -62,25 +62,27 @@ export function TableFooter({
                         {page.total.toLocaleString()}
                     </span>
                 </span>
-                <span className="flex items-center gap-1.5">
-                    <span>Per page</span>
-                    <Select.Root
-                        value={String(page.per_page)}
-                        onValueChange={changePerPage}
-                    >
-                        <Select.Trigger variant="surface" />
-                        <Select.Content>
-                            {perPageOptions.map((option) => (
-                                <Select.Item
-                                    key={option}
-                                    value={String(option)}
-                                >
-                                    {option}
-                                </Select.Item>
-                            ))}
-                        </Select.Content>
-                    </Select.Root>
-                </span>
+                {perPageOptions.length > 1 && (
+                    <span className="flex items-center gap-1.5">
+                        <span>Per page</span>
+                        <Select.Root
+                            value={String(page.per_page)}
+                            onValueChange={changePerPage}
+                        >
+                            <Select.Trigger variant="surface" />
+                            <Select.Content>
+                                {perPageOptions.map((option) => (
+                                    <Select.Item
+                                        key={option}
+                                        value={String(option)}
+                                    >
+                                        {option}
+                                    </Select.Item>
+                                ))}
+                            </Select.Content>
+                        </Select.Root>
+                    </span>
+                )}
             </div>
 
             {page.last_page > 1 && (
@@ -106,16 +108,22 @@ export function TableFooter({
                                 key={i}
                                 disabled={true}
                                 content={
-                                    link.label.toLowerCase().includes('previous')
+                                    link.label
+                                        .toLowerCase()
+                                        .includes('previous')
                                         ? 'You are on the first page'
-                                        : link.label.toLowerCase().includes('next')
+                                        : link.label
+                                                .toLowerCase()
+                                                .includes('next')
                                           ? 'You are on the last page'
                                           : undefined
                                 }
                             >
                                 <span
-                                    className="min-w-8 cursor-not-allowed select-none px-2.5 py-1 text-center text-xs text-neutral-300 dark:text-neutral-700"
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                    className="min-w-8 cursor-not-allowed px-2.5 py-1 text-center text-xs text-neutral-300 select-none dark:text-neutral-700"
+                                    dangerouslySetInnerHTML={{
+                                        __html: link.label,
+                                    }}
                                 />
                             </DisabledTooltip>
                         ),

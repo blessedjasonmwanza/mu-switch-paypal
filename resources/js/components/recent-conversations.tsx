@@ -4,6 +4,8 @@ import { useState } from 'react';
 import SendMoneyAssistantController from '@/actions/App/Http/Controllers/SendMoneyAssistantController';
 import { AssistantMessageContent } from '@/components/send-money-assistant';
 import type { ResumedConversation } from '@/components/send-money-assistant';
+import { TableFooter } from '@/components/table-footer';
+import type { PageMeta } from '@/components/table-footer';
 import { Card } from '@/components/ui/card';
 import {
     Dialog,
@@ -29,6 +31,8 @@ export interface ConversationSummary {
         recipient_gets: string;
     }>;
 }
+
+export type ConversationPage = PageMeta & { data: ConversationSummary[] };
 
 type Transcript = ResumedConversation & {
     transfers: NonNullable<ResumedConversation['transfers']>;
@@ -63,15 +67,18 @@ const tone: Record<string, string> = {
 
 /**
  * The account's recent assistant conversations: who had them, when, and the
- * transfers they started. Each one can be read again or carried on.
+ * transfers they started, ten at a time. Each one can be read again or
+ * carried on.
  */
 export function RecentConversations({
-    conversations,
+    page,
     onContinue,
 }: {
-    conversations: ConversationSummary[];
+    page: ConversationPage;
     onContinue: (conversation: ResumedConversation) => void;
 }) {
+    const conversations = page.data;
+
     const [open, setOpen] = useState<ConversationSummary | null>(null);
     const [transcript, setTranscript] = useState<Transcript | null>(null);
     const [loading, setLoading] = useState(false);
@@ -103,76 +110,95 @@ export function RecentConversations({
 
     return (
         <Card
-            className="gap-0 border border-sidebar-border/70 p-5 dark:border-sidebar-border"
+            className="gap-0 overflow-hidden border border-sidebar-border/70 p-0 dark:border-sidebar-border"
             data-test="recent-conversations"
         >
-            <h2 className="text-sm font-semibold">Recent conversations</h2>
-            <p className="mt-0.5 text-xs text-neutral-500">
-                Who used the assistant to send money, and what it started.
-            </p>
-
-            {conversations.length === 0 ? (
-                <p className="py-8 text-center text-xs text-neutral-500">
-                    No conversations yet.
+            <div className="card-header-raised px-5 pt-5 pb-4">
+                <h2 className="text-sm font-semibold">Recent conversations</h2>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                    Who used the assistant to send money, and what it started.
                 </p>
-            ) : (
-                <ul className="mt-3 divide-y divide-sidebar-border/50 dark:divide-sidebar-border/70">
-                    {conversations.map((conversation) => (
-                        <li key={conversation.id}>
-                            <button
-                                type="button"
-                                onClick={() => view(conversation)}
-                                className="flex w-full cursor-pointer items-start gap-3 py-2.5 text-left hover:bg-neutral-50/70 dark:hover:bg-neutral-900/40"
-                            >
-                                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-neutral-800">
-                                    <MessageSquare className="h-3.5 w-3.5" />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm font-medium">
-                                        {conversation.title}
+            </div>
+
+            <div className="px-5 pb-5">
+                {conversations.length === 0 ? (
+                    <p className="py-8 text-center text-xs text-neutral-500">
+                        No conversations yet.
+                    </p>
+                ) : (
+                    <ul className="mt-1 divide-y divide-sidebar-border/50 dark:divide-sidebar-border/70">
+                        {conversations.map((conversation) => (
+                            <li key={conversation.id}>
+                                <button
+                                    type="button"
+                                    onClick={() => view(conversation)}
+                                    className="flex w-full cursor-pointer items-start gap-3 py-2.5 text-left hover:bg-neutral-50/70 dark:hover:bg-neutral-900/40"
+                                >
+                                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-neutral-800">
+                                        <MessageSquare className="h-3.5 w-3.5" />
                                     </span>
-                                    {conversation.first_message &&
-                                        conversation.first_message !==
-                                            conversation.title && (
-                                            <span className="block truncate text-xs text-neutral-600 dark:text-neutral-400">
-                                                “{conversation.first_message}”
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm font-medium">
+                                            {conversation.title}
+                                        </span>
+                                        {conversation.first_message &&
+                                            conversation.first_message !==
+                                                conversation.title && (
+                                                <span className="block truncate text-xs text-neutral-600 dark:text-neutral-400">
+                                                    “
+                                                    {conversation.first_message}
+                                                    ”
+                                                </span>
+                                            )}
+                                        <span className="block truncate text-xs text-neutral-500">
+                                            {conversation.by.name} ·{' '}
+                                            {conversation.messages} messages ·{' '}
+                                            {when(conversation.updated_at)}
+                                        </span>
+                                        {conversation.transfers.length > 0 && (
+                                            <span className="mt-1 flex flex-wrap gap-1">
+                                                {conversation.transfers
+                                                    .slice(0, 3)
+                                                    .map((transfer) => (
+                                                        <span
+                                                            key={
+                                                                transfer.reference
+                                                            }
+                                                            className={cn(
+                                                                'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                                                tone[
+                                                                    transfer
+                                                                        .status
+                                                                ] ??
+                                                                    'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+                                                            )}
+                                                        >
+                                                            {
+                                                                transfer.recipient_gets
+                                                            }{' '}
+                                                            ·{' '}
+                                                            {
+                                                                transfer.status_label
+                                                            }
+                                                        </span>
+                                                    ))}
                                             </span>
                                         )}
-                                    <span className="block truncate text-xs text-neutral-500">
-                                        {conversation.by.name} ·{' '}
-                                        {conversation.messages} messages ·{' '}
-                                        {when(conversation.updated_at)}
                                     </span>
-                                    {conversation.transfers.length > 0 && (
-                                        <span className="mt-1 flex flex-wrap gap-1">
-                                            {conversation.transfers
-                                                .slice(0, 3)
-                                                .map((transfer) => (
-                                                    <span
-                                                        key={transfer.reference}
-                                                        className={cn(
-                                                            'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                                                            tone[
-                                                                transfer.status
-                                                            ] ??
-                                                                'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
-                                                        )}
-                                                    >
-                                                        {
-                                                            transfer.recipient_gets
-                                                        }{' '}
-                                                        ·{' '}
-                                                        {transfer.status_label}
-                                                    </span>
-                                                ))}
-                                        </span>
-                                    )}
-                                </span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+
+                <TableFooter
+                    page={page}
+                    only={['conversations']}
+                    perPageKey="conversationsPerPage"
+                    pageName="conversations_page"
+                    perPageOptions={[page.per_page]}
+                />
+            </div>
 
             <Dialog
                 open={open !== null}

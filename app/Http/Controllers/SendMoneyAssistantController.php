@@ -12,6 +12,7 @@ use App\Support\CrossBorder\TransferIntent;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -205,17 +206,27 @@ class SendMoneyAssistantController extends Controller
         ]);
     }
 
+    /** How many conversations the Send Money page lists at a time. */
+    public const CONVERSATIONS_PER_PAGE = 10;
+
+    /** The query parameter that pages the conversation list. */
+    public const CONVERSATIONS_PAGE = 'conversations_page';
+
     /**
-     * @return list<array<string, mixed>>
+     * The account's conversations, most recent first, a page at a time.
+     *
+     * @return LengthAwarePaginator<int, array<string, mixed>>
      */
-    public static function recentConversations(User $user, int $limit = 8): array
+    public static function recentConversations(User $user, int $perPage = self::CONVERSATIONS_PER_PAGE): LengthAwarePaginator
     {
-        $conversations = DB::table('agent_conversations')
+        $page = DB::table('agent_conversations')
             ->where('participant_type', Conversation::participantType($user))
             ->where('participant_id', Conversation::participantKey($user))
             ->orderByDesc('updated_at')
-            ->limit($limit)
-            ->get(['id', 'title', 'created_at', 'updated_at']);
+            ->orderByDesc('id')
+            ->paginate($perPage, ['id', 'title', 'created_at', 'updated_at'], self::CONVERSATIONS_PAGE)
+            ->withQueryString();
+        $conversations = collect($page->items());
 
         $ids = $conversations->pluck('id');
         $counts = DB::table('agent_conversation_messages')->whereIn('conversation_id', $ids)->whereIn('role', ['user', 'assistant'])
@@ -225,7 +236,7 @@ class SendMoneyAssistantController extends Controller
             ->mapWithKeys(fn ($message): array => [$message->conversation_id => self::spoken((string) $message->content)]);
         $transfers = CrossBorderTransfer::query()->where('user_id', $user->id)->whereIn('conversation_id', $ids)->latest('id')->get()->groupBy('conversation_id');
 
-        return $conversations->map(fn ($conversation): array => [
+        return $page->setCollection($conversations->map(fn ($conversation): array => [
             'id' => $conversation->id,
             // The AI names each conversation from its first request.
             'title' => Str::limit(trim((string) $conversation->title) ?: (string) ($first[$conversation->id] ?? 'Conversation'), 80),
@@ -240,7 +251,7 @@ class SendMoneyAssistantController extends Controller
                 'status_label' => $transfer->status->label(),
                 'recipient_gets' => (string) $transfer->targetAmount().' '.$transfer->target_currency,
             ])->values()->all(),
-        ])->values()->all();
+        ])->values());
     }
 
     /**
