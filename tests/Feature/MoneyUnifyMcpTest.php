@@ -256,3 +256,16 @@ test('the ai page shows how to connect to the moneyunify mcp servers', function 
             ->where('moneyunifyMcp.operator', route('mcp.operator'))
             ->where('moneyunifyMcp.merchant', route('mcp.merchant')));
 });
+
+test('each mcp client has its own rate limit, so one busy merchant never locks out the operator or other merchants', function () {
+    $busy = $this->merchant->issueMcpKey();
+    $quiet = Merchant::factory()->for($this->operator)->create(['wallet_number' => '260977000333'])->issueMcpKey();
+
+    foreach (range(1, 120) as $call) {
+        mcpCall('/mcp/merchant', $busy, 'tools/list')->assertOk();
+    }
+
+    mcpCall('/mcp/merchant', $busy, 'tools/list')->assertTooManyRequests();
+    mcpCall('/mcp/merchant', $quiet, 'tools/list')->assertOk();
+    mcpCall('/mcp/operator', 'operator-token', 'tools/list')->assertOk();
+});

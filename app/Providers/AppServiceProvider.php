@@ -8,13 +8,16 @@ use App\Support\Fx\Providers\StaticFxRateProvider;
 use App\Support\Paypal\PaypalFxRates;
 use App\Support\ProviderCallLogger;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Client\Events\ConnectionFailed;
 use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Prezet\Prezet\Actions\GetHeadings;
@@ -53,6 +56,18 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->configureHttpTimeouts();
         $this->logProviderHttpCalls();
+        $this->configureMcpRateLimit();
+    }
+
+    /**
+     * Each MCP client (the operator's token, or one merchant's key) gets its
+     * own 120 calls a minute. Keyed by the user alone, every merchant of an
+     * operator would share the operator's limit.
+     */
+    protected function configureMcpRateLimit(): void
+    {
+        RateLimiter::for('mcp', fn (Request $request): Limit => Limit::perMinute(120)
+            ->by(($request->route()?->getName() ?? 'mcp').'|'.hash('sha256', (string) $request->bearerToken())));
     }
 
     /**
