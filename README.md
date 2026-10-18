@@ -108,6 +108,13 @@ in), and gets:
 - **A merchant API** (`/api/v1/merchants`) so platforms and apps can onboard
   merchants and charge customers without touching PayPal's, the FX provider's
   or any operator's API.
+- **FX from PayPal, with no FX provider to sign up with.** If the operator's
+  PayPal business account has FX as a Service, every quote uses PayPal's own
+  exchange rates into 100+ currencies (ZMW, KES, UGX, TZS, GHS, NGN, MWK, RWF,
+  XOF, XAF, ZAR and more), and PayPal converts payments in other currencies at a
+  locked rate. A DFSP, an operator, or a country running MoneyUnify as its
+  national switch gets auditable, PayPal-grade FX from the PayPal account it
+  already has. Without it, MoneyUnify's own rates are used, so nothing breaks.
 - **Revenue built in.** The aggregator keeps an FX margin and a commission per
   payment, both shown up front.
 - **Trust built in.** A locked exchange rate, automatic PayPal refunds when a
@@ -164,7 +171,7 @@ keys. These rules are enforced in code, not in the prompt:
 
 | | |
 | --- | --- |
-| **PayPal** | Orders v2 (create, capture, guest card checkout), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; works alongside the PayPal MCP server |
+| **PayPal** | Orders v2 (create, capture, guest card checkout), FX as a Service (exchange-rate quotes, rates locked to orders with `fx_id`), Refunds API (full, partial, automatic), Webhooks (signature verification), sandbox; works alongside the PayPal MCP server |
 | **AI** | [Laravel AI SDK](https://laravel.com/ai) agents with account-level provider failover (Claude, Gemini and others): a Send Money agent with tool calling and human approval before any transfer, conversation memory, and a treasury agent that suggests float top-ups |
 | **Agent interface** | Laravel MCP: an MCP client that gives our agent PayPal's MCP tools (a MoneyUnify MCP server is next) |
 | **Mobile money** | The MoneyUnify switch's mobile-money and card drivers; payouts through Lenco and pawaPay |
@@ -237,6 +244,7 @@ during it, following the [Implementation Guide](IMPLEMENTATION_GUIDE.md).
 - [x] Refunds: full and partial, from the API and the dashboard, plus refunds made in PayPal
 - [x] Merchants for aggregators: onboarding, pay links, merchant API, commission, settlement to mobile money
 - [x] Guest card checkout through PayPal, for payers without a PayPal account
+- [x] PayPal FX: quotes at PayPal's own rates, locked to orders, with MoneyUnify's rates as the fallback
 - [x] PayPal-verified receipts with a signed permanent link
 - [x] Payer emails: transfer or merchant payment delivered, and refunds completed
 - [x] Demo data: `composer setup --demo-data`

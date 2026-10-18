@@ -559,6 +559,21 @@ reports, and the transaction is marked **Actual**. If your PayPal rate differs,
 set a `fee_schedule` on the provider. Use [Quote a Payment](/docs/api/quote-payment)
 to see the fees before charging.
 
+### PayPal FX (exchange rates)
+
+When the PayPal business account has **FX as a Service**, the account's quotes
+use **PayPal's own exchange rates** (USD, EUR, GBP and other PayPal currencies
+into 100+ currencies, including ZMW, KES, GHS and NGN), and payments in another
+currency are converted by PayPal at a locked rate. Two optional settings:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| **Exchange rates** | `paypal` | `paypal` uses PayPal's rates once FX is enabled on the account, and MoneyUnify's until then; `moneyunify` always uses MoneyUnify's. |
+| **PayPal settlement currency** | `USD` | The currency the PayPal account holds payments in. |
+
+See [PayPal FX](/docs/api/fx#paypal-fx) for how quotes, locking and the
+fallback work.
+
 ### Guest card checkout
 
 Payers don't need a PayPal account. Pass `"pay_with": "card"` to

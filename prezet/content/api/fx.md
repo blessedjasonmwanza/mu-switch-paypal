@@ -14,13 +14,16 @@ short time, so the amount you showed is the amount used.
 - **Quotes** convert one amount and lock the rate, the converted amount and the
   margin for 10 minutes (configurable).
 
-Quoting is free. It never contacts a provider and never moves money.
+Quoting is free and never moves money. With [PayPal FX](#paypal-fx) on, the
+rate comes from PayPal (cached until PayPal refreshes it); otherwise no
+provider is contacted.
 
 ## How a rate is built
 
 | Term | Meaning |
 | --- | --- |
-| `base_rate` | The mid-market rate: units of the target currency for 1 unit of the source. |
+| `base_rate` | The base rate: units of the target currency for 1 unit of the source. PayPal's own rate with PayPal FX, otherwise MoneyUnify's. |
+| `rate_source` | Where the base rate came from: `paypal` or `moneyunify`. |
 | `margin_percent` | The platform margin, 1.5% by default (`FX_MARGIN_PERCENT`). |
 | `effective_rate` | The rate actually used: `base_rate × (1 − margin / 100)`. |
 
@@ -29,9 +32,40 @@ USD and ZMW, 0 for UGX, RWF, XOF and XAF). When you quote by the amount that
 must arrive, the amount to send is **rounded up**, so the recipient always gets
 at least the target.
 
-> **Sandbox rates.** Out of the box, rates come from a static table in
+> **MoneyUnify rates.** Without PayPal FX, rates come from a static table in
 > `config/moneyunify_paypal.php` (`FX_DRIVER=static`). They're illustrative, not
 > live market rates.
+
+## PayPal FX
+
+An account whose PayPal business account has **FX as a Service** gets PayPal's
+own exchange rates, with nothing else to set up. PayPal quotes from the
+currencies it holds (USD, EUR, GBP and 21 more) into over 100 currencies,
+including the mobile-money ones: ZMW, KES, UGX, TZS, GHS, NGN, MWK, RWF, XOF,
+XAF and ZAR.
+
+- **Quotes.** The base rate is PayPal's, and your margin is applied on top.
+  Pairs PayPal doesn't quote directly are inverted (ZMW → USD) or crossed
+  through USD (KES → ZMW). `rate_source` is `paypal` on the quote, the transfer
+  and every rate PayPal supplied.
+- **Payments in another currency.** When the payer pays in a currency other
+  than the PayPal account's settlement currency (USD unless you set **PayPal
+  settlement currency**), the order carries PayPal's `fx_id`. PayPal then
+  converts at that locked rate instead of the rate at capture, and the receipt
+  shows the rate PayPal used.
+- **Fallback.** Until FX is enabled, or whenever PayPal can't answer, quotes use
+  MoneyUnify's rates. An account without FX is asked again every 30 minutes. If
+  PayPal suspends a locked rate for a market event
+  (`FX_RATE_CHANGE_DUE_TO_MARKET_EVENT`), the order is made without it and PayPal
+  converts at capture.
+- **Turning it off.** Set the PayPal provider's **Exchange rates** to
+  `moneyunify`.
+
+To enable it in the sandbox, open **FX as a Service** in the sandbox business
+account (the **Exchange Rates** page links to it when it's off). In live,
+PayPal approves FX as a Service for the business account under its FX
+agreement. The PayPal rate converts PayPal's own leg; the mobile-money payout
+is paid from your float at the rate you locked.
 
 ## Authentication
 
@@ -60,6 +94,8 @@ curl https://your-domain.com/api/v1/fx/rates?base=USD \
   "message": "Exchange rates",
   "data": {
     "base_currency": "USD",
+    "rate_source": "paypal",
+    "paypal_fx": { "state": "enabled", "activation_url": null },
     "rates": {
       "ZMW": {
         "currency": "ZMW",
@@ -69,7 +105,8 @@ curl https://your-domain.com/api/v1/fx/rates?base=USD \
         "decimals": 2,
         "margin_percent": 1.5,
         "country_code": "ZM",
-        "country_name": "Zambia"
+        "country_name": "Zambia",
+        "rate_source": "paypal"
       }
     }
   }
@@ -162,7 +199,7 @@ See [Responses & Errors](/docs/api/responses) for the response envelope.
 
 | `.env` | Default | Description |
 | --- | --- | --- |
-| `FX_DRIVER` | `static` | Where rates come from. `static` reads the table in `config/moneyunify_paypal.php`. |
+| `FX_DRIVER` | `static` | Where MoneyUnify's rates come from. `static` reads the table in `config/moneyunify_paypal.php`. Accounts with PayPal FX use PayPal's rates first. |
 | `FX_MARGIN_PERCENT` | `1.5` | The margin applied to every cross-currency rate. |
 | `FX_QUOTE_TTL_MINUTES` | `10` | How long a quote stays locked. |
 

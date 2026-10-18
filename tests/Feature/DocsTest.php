@@ -191,3 +191,8 @@ test('payer emails are documented', function () {
     $this->get('/docs/api/cross-border-transfers')->assertOk()->assertSee('Emails to the sender');
     $this->get('/docs/providers')->assertOk()->assertSee('Refund emails');
 });
+
+test('paypal fx is documented', function () {
+    $this->get('/docs/api/fx')->assertOk()->assertSee('PayPal FX')->assertSee('FX_RATE_CHANGE_DUE_TO_MARKET_EVENT');
+    $this->get('/docs/providers')->assertOk()->assertSee('PayPal FX (exchange rates)', false);
+});
