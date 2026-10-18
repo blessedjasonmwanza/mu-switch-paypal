@@ -574,6 +574,24 @@ currency are converted by PayPal at a locked rate. Two optional settings:
 See [PayPal FX](/docs/api/fx#paypal-fx) for how quotes, locking and the
 fallback work.
 
+### PayPal's button (JS SDK v6)
+
+Merchant pay pages show **PayPal's own button**, from PayPal's JS SDK v6, so
+the customer approves in PayPal's window without leaving the page. The page
+loads the SDK with the collecting PayPal account's **client ID** (public; the
+secret never leaves the server). The order is created on the server, PayPal's
+window approves it, and the server captures it before showing the receipt:
+
+1. `POST /pay/{merchant}/order` (or `/pay/l/{link}/order`) creates the order
+   and returns its `order_id`.
+2. PayPal's window opens from the click, and the customer approves.
+3. `POST /pay/receipt/{reference}/capture` captures it; the merchant is then
+   settled as usual.
+
+If the SDK can't load, or PayPal isn't available for the payer's currency, the
+page shows the classic **Pay with PayPal** button, which redirects to PayPal.
+**Debit or credit card** keeps using PayPal's guest card checkout.
+
 ### Guest card checkout
 
 Payers don't need a PayPal account. Pass `"pay_with": "card"` to

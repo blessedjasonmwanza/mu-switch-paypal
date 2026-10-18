@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import {
     ArrowDown,
     CreditCard,
@@ -8,14 +8,16 @@ import {
     Store,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import InputError from '@/components/input-error';
+import { PaypalSdkButton } from '@/components/paypal-sdk-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { csrfToken } from '@/lib/csrf';
 import { countryFlag } from '@/lib/flags';
 import { cn } from '@/lib/utils';
 import pay from '@/routes/pay';
-import payLink from '@/routes/pay/link';
+import payLink, { order as linkOrder } from '@/routes/pay/link';
 
 interface Money {
     amount: string;
@@ -43,6 +45,7 @@ interface Props {
     payCurrencies: string[];
     settleCurrency: string;
     prefill: { amount: string | null; reference: string | null };
+    paypalSdk: { client_id: string; environment: 'sandbox' | 'live' } | null;
 }
 
 function formatMoney({ amount, currency }: Money): string {
@@ -61,6 +64,7 @@ export default function PayMerchant({
     payCurrencies,
     settleCurrency,
     prefill,
+    paypalSdk,
 }: Props) {
     const form = useForm({
         amount: prefill.amount ?? '',
@@ -77,6 +81,9 @@ export default function PayMerchant({
     const [quoteError, setQuoteError] = useState<string | null>(null);
     const [isQuoting, setIsQuoting] = useState(false);
     const [payingWith, setPayingWith] = useState<'paypal' | 'card'>('paypal');
+    const [sdkBusy, setSdkBusy] = useState(false);
+    const [sdkError, setSdkError] = useState<string | null>(null);
+    const captureUrl = useRef<string | null>(null);
     const canPay = merchant.is_active && payCurrencies.length > 0;
     const fixed = link?.fixed_amount ?? false;
     const quoteUrl = link
@@ -154,6 +161,101 @@ export default function PayMerchant({
             link ? payLink.store.url(link.code) : pay.store.url(merchant.slug),
         );
     };
+
+    // PayPal's JS SDK button: the order is made here, approved in PayPal's
+    // window, then captured here before showing the receipt.
+    const createSdkOrder = async (): Promise<string> => {
+        setSdkError(null);
+        setSdkBusy(true);
+
+        try {
+            const response = await fetch(
+                link ? linkOrder.url(link.code) : pay.order.url(merchant.slug),
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': csrfToken(),
+                    },
+                    body: JSON.stringify({ ...form.data, pay_with: 'paypal' }),
+                },
+            );
+            const json = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                const message =
+                    json.message ?? 'PayPal could not start the payment.';
+                setSdkError(message);
+
+                throw new Error(message);
+            }
+
+            // Made with another PayPal account than the button's: pay on PayPal's page instead.
+            if (json.data.client_id !== paypalSdk?.client_id) {
+                window.location.href = json.data.checkout_url;
+
+                throw new Error('Continuing on PayPal…');
+            }
+
+            captureUrl.current = json.data.capture_url;
+
+            return json.data.order_id as string;
+        } catch (error) {
+            setSdkBusy(false);
+
+            throw error;
+        }
+    };
+
+    const captureSdkOrder = async () => {
+        try {
+            const response = await fetch(captureUrl.current ?? '', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+            });
+            const json = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                setSdkError(
+                    json.message ?? 'PayPal could not confirm the payment.',
+                );
+                setSdkBusy(false);
+
+                return;
+            }
+
+            router.visit(json.data.receipt_url);
+        } catch {
+            setSdkError('PayPal could not confirm the payment.');
+            setSdkBusy(false);
+        }
+    };
+
+    const classicPaypalButton = (
+        <button
+            type="submit"
+            value="paypal"
+            disabled={!shownQuote || form.processing}
+            className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#FFC439] text-sm font-semibold text-[#111] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+            {form.processing && payingWith === 'paypal' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+                <img
+                    src="/paypal.png"
+                    alt=""
+                    className="h-4 w-4 object-contain"
+                />
+            )}
+            {shownQuote
+                ? `Pay ${formatMoney(shownQuote.customer_pays)} with PayPal`
+                : 'Pay with PayPal'}
+        </button>
+    );
 
     return (
         <>
@@ -399,26 +501,33 @@ export default function PayMerchant({
                                     </div>
                                 </div>
 
-                                <button
-                                    type="submit"
-                                    value="paypal"
-                                    disabled={!shownQuote || form.processing}
-                                    className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#FFC439] text-sm font-semibold text-[#111] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {form.processing &&
-                                    payingWith === 'paypal' ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <img
-                                            src="/paypal.png"
-                                            alt=""
-                                            className="h-4 w-4 object-contain"
-                                        />
-                                    )}
-                                    {shownQuote
-                                        ? `Pay ${formatMoney(shownQuote.customer_pays)} with PayPal`
-                                        : 'Pay with PayPal'}
-                                </button>
+                                {paypalSdk ? (
+                                    <PaypalSdkButton
+                                        clientId={paypalSdk.client_id}
+                                        environment={paypalSdk.environment}
+                                        currency={payIn}
+                                        disabled={
+                                            !shownQuote ||
+                                            form.processing ||
+                                            sdkBusy
+                                        }
+                                        createOrder={createSdkOrder}
+                                        onApprove={captureSdkOrder}
+                                        onCancel={() => setSdkBusy(false)}
+                                        onError={(error) => {
+                                            setSdkBusy(false);
+                                            setSdkError(error.message);
+                                        }}
+                                        fallback={classicPaypalButton}
+                                    />
+                                ) : (
+                                    classicPaypalButton
+                                )}
+                                {sdkError && (
+                                    <p className="-mt-2 text-center text-xs text-red-600 dark:text-red-400">
+                                        {sdkError}
+                                    </p>
+                                )}
 
                                 <button
                                     type="submit"

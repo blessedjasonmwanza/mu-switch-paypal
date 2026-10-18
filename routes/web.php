@@ -115,11 +115,14 @@ if (! config('app.docs_only_routes')) {
     // A merchant's public pay page: customers pay with PayPal, the merchant is
     // settled to mobile money. Receipts are found by their unguessable reference.
     Route::get('pay/receipt/{transfer:reference}', [MerchantPayController::class, 'receipt'])->name('pay.receipt');
+    Route::post('pay/receipt/{transfer:reference}/capture', [MerchantPayController::class, 'capture'])->middleware(['throttle:20,1', LogApiRequests::class])->name('pay.capture');
+    Route::post('pay/l/{link}/order', [MerchantPayController::class, 'orderLink'])->middleware(['throttle:10,1', LogApiRequests::class])->name('pay.link.order');
     Route::get('pay/l/{link}', [MerchantPayController::class, 'showLink'])->name('pay.link');
     Route::post('pay/l/{link}/quote', [MerchantPayController::class, 'quoteLink'])->middleware('throttle:60,1')->name('pay.link.quote');
     Route::post('pay/l/{link}', [MerchantPayController::class, 'storeLink'])->middleware(['throttle:10,1', LogApiRequests::class])->name('pay.link.store');
     Route::get('pay/{merchant}', [MerchantPayController::class, 'show'])->name('pay.show');
     Route::post('pay/{merchant}/quote', [MerchantPayController::class, 'quote'])->middleware('throttle:60,1')->name('pay.quote');
+    Route::post('pay/{merchant}/order', [MerchantPayController::class, 'order'])->middleware(['throttle:10,1', LogApiRequests::class])->name('pay.order');
     Route::post('pay/{merchant}', [MerchantPayController::class, 'store'])->middleware(['throttle:10,1', LogApiRequests::class])->name('pay.store');
 
     // A PayPal payment's verified receipt (permanent signed link).

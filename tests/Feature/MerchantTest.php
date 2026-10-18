@@ -7,6 +7,7 @@ use App\Models\Merchant;
 use App\Models\PaymentProvider;
 use App\Models\User;
 use App\Support\CrossBorder\CrossBorderTransferService;
+use App\Support\Merchants\PaymentLinks;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -329,4 +330,75 @@ test('paying with a paypal account keeps paypal\'s usual checkout', function () 
     Http::assertSentCount(2); // one token and one order
     Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v2/checkout/orders')
         && ! array_key_exists('landing_page', $request['payment_source']['paypal']['experience_context']));
+});
+
+// PayPal JS SDK v6 button
+
+test('the pay page gives paypal\'s js sdk the collecting account\'s public client id', function () {
+    $this->get(route('pay.show', $this->merchant))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('paypalSdk.client_id', 'paypal-client-id')
+            ->where('paypalSdk.environment', 'sandbox')
+            ->missing('paypalSdk.client_secret'));
+});
+
+test('the sdk button\'s order is made on the server, without redirect links, and captured after approval', function () {
+    fakeMerchantPaypal();
+
+    $order = $this->postJson(route('pay.order', $this->merchant), ['amount' => 2500, 'payer_email' => 'buyer@example.com'])
+        ->assertCreated()
+        ->assertJsonPath('data.order_id', 'ORDER-1')
+        ->assertJsonPath('data.client_id', 'paypal-client-id')
+        ->assertJsonPath('data.checkout_url', 'https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1')
+        ->json('data');
+
+    Http::assertSent(function (Request $request) {
+        if (! str_ends_with($request->url(), '/v2/checkout/orders')) {
+            return false;
+        }
+
+        $context = $request['payment_source']['paypal']['experience_context'];
+
+        return ! isset($context['return_url']) && ! isset($context['cancel_url']) && $context['brand_name'] === 'Kitwe Crafts';
+    });
+
+    $transfer = CrossBorderTransfer::sole();
+    expect($order['capture_url'])->toBe(route('pay.capture', $transfer->reference))
+        ->and($transfer->payer_email)->toBe('buyer@example.com');
+
+    // The customer approved in PayPal's window.
+    $this->postJson($order['capture_url'])
+        ->assertOk()
+        ->assertJsonPath('data.receipt_url', route('pay.receipt', $transfer->reference));
+
+    expect($transfer->refresh()->fundingTransaction->status->value)->toBe('success')
+        ->and($transfer->status)->not->toBe(CrossBorderStatus::AWAITING_PAYMENT);
+});
+
+test('a pay link\'s sdk order keeps the link\'s price', function () {
+    fakeMerchantPaypal();
+    $link = app(PaymentLinks::class)->create($this->merchant, ['label' => 'Basket', 'amount' => 450, 'settle_currency' => 'ZMW']);
+
+    $this->postJson(route('pay.link.order', $link->code), ['amount' => 1])->assertCreated();
+
+    expect(CrossBorderTransfer::sole()->targetAmount()->isEqualTo(441))->toBeTrue(); // 450 less the 2% commission
+});
+
+test('an sdk order the merchant can\'t take is explained, not thrown', function () {
+    Http::fake();
+    $this->merchant->update(['is_active' => false]);
+
+    $this->postJson(route('pay.order', $this->merchant), ['amount' => 2500])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'This merchant is not accepting payments.');
+});
+
+test('only merchant payments can be captured from the pay page', function () {
+    $user = User::factory()->create();
+    paypalProvider($user);
+    PaymentProvider::create(['user_id' => $user->id, 'name' => 'Simulated Payouts 2', 'class' => SandboxPayoutController::class, 'config' => ['supported_countries' => ['ZM']], 'is_active' => true]);
+    fakeMerchantPaypal();
+    [$transfer] = app(CrossBorderTransferService::class)->request($user, ['amount' => '2500', 'mode' => 'target', 'country' => 'ZM', 'account_number' => '0977123456']);
+
+    $this->postJson(route('pay.capture', $transfer->reference))->assertNotFound();
 });

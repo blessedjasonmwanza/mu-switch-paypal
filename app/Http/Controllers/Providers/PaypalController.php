@@ -57,6 +57,12 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
     public const PAY_WITH_CARD = 'card';
 
     /**
+     * `checkout` value for an order approved through PayPal's JS SDK (v6)
+     * button on the page, rather than by redirecting to PayPal.
+     */
+    public const CHECKOUT_SDK = 'sdk';
+
+    /**
      * Currencies PayPal can charge. Requests must name one via `currency`.
      */
     public const SUPPORTED_CURRENCIES = [
@@ -218,7 +224,8 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
         // With PayPal FX, PayPal converts what the payer pays into the account's
         // settlement currency at a rate locked now (its fx_id), not at capture.
         $paypalFx = $this->lockedPaypalRate($chargeCurrency);
-        $payload = $this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with'), $paypalFx['fx_id'] ?? null);
+        $sdk = $request->input('checkout') === self::CHECKOUT_SDK;
+        $payload = $this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with'), $paypalFx['fx_id'] ?? null, $sdk);
 
         try {
             $order = $this->client->createOrder($payload, $transaction->transaction_id);
@@ -231,7 +238,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
             $paypalFx = null;
 
             try {
-                $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with')), $transaction->transaction_id.'-fx');
+                $order = $this->client->createOrder($this->orderPayload($transaction, $chargeAmount, $payerEmail, $request->input('brand_name'), $request->input('pay_with'), sdk: $sdk), $transaction->transaction_id.'-fx');
             } catch (PaypalException $retry) {
                 return $this->failTransaction($transaction, $retry->getMessage(), $retry->status >= 500 ? 502 : 422);
             }
@@ -435,7 +442,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
      *
      * @return array<string, mixed>
      */
-    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail, mixed $brandName = null, mixed $payWith = null, ?string $fxId = null): array
+    private function orderPayload(Transaction $transaction, string $amount, ?string $payerEmail, mixed $brandName = null, mixed $payWith = null, ?string $fxId = null, bool $sdk = false): array
     {
         return [
             'intent' => 'CAPTURE',
@@ -456,8 +463,9 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
                         'landing_page' => $payWith === self::PAY_WITH_CARD ? 'GUEST_CHECKOUT' : null,
                         'user_action' => 'PAY_NOW',
                         'shipping_preference' => 'NO_SHIPPING',
-                        'return_url' => URL::signedRoute('paypal.checkout.return', ['transaction' => $transaction->transaction_id]),
-                        'cancel_url' => URL::signedRoute('paypal.checkout.cancel', ['transaction' => $transaction->transaction_id]),
+                        // PayPal's JS SDK approves in its own window and hands back to the page, so it needs no return links.
+                        'return_url' => $sdk ? null : URL::signedRoute('paypal.checkout.return', ['transaction' => $transaction->transaction_id]),
+                        'cancel_url' => $sdk ? null : URL::signedRoute('paypal.checkout.cancel', ['transaction' => $transaction->transaction_id]),
                     ]),
                 ]),
             ],

@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\ApiResponse;
+use App\Contracts\RefundsPayments;
 use App\Exceptions\CrossBorderException;
+use App\Exceptions\NoEligibleProviderException;
+use App\Http\Controllers\Providers\PaypalController;
 use App\Models\CrossBorderTransfer;
 use App\Models\Merchant;
 use App\Models\PaymentLink;
@@ -11,6 +14,8 @@ use App\Support\CrossBorder\CrossBorderTransferService;
 use App\Support\Market;
 use App\Support\Merchants\MerchantCurrencies;
 use App\Support\Merchants\MerchantPresenter;
+use App\Support\ProviderRouter;
+use App\Support\TransactionVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -84,6 +89,43 @@ class MerchantPayController extends Controller
     }
 
     /**
+     * Start the payment for PayPal's JS SDK button: the order is created here
+     * and approved in PayPal's own window on the page. The classic checkout
+     * link comes back too, should the button not be able to take it.
+     */
+    public function order(Request $request, Merchant $merchant): JsonResponse
+    {
+        return $this->sdkOrder($request, $merchant, null);
+    }
+
+    public function orderLink(Request $request, PaymentLink $link): JsonResponse
+    {
+        return $this->sdkOrder($request, $link->merchant, $link);
+    }
+
+    /**
+     * The customer approved in PayPal's window: capture the payment, so the
+     * merchant can be settled, and say where the receipt is.
+     */
+    public function capture(CrossBorderTransfer $transfer, TransactionVerifier $verifier): JsonResponse
+    {
+        abort_if($transfer->merchant_id === null, 404);
+
+        $payment = $transfer->fundingTransaction;
+
+        if ($payment && ! $payment->isFinal()) {
+            $verifier->verify($payment);
+        }
+
+        $transfer->refresh();
+
+        return ApiResponse::success($transfer->status->label(), [
+            'status' => $transfer->status->value,
+            'receipt_url' => route('pay.receipt', $transfer->reference),
+        ]);
+    }
+
+    /**
      * The customer's receipt, followed live until the payment settles.
      */
     public function receipt(CrossBorderTransfer $transfer): Response|RedirectResponse
@@ -109,7 +151,62 @@ class MerchantPayController extends Controller
             ],
             'link' => $link ? ['code' => $link->code, 'label' => $link->label, 'fixed_amount' => $link->amount() !== null] : null,
             ...$props,
+            'paypalSdk' => $this->paypalSdk($merchant, $props['payCurrencies'][0] ?? 'USD'),
         ]);
+    }
+
+    /**
+     * What PayPal's JS SDK needs to show its button: the public client ID
+     * of the PayPal account that collects for this merchant, and whether
+     * it's the sandbox. Null when there's no such account.
+     *
+     * @return array{client_id: string, environment: string}|null
+     */
+    private function paypalSdk(Merchant $merchant, string $currency): ?array
+    {
+        try {
+            $provider = ProviderRouter::route($merchant->user, $merchant->country, $currency, 1, RefundsPayments::class)->first();
+        } catch (NoEligibleProviderException) {
+            return null;
+        }
+
+        $clientId = trim((string) ($provider?->config['client_id'] ?? ''));
+
+        return $provider?->class === PaypalController::class && $clientId !== ''
+            ? ['client_id' => $clientId, 'environment' => ($provider->config['environment'] ?? 'live') === 'sandbox' ? 'sandbox' : 'live']
+            : null;
+    }
+
+    private function sdkOrder(Request $request, Merchant $merchant, ?PaymentLink $link): JsonResponse
+    {
+        try {
+            $input = $this->input($request, $merchant, $link, extra: [
+                'payer_email' => 'nullable|email',
+                'reference' => 'nullable|string|max:100',
+            ]);
+
+            [$transfer, $checkoutUrl] = $this->transfers->collectForMerchant($merchant, [
+                ...$input,
+                'narration' => $link?->reference ?? ($input['reference'] ?? null),
+                'checkout' => 'sdk',
+            ], 'pay_link', fn (CrossBorderTransfer $transfer): string => route('pay.receipt', $transfer->reference), link: $link);
+        } catch (CrossBorderException $e) {
+            return ApiResponse::error($e->getMessage(), 422);
+        }
+
+        $payment = $transfer->fundingTransaction;
+
+        if (! $payment || ! $checkoutUrl) {
+            return ApiResponse::error('PayPal did not start the payment. Please try again.', 502);
+        }
+
+        return ApiResponse::success('Order created', [
+            'order_id' => $payment->provider_transaction_id,
+            'client_id' => (string) ($transfer->fundingProvider?->config['client_id'] ?? ''),
+            'checkout_url' => $checkoutUrl,
+            'capture_url' => route('pay.capture', $transfer->reference),
+            'receipt_url' => route('pay.receipt', $transfer->reference),
+        ], 201);
     }
 
     private function quoteFor(Request $request, Merchant $merchant, ?PaymentLink $link): JsonResponse

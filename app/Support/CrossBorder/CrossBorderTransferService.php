@@ -150,7 +150,7 @@ class CrossBorderTransferService
      * Collect a payment for a merchant through PayPal and settle it to the
      * merchant's mobile-money wallet once PayPal confirms it.
      *
-     * @param  array{amount: string, mode?: ?string, source_currency?: ?string, payer_email?: ?string, pay_with?: ?string, narration?: ?string, return_url?: ?string}  $input
+     * @param  array{amount: string, mode?: ?string, source_currency?: ?string, payer_email?: ?string, pay_with?: ?string, checkout?: ?string, narration?: ?string, return_url?: ?string}  $input
      * @param  (callable(CrossBorderTransfer): string)|null  $returnUrl  where PayPal sends the customer back, built from the new transfer
      * @return array{0: CrossBorderTransfer, 1: ?string}
      *
@@ -184,6 +184,7 @@ class CrossBorderTransferService
             'brand_name' => $merchant->name,
             'payer_email' => $input['payer_email'] ?? null,
             'pay_with' => $input['pay_with'] ?? null,
+            'checkout' => $input['checkout'] ?? null,
             'return_url' => $returnUrl ? $returnUrl($transfer) : ($input['return_url'] ?? null),
         ]);
 
@@ -599,6 +600,7 @@ class CrossBorderTransferService
             'return_url' => $input['return_url'] ?? null,
             'brand_name' => $input['brand_name'] ?? null,
             'pay_with' => $input['pay_with'] ?? null,
+            'checkout' => $input['checkout'] ?? null,
         ]));
         $payment->setUserResolver(fn () => $transfer->user);
 
