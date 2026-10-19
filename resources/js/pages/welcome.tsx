@@ -9,7 +9,13 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { dashboard, login, register } from '@/routes';
+import { CodeSample } from '@/components/code-sample';
+import type { CodeTab } from '@/components/code-sample';
+import { PublicFooter } from '@/components/public-footer';
+import { GITHUB_URL, PublicHeader } from '@/components/public-header';
+import { Reveal } from '@/components/reveal';
+import { cn } from '@/lib/utils';
+import { dashboard, register } from '@/routes';
 
 interface Country {
     code: string;
@@ -45,9 +51,9 @@ interface Audience {
     body: string;
     points: string[];
     /** Where the section's photo goes once it's added, under public/. */
-    image: string;
+    image?: string;
     /** What the photo should show, until it's added. */
-    imageHint: string;
+    imageHint?: string;
 }
 
 const AUDIENCES: Audience[] = [
@@ -115,6 +121,70 @@ const STEPS: {
         title: 'Settle to any wallet',
         body: "The switch pays the wallet in local currency through the best available provider, usually in seconds, and refunds the payer if it can't.",
         tags: ['MTN MoMo', 'Airtel Money', 'M-Pesa', 'and more'],
+    },
+];
+
+const MOBILE_MONEY_SAMPLE: CodeTab[] = [
+    {
+        label: 'Request',
+        code: `curl -X POST https://your-domain.com/api/v1/payment/request \\
+  -H "Authorization: Bearer YOUR_API_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "amount": 150.00,
+    "account_number": "0976000000",
+    "country": "ZM",
+    "callback_url": "https://your-app.com/webhooks/payments"
+  }'`,
+    },
+    {
+        label: 'Response',
+        meta: '200 OK',
+        code: `{
+  "status": "success",
+  "message": "Payment request initiated successfully",
+  "data": {
+    "transaction_id": "9b6c2f1e-2a4d-4c7e-9f3a-1b2c3d4e5f6a",
+    "reference": "MTN-8F2K41QZ",
+    "status": "pending"
+  }
+}`,
+    },
+];
+
+const PAYPAL_SAMPLE: CodeTab[] = [
+    {
+        label: 'Request',
+        code: `curl -X POST https://your-domain.com/api/v1/transfer/request \\
+  -H "Authorization: Bearer YOUR_API_TOKEN" \\
+  -H "Idempotency-Key: send-mum-2026-10-15" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "amount": 2500,
+    "country": "ZM",
+    "account_number": "0977123456",
+    "recipient_name": "Mum",
+    "payer_email": "chipo@example.com"
+  }'`,
+    },
+    {
+        label: 'Response',
+        meta: '200 OK',
+        code: `{
+  "status": "awaiting_payment",
+  "message": "Transfer started. Send the sender to checkout_url to pay with PayPal.",
+  "data": {
+    "reference": "7f0c6c1e-3b5a-4c55-9a1d-2b7f3f9e8a10",
+    "status": "awaiting_payment",
+    "checkout_url": "https://www.sandbox.paypal.com/checkoutnow?token=5O190127TN364715T",
+    "sender_pays": { "amount": "92.30", "currency": "USD" },
+    "recipient_gets": { "amount": "2500.00", "currency": "ZMW" },
+    "fx": {
+      "quote_id": "2653c984-4e7f-4b34-b338-91ec79fecda0",
+      "effective_rate": "27.08750000"
+    }
+  }
+}`,
     },
 ];
 
@@ -206,19 +276,29 @@ function SectionImage({ src, hint }: { src: string; hint: string }) {
 function AudienceSection({
     audience,
     reversed,
+    media,
 }: {
     audience: Audience;
     reversed: boolean;
+    /** Shown in place of the photo, e.g. a code sample. */
+    media?: React.ReactNode;
 }) {
     return (
         <div
             id={audience.id}
             className="grid scroll-mt-8 grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16"
         >
-            <div className={reversed ? 'lg:order-2' : undefined}>
-                <SectionImage src={audience.image} hint={audience.imageHint} />
-            </div>
-            <div className="max-w-xl">
+            <Reveal
+                className={cn('min-w-0', reversed ? 'lg:order-2' : undefined)}
+            >
+                {media ?? (
+                    <SectionImage
+                        src={audience.image ?? ''}
+                        hint={audience.imageHint ?? ''}
+                    />
+                )}
+            </Reveal>
+            <Reveal delay={120} className="max-w-xl">
                 <p className="text-sm font-semibold text-primary">
                     {audience.eyebrow}
                 </p>
@@ -238,7 +318,7 @@ function AudienceSection({
                         </li>
                     ))}
                 </ul>
-            </div>
+            </Reveal>
         </div>
     );
 }
@@ -277,7 +357,7 @@ function ScrollColumn({
 
 export default function Welcome({
     countries = [],
-    githubUrl = 'https://github.com/moneyUnify/mu-switch',
+    githubUrl = GITHUB_URL,
     stats = { countries: 0, providers: 0, currencies: 0 },
     docsOnly = false,
 }: WelcomeProps) {
@@ -356,76 +436,7 @@ export default function Welcome({
                     <div className="pointer-events-none absolute -top-40 -right-32 h-[38rem] w-[38rem] rounded-full bg-primary/10 blur-3xl" />
                     <div className="pointer-events-none absolute -bottom-48 -left-32 h-[32rem] w-[32rem] rounded-full bg-primary/[0.07] blur-3xl" />
 
-                    {/* Header */}
-                    <header className="relative z-20 mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-6">
-                        <div className="flex items-center gap-2.5">
-                            <img
-                                src="/moneyunify-icon.png"
-                                alt="MoneyUnify"
-                                className="h-8 w-8 object-contain"
-                            />
-                            <span className="text-lg font-semibold tracking-tight text-neutral-900 dark:text-white">
-                                MoneyUnify
-                            </span>
-                        </div>
-                        <nav className="flex items-center gap-8">
-                            <Button
-                                asChild
-                                size="2"
-                                variant="ghost"
-                                color="gray"
-                                className="hidden cursor-pointer sm:inline-flex"
-                            >
-                                <a href="/docs">Docs</a>
-                            </Button>
-                            <Button
-                                asChild
-                                size="2"
-                                variant="ghost"
-                                color="gray"
-                                className="cursor-pointer"
-                            >
-                                <a
-                                    href={githubUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    aria-label="MoneyUnify on GitHub"
-                                >
-                                    <Github className="h-4 w-4" aria-hidden />
-                                </a>
-                            </Button>
-                            {!docsOnly && auth.user ? (
-                                <Button
-                                    asChild
-                                    size="2"
-                                    className="cursor-pointer"
-                                >
-                                    <Link href={dashboard()}>Dashboard</Link>
-                                </Button>
-                            ) : !docsOnly ? (
-                                <>
-                                    <Button
-                                        asChild
-                                        size="2"
-                                        variant="ghost"
-                                        color="gray"
-                                        className="cursor-pointer"
-                                    >
-                                        <Link href={login()}>Sign in</Link>
-                                    </Button>
-                                    <Button
-                                        asChild
-                                        size="2"
-                                        className="cursor-pointer"
-                                    >
-                                        <Link href={register()}>
-                                            Get Started
-                                        </Link>
-                                    </Button>
-                                </>
-                            ) : null}
-                        </nav>
-                    </header>
+                    <PublicHeader githubUrl={githubUrl} docsOnly={docsOnly} />
 
                     {/* Main: content left, scrolling countries right */}
                     <div className="relative z-10 mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 items-center gap-8 px-6 pt-6 pb-8 lg:grid-cols-2 lg:gap-4 lg:pt-4">
@@ -575,7 +586,7 @@ export default function Welcome({
                 {/* How a payment moves */}
                 <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
-                        <div className="max-w-2xl">
+                        <Reveal className="max-w-2xl">
                             <p className="text-sm font-semibold text-primary">
                                 How it works
                             </p>
@@ -590,40 +601,42 @@ export default function Welcome({
                                 integration, used through the API, a pay link,
                                 the Send Money page or an AI agent.
                             </p>
-                        </div>
+                        </Reveal>
                         <ol className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
                             {STEPS.map((step, index) => (
-                                <li
-                                    key={step.title}
-                                    className="flex flex-col rounded-xl border border-neutral-200 bg-white/60 p-6 dark:border-neutral-800 dark:bg-white/[0.03]"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                            <step.icon
-                                                className="h-5 w-5"
-                                                aria-hidden
-                                            />
-                                        </span>
-                                        <span className="text-xs font-medium text-neutral-400 tabular-nums dark:text-neutral-500">
-                                            Step {index + 1}
-                                        </span>
-                                    </div>
-                                    <h3 className="mt-5 font-semibold text-neutral-900 dark:text-white">
-                                        {step.title}
-                                    </h3>
-                                    <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-                                        {step.body}
-                                    </p>
-                                    <ul className="mt-auto flex flex-wrap gap-1.5 pt-5">
-                                        {step.tags.map((tag) => (
-                                            <li
-                                                key={tag}
-                                                className="rounded-full border border-neutral-200 px-2.5 py-0.5 text-xs text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
-                                            >
-                                                {tag}
-                                            </li>
-                                        ))}
-                                    </ul>
+                                <li key={step.title} className="flex">
+                                    <Reveal
+                                        delay={index * 120}
+                                        className="flex w-full flex-col rounded-xl border border-neutral-200 bg-white/60 p-6 dark:border-neutral-800 dark:bg-white/[0.03]"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                <step.icon
+                                                    className="h-5 w-5"
+                                                    aria-hidden
+                                                />
+                                            </span>
+                                            <span className="text-xs font-medium text-neutral-400 tabular-nums dark:text-neutral-500">
+                                                Step {index + 1}
+                                            </span>
+                                        </div>
+                                        <h3 className="mt-5 font-semibold text-neutral-900 dark:text-white">
+                                            {step.title}
+                                        </h3>
+                                        <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+                                            {step.body}
+                                        </p>
+                                        <ul className="mt-auto flex flex-wrap gap-1.5 pt-5">
+                                            {step.tags.map((tag) => (
+                                                <li
+                                                    key={tag}
+                                                    className="rounded-full border border-neutral-200 px-2.5 py-0.5 text-xs text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
+                                                >
+                                                    {tag}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </Reveal>
                                 </li>
                             ))}
                         </ol>
@@ -654,10 +667,72 @@ export default function Welcome({
                     </div>
                 </section>
 
+                {/* For developers */}
+                <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
+                    <div className="mx-auto w-full max-w-7xl px-6 py-20">
+                        <Reveal className="max-w-2xl">
+                            <p className="text-sm font-semibold text-primary">
+                                For developers
+                            </p>
+                            <h2 className="mt-2 text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
+                                One API for mobile money and PayPal
+                            </h2>
+                            <p className="mt-3 leading-relaxed text-neutral-600 dark:text-neutral-400">
+                                Every provider sits behind the same JSON API,
+                                documented in an OpenAPI spec. Send one request;
+                                the switch picks the provider, tracks the
+                                payment and tells you when it settles.
+                            </p>
+                        </Reveal>
+                        <div className="mt-14 flex flex-col gap-20">
+                            <AudienceSection
+                                audience={{
+                                    id: 'request-to-pay',
+                                    eyebrow: 'Mobile money request to pay',
+                                    title: "A payment prompt on the payer's phone",
+                                    body: "One call sends a payment prompt straight to the payer's phone. They approve it with their PIN, on any phone, and the switch routes it through the best available provider.",
+                                    points: [
+                                        'Works the same way across MTN, Airtel, M-Pesa and every other provider.',
+                                        'If a provider declines, the next one is tried automatically.',
+                                        'Get the final result by webhook, or check it with one call.',
+                                    ],
+                                }}
+                                media={
+                                    <CodeSample
+                                        title="POST /api/v1/payment/request"
+                                        tabs={MOBILE_MONEY_SAMPLE}
+                                    />
+                                }
+                                reversed
+                            />
+                            <AudienceSection
+                                audience={{
+                                    id: 'paypal-transfer',
+                                    eyebrow: 'PayPal to mobile money',
+                                    title: 'PayPal in, mobile money out, in one call',
+                                    body: "Start a transfer and get back a PayPal checkout link, the exact amounts on both sides and PayPal's locked exchange rate. Once PayPal confirms the payment, the switch pays the wallet.",
+                                    points: [
+                                        'The rate is locked when the sender is quoted.',
+                                        'Retries are safe with an Idempotency-Key.',
+                                        "If the wallet can't be paid, the PayPal payment is refunded automatically.",
+                                    ],
+                                }}
+                                media={
+                                    <CodeSample
+                                        title="POST /api/v1/transfer/request"
+                                        tabs={PAYPAL_SAMPLE}
+                                    />
+                                }
+                                reversed={false}
+                            />
+                        </div>
+                    </div>
+                </section>
+
                 {/* Who it's for */}
                 <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
-                        <div className="max-w-2xl">
+                        <Reveal className="max-w-2xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
                                 Built for everyone between the payer and the
                                 wallet
@@ -666,7 +741,7 @@ export default function Welcome({
                                 Use it as your own payment tool, as a gateway
                                 for your merchants, or both.
                             </p>
-                        </div>
+                        </Reveal>
                         <div className="mt-14 flex flex-col gap-20">
                             {AUDIENCES.map((audience, index) => (
                                 <AudienceSection
@@ -681,7 +756,7 @@ export default function Welcome({
 
                 {/* Closing call to action */}
                 <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
-                    <div className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-6 py-20 md:flex-row md:items-center md:justify-between">
+                    <Reveal className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-6 py-20 md:flex-row md:items-center md:justify-between">
                         <div className="max-w-xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
                                 Open source, and yours to run
@@ -729,23 +804,10 @@ export default function Welcome({
                                 </a>
                             </Button>
                         </div>
-                    </div>
+                    </Reveal>
                 </section>
 
-                {/* Footer — a heartfelt note */}
-                <footer className="relative z-10 mx-auto w-full max-w-7xl border-t border-neutral-200 px-6 pt-6 pb-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-                    A gift from{' '}
-                    <a
-                        href="https://github.com/blessedjasonmwanza/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-primary hover:underline"
-                    >
-                        Blessed Jason Mwanza
-                    </a>
-                    , made with so much love and passion for innovation and the
-                    community.
-                </footer>
+                <PublicFooter />
             </div>
         </>
     );
