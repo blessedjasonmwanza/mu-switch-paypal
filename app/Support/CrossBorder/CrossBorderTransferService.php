@@ -97,7 +97,7 @@ class CrossBorderTransferService
      * Start a transfer: lock the quote, then open a PayPal checkout for the
      * sender. Nothing is paid out until PayPal confirms the payment.
      *
-     * @param  array{amount: string, mode?: ?string, source_currency?: ?string, country: string, currency?: ?string, fx_quote_id?: ?string, account_number: string, recipient_name?: ?string, network?: ?string, narration?: ?string, payer_email?: ?string, pay_with?: ?string, return_url?: ?string}  $input
+     * @param  array{amount: string, mode?: ?string, source_currency?: ?string, country: string, currency?: ?string, fx_quote_id?: ?string, account_number: string, recipient_name?: ?string, recipient_email?: ?string, network?: ?string, narration?: ?string, payer_email?: ?string, pay_with?: ?string, return_url?: ?string}  $input
      * @return array{0: CrossBorderTransfer, 1: ?string} the transfer and the PayPal checkout link
      *
      * @throws CrossBorderException
@@ -560,6 +560,7 @@ class CrossBorderTransferService
                 'recipient_country' => $quote->country,
                 'recipient_account' => Market::msisdn((string) $input['account_number'], $quote->country),
                 'recipient_name' => $input['recipient_name'] ?? null,
+                'recipient_email' => $input['recipient_email'] ?? null,
                 'recipient_network' => $input['network'] ?? null,
                 'narration' => $input['narration'] ?? null,
                 'fx_quote_id' => $fx->id,

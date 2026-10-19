@@ -382,6 +382,7 @@ paths:
                       description: The recipient's mobile number.
                       examples: ['0977123456']
                     recipient_name: { type: string, maxLength: 255 }
+                    recipient_email: { type: string, format: email, description: "Emailed when the money arrives." }
                     network: { type: string, maxLength: 50 }
                     narration: { type: string, maxLength: 100, description: Shown to the recipient where supported. }
                     payer_email:

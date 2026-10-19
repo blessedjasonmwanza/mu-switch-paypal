@@ -21,7 +21,7 @@ class StartTransfer extends OperatorTool
 {
     public function handle(Request $request): Response|ResponseFactory
     {
-        return $this->forward([CrossBorderTransferController::class, 'request'], $request->all(['amount', 'country', 'account_number', 'mode', 'source_currency', 'recipient_name', 'network', 'narration', 'payer_email', 'pay_with', 'return_url', 'fx_quote_id']), $this->account($request), [], $request->get('idempotency_key'));
+        return $this->forward([CrossBorderTransferController::class, 'request'], $request->all(['amount', 'country', 'account_number', 'mode', 'source_currency', 'recipient_name', 'recipient_email', 'network', 'narration', 'payer_email', 'pay_with', 'return_url', 'fx_quote_id']), $this->account($request), [], $request->get('idempotency_key'));
     }
 
     /**
@@ -36,6 +36,7 @@ class StartTransfer extends OperatorTool
             'mode' => $schema->string()->description('target (default): the recipient gets exactly the amount. source: the sender pays exactly the amount.')->enum(['source', 'target']),
             'source_currency' => $schema->string()->description('The currency the payer pays in with PayPal, e.g. USD. Defaults to USD.'),
             'recipient_name' => $schema->string()->description('The recipient\'s name.'),
+            'recipient_email' => $schema->string()->description('The recipient\'s email: they\'re told when the money arrives.'),
             'network' => $schema->string()->description('The recipient\'s network.'),
             'narration' => $schema->string()->description('Shown to the recipient.'),
             'payer_email' => $schema->string()->description('The sender\'s email: pre-fills PayPal, and gets the delivered or refunded email.'),

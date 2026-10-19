@@ -46,6 +46,7 @@ class CrossBorderTransferController extends Controller
             ...$this->quoteRules(),
             'account_number' => 'required|string|max:50',
             'recipient_name' => 'nullable|string|max:255',
+            'recipient_email' => 'nullable|email',
             'network' => 'nullable|string|max:50',
             'narration' => 'nullable|string|max:100',
             'payer_email' => 'nullable|email',

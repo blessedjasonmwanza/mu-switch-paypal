@@ -262,6 +262,7 @@ export default function SendMoney({
         amount: '',
         account_number: '',
         recipient_name: '',
+        recipient_email: '',
         network: '',
         payer_email: '',
     });
@@ -841,6 +842,32 @@ export default function SendMoney({
                                                     )
                                                 }
                                                 disabled={!ready}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-1 sm:col-span-1">
+                                            <Label htmlFor="send-recipient-email">
+                                                Recipient&apos;s email
+                                                (optional)
+                                            </Label>
+                                            <Input
+                                                id="send-recipient-email"
+                                                type="email"
+                                                value={
+                                                    form.data.recipient_email
+                                                }
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'recipient_email',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="Told when the money arrives"
+                                                disabled={!ready}
+                                            />
+                                            <InputError
+                                                message={
+                                                    form.errors.recipient_email
+                                                }
                                             />
                                         </div>
                                         <div className="col-span-2 space-y-1 sm:col-span-1">

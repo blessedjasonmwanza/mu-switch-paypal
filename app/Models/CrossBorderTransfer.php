@@ -19,7 +19,7 @@ class CrossBorderTransfer extends Model
         'reference', 'user_id', 'merchant_id', 'payment_link_id', 'idempotency_key', 'origin', 'conversation_id', 'commission_minor', 'payer_email',
         'funding_provider_id', 'funding_transaction_id', 'source_currency', 'source_amount_minor',
         'payout_provider_id', 'payout_transaction_id', 'target_currency', 'target_amount_minor',
-        'recipient_country', 'recipient_account', 'recipient_name', 'recipient_network', 'narration',
+        'recipient_country', 'recipient_account', 'recipient_name', 'recipient_email', 'recipient_network', 'narration',
         'fx_quote_id', 'fx_base_rate', 'fx_rate', 'fx_margin_percent', 'fx_margin_minor', 'fx_rate_source',
         'refund_transaction_id', 'status', 'failure_reason',
         'funded_at', 'delivered_at', 'refunded_at',

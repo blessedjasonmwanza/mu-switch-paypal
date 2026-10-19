@@ -262,3 +262,14 @@ test('the transfer status labels describe each step', function () {
         ->and(CrossBorderStatus::DELIVERED->isFinal())->toBeTrue()
         ->and(CrossBorderStatus::FUNDED->canTransitionTo(CrossBorderStatus::DELIVERED))->toBeFalse();
 });
+
+test('a transfer can carry the recipient\'s email, which must be valid', function () {
+    startTransfer(['recipient_email' => 'not-an-email'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('recipient_email');
+
+    fakeCrossBorderPaypal();
+    startTransfer(['recipient_email' => 'mum@example.com'])->assertOk();
+
+    expect(CrossBorderTransfer::query()->latest('id')->value('recipient_email'))->toBe('mum@example.com');
+});
