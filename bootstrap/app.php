@@ -19,6 +19,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
+        // Hosts like Render end HTTPS at their load balancer and forward plain
+        // HTTP, so trust the forwarded headers (set TRUSTED_PROXIES to narrow
+        // it). Links, PayPal return URLs and signed receipts then stay https.
+        $middleware->trustProxies(at: env('TRUSTED_PROXIES', '*'));
+
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,
