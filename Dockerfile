@@ -134,12 +134,18 @@ RUN printf '%s\n' \
         'redirect_stderr=true' \
         > /etc/supervisor/conf.d/moneyunify.conf
 
-# Start: fill in the port, migrate, optionally add the demo account, cache the
-# configuration, then hand over to supervisord.
+# Start: make sure there's an app key (local Docker gets one generated and
+# kept in its storage volume), fill in the port, migrate, optionally add the
+# demo account, cache the configuration, then hand over to supervisord.
 RUN printf '%s\n' \
         '#!/bin/sh' \
         'set -e' \
         'cd /var/www/html' \
+        'if [ -z "$APP_KEY" ]; then' \
+        '  echo "APP_KEY is not set: using a generated key kept in storage/app/.app-key. Set APP_KEY on hosted deployments."' \
+        '  [ -s storage/app/.app-key ] || php artisan key:generate --show > storage/app/.app-key' \
+        '  export APP_KEY="$(cat storage/app/.app-key)"' \
+        'fi' \
         'envsubst '"'"'${PORT}'"'"' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf' \
         'php artisan migrate --force' \
         'if [ "$SEED_DEMO_DATA" = "true" ]; then php artisan demo:seed; fi' \
