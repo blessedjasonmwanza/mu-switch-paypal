@@ -211,16 +211,16 @@ function rotate<T>(items: T[], by: number): T[] {
 
 function CountryPill({ country }: { country: Country }) {
     return (
-        <div className="flex items-center gap-2.5 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:backdrop-blur-sm">
-            <span className="text-base leading-none">
+        <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-2.5 py-2 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:backdrop-blur-sm">
+            <span className="text-sm leading-none">
                 {flagEmoji(country.code)}
             </span>
-            <span className="truncate text-sm font-medium text-neutral-700 dark:text-white/80">
+            <span className="min-w-0 text-xs leading-snug font-medium text-neutral-700 xl:truncate dark:text-white/80">
                 {country.name}
             </span>
             {country.mobile_money ? (
                 <span
-                    className="ml-auto shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    className="ml-auto shrink-0 rounded-full bg-emerald-50 px-1.5 py-px text-[9px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
                     title="Mobile money collected and paid out here"
                 >
                     MoMo
@@ -338,9 +338,11 @@ function ScrollColumn({
     duration: number;
 }) {
     return (
-        <div className="flex-1">
+        // min-w-0 lets a column shrink to its share, so long names truncate
+        // inside their pill instead of pushing the pill past the edge.
+        <div className="min-w-0 flex-1">
             <div
-                className="flex flex-col gap-3"
+                className="flex flex-col gap-2"
                 style={{
                     animation: `mu-scroll-${direction} ${duration}s linear infinite`,
                 }}
@@ -565,8 +567,17 @@ export default function Welcome({
 
                         {/* Right — scrolling country columns (desktop only) */}
                         <div className="relative hidden h-[38rem] lg:block">
-                            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                                <div className="flex h-full gap-3">
+                            {/* The columns fade to transparent at the top and bottom, so the page's glow shows through */}
+                            <div
+                                className="pointer-events-none absolute inset-y-0 -right-6 left-0 overflow-hidden"
+                                style={{
+                                    maskImage:
+                                        'linear-gradient(to bottom, transparent, black 7rem, black calc(100% - 7rem), transparent)',
+                                    WebkitMaskImage:
+                                        'linear-gradient(to bottom, transparent, black 7rem, black calc(100% - 7rem), transparent)',
+                                }}
+                            >
+                                <div className="flex h-full gap-2">
                                     {columns.map((column, index) => (
                                         <ScrollColumn
                                             key={index}
@@ -576,9 +587,6 @@ export default function Welcome({
                                         />
                                     ))}
                                 </div>
-                                {/* Top / bottom fade into the background */}
-                                <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#FDFDFC] to-transparent dark:from-[#0a0a0a]" />
-                                <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#FDFDFC] to-transparent dark:from-[#0a0a0a]" />
                             </div>
                         </div>
                     </div>
