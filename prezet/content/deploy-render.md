@@ -47,8 +47,14 @@ You need:
 ## 1. Create the Blueprint
 
 1. In the Render dashboard, choose **New → Blueprint**.
-2. Connect your repository and pick the branch to deploy.
+2. Connect your repository.
 3. Render reads `render.yaml` and shows the web service and the database.
+
+The Blueprint deploys the `main` branch, and only after its GitHub checks pass
+(`autoDeployTrigger: checksPass`): code style, TypeScript types, the test suite
+on SQLite and Postgres, and a build of the Docker image. A commit that fails
+any of them is never deployed. To deploy another branch, change `branch` in
+`render.yaml` or on the service's **Settings** page.
 
 ## 2. Fill in the secrets
 
