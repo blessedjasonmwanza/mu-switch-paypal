@@ -120,6 +120,7 @@ Takes every quote field, plus:
 | --- | --- | --- | --- |
 | `account_number` | string | required | The recipient's mobile-money number, local or international format. |
 | `recipient_name` | string | nullable | Shown in the transfer's details. |
+| `recipient_email` | string | nullable, email | The recipient is emailed here when the money arrives in their wallet. |
 | `network` | string | nullable | The recipient's network, when the payout provider can't detect it. |
 | `narration` | string | nullable, max 100 | Shown to the recipient where the provider supports it. |
 | `payer_email` | string | nullable, email | Pre-fills the sender's PayPal login, and is where the sender is emailed when the transfer is delivered or refunded. |
@@ -140,6 +141,7 @@ curl -X POST https://your-domain.com/api/v1/transfer/request \
     "country": "ZM",
     "account_number": "0977123456",
     "recipient_name": "Mum",
+    "recipient_email": "mum@example.com",
     "payer_email": "chipo@example.com",
     "return_url": "https://your-app.com/sent"
   }'
@@ -205,7 +207,7 @@ their own; `verify` is the fallback.
 
 A transfer can only be read by the account that created it.
 
-## Emails to the sender
+## Emails to the sender and recipient
 
 When the request includes `payer_email`, the sender gets an email:
 
@@ -214,6 +216,11 @@ When the request includes `payer_email`, the sender gets an email:
   receipt.
 - **Refunded:** the transfer couldn't be delivered, so the full payment went
   back to them through PayPal, with the same reference and receipt link.
+
+When the request includes `recipient_email`, the recipient is emailed once the
+money is in their wallet: the amount, the masked wallet number, who sent it, the
+narration and the reference. They aren't emailed if the transfer is refunded.
+Their mobile-money provider also confirms the deposit by SMS.
 
 Each email is sent once, after the change is saved, through your app's mail
 settings (`MAIL_*` in `.env`). Senders who gave no email aren't emailed; PayPal

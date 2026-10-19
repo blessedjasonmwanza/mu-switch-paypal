@@ -5,10 +5,13 @@ namespace App\Support\Notifications;
 use App\Enums\TransactionStatus;
 use App\Models\CrossBorderTransfer;
 use App\Models\Transaction;
+use App\Notifications\MerchantPaid;
 use App\Notifications\PaymentRefunded;
+use App\Notifications\RecipientPaid;
 use App\Notifications\TransferDelivered;
 use App\Support\Currency;
 use Brick\Math\BigDecimal;
+use Illuminate\Notifications\Notification as BaseNotification;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
@@ -16,7 +19,9 @@ use Illuminate\Support\Facades\URL;
 /**
  * Emails the payer when their money arrives or comes back: a cross-border
  * transfer or merchant payment delivered end to end, or a refund that
- * completed. Only payers who gave an email are told, and each is told once.
+ * completed. On delivery the other side is told too: the recipient, when
+ * the sender gave their email, or the merchant. Only people with an email
+ * are told, and each is told once.
  */
 class PayerNotifier
 {
@@ -25,13 +30,24 @@ class PayerNotifier
 
     public function transferDelivered(CrossBorderTransfer $transfer): void
     {
-        $email = self::email($transfer->payer_email);
+        $this->send($transfer->payer_email, "delivered:{$transfer->id}", new TransferDelivered($transfer));
 
-        if ($email === null || ! $this->firstTime("delivered:{$transfer->id}")) {
+        if ($transfer->merchant_id !== null) {
+            $this->send($transfer->merchant?->email, "merchant-paid:{$transfer->id}", new MerchantPaid($transfer));
+        } else {
+            $this->send($transfer->recipient_email, "recipient-paid:{$transfer->id}", new RecipientPaid($transfer));
+        }
+    }
+
+    private function send(?string $email, string $key, BaseNotification $notification): void
+    {
+        $email = self::email($email);
+
+        if ($email === null || ! $this->firstTime($key)) {
             return;
         }
 
-        Notification::route('mail', $email)->notify(new TransferDelivered($transfer));
+        Notification::route('mail', $email)->notify($notification);
     }
 
     /**

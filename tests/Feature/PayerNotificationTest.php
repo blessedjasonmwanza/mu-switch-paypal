@@ -8,7 +8,9 @@ use App\Models\Merchant;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Notifications\MerchantPaid;
 use App\Notifications\PaymentRefunded;
+use App\Notifications\RecipientPaid;
 use App\Notifications\TransferDelivered;
 use App\Support\CrossBorder\CrossBorderTransferService;
 use Illuminate\Notifications\AnonymousNotifiable;
@@ -132,6 +134,55 @@ test('a merchant customer is told the merchant was paid', function () {
 
         return $notifiable->routes['mail'] === 'buyer@example.com'
             && $mail->subject === 'Your payment to Kitwe Crafts is complete'
+            && $mail->actionUrl === route('pay.receipt', $transfer->reference);
+    });
+});
+
+test('the recipient is emailed once when the sender gave their email', function () {
+    $transfer = deliverTransfer($this->user, ['recipient_email' => 'mum@example.com', 'narration' => 'School fees']);
+
+    Notification::assertSentOnDemandTimes(RecipientPaid::class, 1);
+    Notification::assertSentOnDemand(RecipientPaid::class, sentTo('mum@example.com'));
+    Notification::assertSentOnDemand(TransferDelivered::class, sentTo('chipo@example.com'));
+
+    app(CrossBorderTransferService::class)->refresh($transfer);
+    Notification::assertSentOnDemandTimes(RecipientPaid::class, 1);
+
+    $mail = (new RecipientPaid($transfer))->toMail(new AnonymousNotifiable);
+    $text = implode("\n", $mail->introLines);
+
+    expect($mail->subject)->toBe("You've received ZMW 2,500.00")
+        ->and($mail->greeting)->toBe('Hi Mum,')
+        ->and($text)->toContain('ZMW 2,500.00 has been paid to your mobile money wallet •••3456 in Zambia.')
+        ->and($text)->toContain('It was sent by chipo@example.com through PayPal.')
+        ->and($text)->toContain('Note from the sender: School fees')
+        ->and($text)->toContain("Reference: {$transfer->reference}");
+});
+
+test('the recipient is not emailed when the transfer is refunded', function () {
+    deliverTransfer($this->user, ['account_number' => '0977120000', 'recipient_email' => 'mum@example.com']);
+
+    Notification::assertSentOnDemandTimes(RecipientPaid::class, 0);
+});
+
+test('the merchant is emailed once when a customer payment reaches their wallet', function () {
+    $merchant = Merchant::factory()->for($this->user)->create(['name' => 'Kitwe Crafts', 'email' => 'owner@kitwecrafts.example', 'wallet_number' => '260977123456']);
+    $service = app(CrossBorderTransferService::class);
+
+    [$transfer] = $service->collectForMerchant($merchant, ['amount' => '2500', 'payer_email' => 'buyer@example.com']);
+    $service->refresh($transfer);
+    $service->refresh($transfer->refresh());
+    $service->refresh($transfer->refresh());
+
+    Notification::assertSentOnDemandTimes(MerchantPaid::class, 1);
+    Notification::assertSentOnDemandTimes(RecipientPaid::class, 0);
+    Notification::assertSentOnDemand(MerchantPaid::class, function (MerchantPaid $notification, array $channels, AnonymousNotifiable $notifiable) use ($transfer): bool {
+        $mail = $notification->toMail($notifiable);
+        $text = implode("\n", $mail->introLines);
+
+        return $notifiable->routes['mail'] === 'owner@kitwecrafts.example'
+            && str_starts_with($mail->subject, "You've been paid ")
+            && str_contains($text, 'Your customer (buyer@example.com) paid')
             && $mail->actionUrl === route('pay.receipt', $transfer->reference);
     });
 });
