@@ -39,7 +39,8 @@ Route::inertia('terms', 'legal/terms', ['docsOnly' => config('app.docs_only')])-
 if (! config('app.docs_only_routes')) {
     Route::get('/up', fn (Request $request) => $request->expectsJson()
         ? response()->json(['status' => 'up'])
-        : response(View::file(base_path('vendor/laravel/framework/src/Illuminate/Foundation/resources/health-up.blade.php'))));
+        // The page shows an error when given one; a healthy app passes none.
+        : response(View::file(base_path('vendor/laravel/framework/src/Illuminate/Foundation/resources/health-up.blade.php'), ['exception' => null])));
 
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
