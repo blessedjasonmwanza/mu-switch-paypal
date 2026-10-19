@@ -130,6 +130,16 @@ The Send Money assistant only gets PayPal's **read-only** tools (names starting
 `get_order`, `list_transactions`, `get_refund` and `list_disputes`, so it can
 check PayPal's own record but never move or refund money through PayPal.
 
+### `npm audit`
+
+`npm audit` reports advisories in packages that `@paypal/agent-toolkit` ships
+for other agent frameworks (LangChain, LangSmith and the Vercel `ai` SDK, with
+their `uuid` and `jsondiffpatch` dependencies). The MCP server never loads them:
+its entry point only uses the toolkit's MCP adapter. The one package it does
+load with an advisory, `mathjs`, is pinned to the fixed version through
+`overrides` in `package.json`. None of the remaining advisories has a fix
+within the toolkit's current version.
+
 ### From the dashboard (automatic)
 
 If the account has an **active PayPal provider** on the
