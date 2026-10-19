@@ -11,6 +11,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodeSample } from '@/components/code-sample';
 import type { CodeTab } from '@/components/code-sample';
+import { McpSession } from '@/components/mcp-session';
 import { PublicFooter } from '@/components/public-footer';
 import { GITHUB_URL, PublicHeader } from '@/components/public-header';
 import { RaisedFrame } from '@/components/raised-frame';
@@ -745,9 +746,32 @@ export default function Welcome({
                     </div>
                 </section>
 
-                {/* Who it's for */}
+                {/* Built for AI agents */}
                 <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
                     <SectionGlow side="left" offset={3} />
+                    <div className="mx-auto w-full max-w-7xl px-6 py-20">
+                        <AudienceSection
+                            audience={{
+                                id: 'ai-agents',
+                                eyebrow: 'Built for AI agents',
+                                title: 'Any AI agent can move money, with a person in charge',
+                                body: 'MoneyUnify runs its own MCP servers, so assistants and agents like Claude can quote, send and track payments in plain language. They use the same rules as the API, and nothing moves until a person approves it.',
+                                points: [
+                                    '21 tools for operators: payments, payouts, transfers, refunds, merchants, FX and treasury.',
+                                    '9 tools for each merchant, limited to its own payments and pay links.',
+                                    "PayPal's Agent Toolkit, read-only, so the agent can check PayPal's own record of a payment.",
+                                    'Spending limits and approvals are enforced in code, not in the prompt.',
+                                ],
+                            }}
+                            media={<McpSession />}
+                            reversed
+                        />
+                    </div>
+                </section>
+
+                {/* Who it's for */}
+                <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
+                    <SectionGlow side="right" offset={4} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <Reveal className="max-w-2xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
@@ -773,7 +797,7 @@ export default function Welcome({
 
                 {/* Closing call to action */}
                 <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
-                    <SectionGlow side="right" offset={4} />
+                    <SectionGlow side="left" offset={5} />
                     <Reveal className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-6 py-20 md:flex-row md:items-center md:justify-between">
                         <div className="max-w-xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
