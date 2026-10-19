@@ -274,6 +274,10 @@ live accounts.)
 (`demo@moneyunify.test`, password `password`) with a week of activity. See
 [Local Setup](#local-setup).
 
+**Host it:** the repository includes a `Dockerfile` and a `render.yaml`
+Blueprint that deploy the app, its queue worker, its scheduler and Postgres to
+Render in one step. See [Deploy on Render](prezet/content/deploy-render.md).
+
 1. **Add PayPal** on **Providers**: a sandbox app's client ID and secret, with
    environment `sandbox` (from [developer.paypal.com](https://developer.paypal.com/dashboard/applications)).
 2. **Add a payout provider:** pawaPay with a sandbox API token for real
