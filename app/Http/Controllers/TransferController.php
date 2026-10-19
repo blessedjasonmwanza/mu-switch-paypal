@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Support\Currency;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Market;
+use App\Support\SqlDate;
 use App\Support\TransactionVerifier;
 use Brick\Math\RoundingMode;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -176,20 +177,20 @@ class TransferController extends Controller
         $like = '%'.$search.'%';
 
         $query->where(function (Builder $inner) use ($like, $search): void {
-            $inner->where('reference', 'like', $like)
-                ->orWhere('recipient_account', 'like', $like)
-                ->orWhere('recipient_name', 'like', $like)
-                ->orWhere('recipient_country', 'like', $like)
-                ->orWhere('source_currency', 'like', $like)
-                ->orWhere('target_currency', 'like', $like)
-                ->orWhere('narration', 'like', $like)
-                ->orWhere('status', 'like', $like)
+            $inner->whereLike('reference', $like)
+                ->orWhereLike('recipient_account', $like)
+                ->orWhereLike('recipient_name', $like)
+                ->orWhereLike('recipient_country', $like)
+                ->orWhereLike('source_currency', $like)
+                ->orWhereLike('target_currency', $like)
+                ->orWhereLike('narration', $like)
+                ->orWhereLike('status', $like)
                 ->when(is_numeric($search), function (Builder $q) use ($search): void {
                     $minor = (int) round(((float) $search) * 100);
                     $q->orWhere('source_amount_minor', $minor)->orWhere('target_amount_minor', $minor);
                 })
-                ->orWhereHas('fundingProvider', fn (Builder $p) => $p->where('name', 'like', $like))
-                ->orWhereHas('payoutProvider', fn (Builder $p) => $p->where('name', 'like', $like));
+                ->orWhereHas('fundingProvider', fn (Builder $p) => $p->whereLike('name', $like))
+                ->orWhereHas('payoutProvider', fn (Builder $p) => $p->whereLike('name', $like));
         });
     }
 
@@ -205,15 +206,15 @@ class TransferController extends Controller
         $like = '%'.$search.'%';
 
         $query->where(function (Builder $inner) use ($like, $search): void {
-            $inner->where('transaction_id', 'like', $like)
-                ->orWhere('provider_transaction_id', 'like', $like)
-                ->orWhere('currency', 'like', $like)
-                ->orWhere('country', 'like', $like)
-                ->orWhere('status', 'like', $like)
+            $inner->whereLike('transaction_id', $like)
+                ->orWhereLike('provider_transaction_id', $like)
+                ->orWhereLike('currency', $like)
+                ->orWhereLike('country', $like)
+                ->orWhereLike('status', $like)
                 ->when(is_numeric($search), fn (Builder $q) => $q->orWhere('amount', $search))
-                ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', $like)->orWhere('email', 'like', $like))
-                ->orWhereHas('customer.accounts', fn (Builder $a) => $a->where('number', 'like', $like))
-                ->orWhereHas('paymentProvider', fn (Builder $p) => $p->where('name', 'like', $like));
+                ->orWhereHas('customer', fn (Builder $c) => $c->whereLike('name', $like)->orWhereLike('email', $like))
+                ->orWhereHas('customer.accounts', fn (Builder $a) => $a->whereLike('number', $like))
+                ->orWhereHas('paymentProvider', fn (Builder $p) => $p->whereLike('name', $like));
         });
     }
 
@@ -312,7 +313,7 @@ class TransferController extends Controller
 
         $cbRows = $cbQuery
             ->where('created_at', '>=', $start)
-            ->selectRaw("strftime('%Y-%m-%d', created_at) as bucket")
+            ->selectRaw(SqlDate::bucket($cbQuery).' as bucket')
             ->selectRaw('count(*) as total')
             ->selectRaw("coalesce(sum(case when status in ('".implode("','", $cbSuccessStatuses)."') then 1 else 0 end), 0) as success")
             ->selectRaw("coalesce(sum(case when status in ('".implode("','", $cbPendingStatuses)."') then 1 else 0 end), 0) as pending")
@@ -323,7 +324,7 @@ class TransferController extends Controller
 
         $payoutRows = $payoutQuery
             ->where('created_at', '>=', $start)
-            ->selectRaw("strftime('%Y-%m-%d', created_at) as bucket")
+            ->selectRaw(SqlDate::bucket($payoutQuery).' as bucket')
             ->selectRaw('count(*) as total')
             ->selectRaw("coalesce(sum(case when status = 'success' then 1 else 0 end), 0) as success")
             ->selectRaw("coalesce(sum(case when status = 'pending' then 1 else 0 end), 0) as pending")

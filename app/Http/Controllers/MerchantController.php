@@ -41,9 +41,9 @@ class MerchantController extends Controller
             'merchants' => $user->merchants()
                 ->withCount('paymentLinks')
                 ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $inner) => $inner
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhere('wallet_number', 'like', "%{$search}%")
-                    ->orWhere('slug', 'like', "%{$search}%")))
+                    ->whereLike('name', "%{$search}%")
+                    ->orWhereLike('wallet_number', "%{$search}%")
+                    ->orWhereLike('slug', "%{$search}%")))
                 ->latest('id')
                 ->paginate(10)
                 ->withQueryString()

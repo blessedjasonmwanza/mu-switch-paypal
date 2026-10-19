@@ -11,6 +11,7 @@ use App\Support\Currency;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Market;
 use App\Support\Refunds\PaymentRefunder;
+use App\Support\SqlDate;
 use Brick\Math\RoundingMode;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -113,15 +114,15 @@ class PaymentController extends Controller
         $like = '%'.$search.'%';
 
         $query->where(function (Builder $inner) use ($like, $search): void {
-            $inner->where('transaction_id', 'like', $like)
-                ->orWhere('provider_transaction_id', 'like', $like)
-                ->orWhere('currency', 'like', $like)
-                ->orWhere('country', 'like', $like)
-                ->orWhere('status', 'like', $like)
+            $inner->whereLike('transaction_id', $like)
+                ->orWhereLike('provider_transaction_id', $like)
+                ->orWhereLike('currency', $like)
+                ->orWhereLike('country', $like)
+                ->orWhereLike('status', $like)
                 ->when(is_numeric($search), fn (Builder $q) => $q->orWhere('amount', $search))
-                ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', $like)->orWhere('email', 'like', $like))
-                ->orWhereHas('customer.accounts', fn (Builder $a) => $a->where('number', 'like', $like))
-                ->orWhereHas('paymentProvider', fn (Builder $p) => $p->where('name', 'like', $like));
+                ->orWhereHas('customer', fn (Builder $c) => $c->whereLike('name', $like)->orWhereLike('email', $like))
+                ->orWhereHas('customer.accounts', fn (Builder $a) => $a->whereLike('number', $like))
+                ->orWhereHas('paymentProvider', fn (Builder $p) => $p->whereLike('name', $like));
         });
     }
 
@@ -167,7 +168,7 @@ class PaymentController extends Controller
 
         $rows = $query
             ->where('created_at', '>=', $start)
-            ->selectRaw("strftime('%Y-%m-%d', created_at) as bucket")
+            ->selectRaw(SqlDate::bucket($query).' as bucket')
             ->selectRaw('count(*) as total')
             ->selectRaw("coalesce(sum(case when status = 'success' then 1 else 0 end), 0) as success")
             ->selectRaw("coalesce(sum(case when status = 'pending' then 1 else 0 end), 0) as pending")

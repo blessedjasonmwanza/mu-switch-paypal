@@ -428,12 +428,12 @@ class DashboardController extends Controller
             ->when($search !== '', function (Builder $query) use ($search): void {
                 $like = '%'.$search.'%';
                 $query->where(function (Builder $inner) use ($like, $search): void {
-                    $inner->where('transaction_id', 'like', $like)
-                        ->orWhere('currency', 'like', $like)
-                        ->orWhere('status', 'like', $like)
+                    $inner->whereLike('transaction_id', $like)
+                        ->orWhereLike('currency', $like)
+                        ->orWhereLike('status', $like)
                         ->when(is_numeric($search), fn (Builder $q) => $q->orWhere('amount', $search))
-                        ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', $like)->orWhere('email', 'like', $like))
-                        ->orWhereHas('paymentProvider', fn (Builder $p) => $p->where('name', 'like', $like));
+                        ->orWhereHas('customer', fn (Builder $c) => $c->whereLike('name', $like)->orWhereLike('email', $like))
+                        ->orWhereHas('paymentProvider', fn (Builder $p) => $p->whereLike('name', $like));
                 });
             })
             ->latest()
