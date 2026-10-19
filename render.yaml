@@ -1,0 +1,64 @@
+# Render Blueprint: the MoneyUnify Switch web app (with its queue worker and
+# scheduler) plus a Postgres database. Deploy it from the Render dashboard:
+# New > Blueprint, then pick this repository. See prezet/content/deploy-render.md.
+services:
+  - type: web
+    name: moneyunify
+    runtime: docker
+    # Deploy main, and only once its GitHub checks (lint, tests on SQLite and
+    # Postgres, Docker build) have passed.
+    branch: main
+    autoDeployTrigger: checksPass
+    # No plan here: new services start on Render's smallest paid instance
+    # (0.5 CPU, 512 MB), which stays awake so the scheduler keeps running.
+    # Pick a plan in the dashboard if you need more.
+    healthCheckPath: /up
+    envVars:
+      # Generate with `php artisan key:generate --show` and paste it in.
+      - key: APP_KEY
+        sync: false
+      # e.g. https://moneyunify.onrender.com (your service's URL).
+      - key: APP_URL
+        sync: false
+      # Not "production": the sandbox demo uses Simulated Payouts and demo data.
+      - key: APP_ENV
+        value: staging
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: moneyunify-db
+          property: connectionString
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: MAIL_MAILER
+        value: log
+      # Adds the demo account (demo@moneyunify.test / password) on deploy.
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: PAYPAL_SANDBOX_CLIENT_ID
+        sync: false
+      - key: PAYPAL_SANDBOX_CLIENT_SECRET
+        sync: false
+      - key: PAWAPAY_SANDBOX_TOKEN
+        sync: false
+      # Optional server-wide AI fallback. Any supported provider works (set
+      # AI_PROVIDER and that provider's key); accounts normally choose their
+      # own providers, models and keys on the AI & Agents page instead.
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+
+databases:
+  - name: moneyunify-db
+    databaseName: moneyunify
+    user: moneyunify
