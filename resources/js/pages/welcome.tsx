@@ -14,6 +14,7 @@ import type { CodeTab } from '@/components/code-sample';
 import { PublicFooter } from '@/components/public-footer';
 import { GITHUB_URL, PublicHeader } from '@/components/public-header';
 import { Reveal } from '@/components/reveal';
+import { SectionGlow } from '@/components/section-glow';
 import { cn } from '@/lib/utils';
 import { dashboard, register } from '@/routes';
 
@@ -584,7 +585,8 @@ export default function Welcome({
                 </div>
 
                 {/* How a payment moves */}
-                <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
+                <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
+                    <SectionGlow side="right" offset={0} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <Reveal className="max-w-2xl">
                             <p className="text-sm font-semibold text-primary">
@@ -644,7 +646,8 @@ export default function Welcome({
                 </section>
 
                 {/* Mobile money, natively */}
-                <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
+                <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
+                    <SectionGlow side="left" offset={1} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <AudienceSection
                             audience={{
@@ -668,7 +671,8 @@ export default function Welcome({
                 </section>
 
                 {/* For developers */}
-                <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
+                <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
+                    <SectionGlow side="right" offset={2} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <Reveal className="max-w-2xl">
                             <p className="text-sm font-semibold text-primary">
@@ -730,7 +734,8 @@ export default function Welcome({
                 </section>
 
                 {/* Who it's for */}
-                <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
+                <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
+                    <SectionGlow side="left" offset={3} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <Reveal className="max-w-2xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
@@ -755,7 +760,8 @@ export default function Welcome({
                 </section>
 
                 {/* Closing call to action */}
-                <section className="relative z-10 border-t border-neutral-200 dark:border-neutral-800">
+                <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
+                    <SectionGlow side="right" offset={4} />
                     <Reveal className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-6 py-20 md:flex-row md:items-center md:justify-between">
                         <div className="max-w-xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
