@@ -173,3 +173,6 @@ A live deployment uses the same Blueprint with:
   [terms](/terms) for deployments.
 
 Keep `LICENSE.txt` and `NOTICE` with every deployment.
+
+To run on your own server instead of Render, see
+[Self-Host with Docker](/docs/docker-production).

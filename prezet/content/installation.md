@@ -9,6 +9,12 @@ MoneyUnify Switch is a standard, self-hosted PHP application. You host it
 yourself, which keeps every credential, customer, and transaction inside
 infrastructure you control.
 
+> **Have Docker?** Skip installing PHP, Composer, Node.js and a database:
+> `docker compose up --build` runs everything, with a demo account. See
+> [Run with Docker](/docs/docker). To host it for others, see
+> [Self-Host with Docker](/docs/docker-production) (your own server) or
+> [Deploy on Render](/docs/deploy-render).
+
 ## Requirements
 
 | Dependency | Version | Download |

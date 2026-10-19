@@ -30,6 +30,8 @@
 - [Requirements](#requirements)
   - [Installing PHP and its extensions](#installing-php-and-its-extensions)
 - [Local Setup](#local-setup)
+  - [With Docker](#with-docker)
+  - [Without Docker](#without-docker)
 - [Documentation Site (`/docs`)](#documentation-site-docs)
 - [API Documentation & Consumption](#api-documentation--consumption)
 - [Authors](#authors)
@@ -270,9 +272,10 @@ needs no credentials, is never available when `APP_ENV=production`, and is
 never counted as real coverage. (Lenco has no sandbox, so it's used only with
 live accounts.)
 
-**Fastest start:** `composer setup --demo-data` creates a demo account
-(`demo@moneyunify.test`, password `password`) with a week of activity. See
-[Local Setup](#local-setup).
+**Fastest start:** with Docker, `docker compose up --build` starts everything
+with a demo account (`demo@moneyunify.test`, password `password`) and a week of
+activity ([Run with Docker](prezet/content/docker.md)). Without Docker,
+`composer setup --demo-data` does the same. See [Local Setup](#local-setup).
 
 **Host it:** the repository includes a `Dockerfile` and a `render.yaml`
 Blueprint that deploy the app, its queue worker, its scheduler and Postgres to
@@ -511,6 +514,40 @@ If an extension is missing, install its package (e.g. `php8.4-gd`) and re-run th
 check — no PHP reconfiguration is needed.
 
 ## Local Setup
+
+There are two ways to run MoneyUnify on your machine:
+
+| | With Docker | Without Docker |
+| --- | --- | --- |
+| **You install** | Docker only | PHP 8.4+, Composer, Node.js 22+ |
+| **Database** | Postgres, in a container | SQLite file (or your own MySQL/Postgres) |
+| **Best for** | Trying it in minutes | Day-to-day development, with instant reloads |
+| **Start with** | `docker compose up --build` | `composer setup`, then `composer dev` |
+
+### With Docker
+
+```bash
+git clone https://github.com/blessedjasonmwanza/mu-switch-paypal.git
+cd mu-switch-paypal
+docker compose up --build
+```
+
+Open [http://localhost:8000](http://localhost:8000) and sign in with
+`demo@moneyunify.test` / `password`. This starts the app, its queue worker,
+its scheduler and a Postgres database, with a demo account and a week of
+activity. To make real sandbox payments, copy `.env.docker.example` to
+`.env.docker` and add your PayPal sandbox keys before the first start.
+
+**Full guide:** [Run with Docker](prezet/content/docker.md) (step by step,
+everyday commands and troubleshooting).
+
+**Deploying for real?** The local setup above is a sandbox demo. To run
+MoneyUnify in production on your own server, with your domain, automatic HTTPS,
+no demo data and your live providers, use `compose.prod.yaml`:
+[Self-Host with Docker](prezet/content/docker-production.md). To host on a
+platform instead, see [Deploy on Render](prezet/content/deploy-render.md).
+
+### Without Docker
 
 1. Clone the repository:
 
