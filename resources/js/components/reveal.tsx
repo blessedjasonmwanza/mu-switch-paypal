@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
+/** How much must be on screen before content appears; more than its 32px slide. */
+const SHOW_AFTER_PX = 64;
+
+/** Check every 5% of the element, so SHOW_AFTER_PX is noticed promptly. */
+const THRESHOLDS = Array.from({ length: 21 }, (_, step) => step / 20);
+
 /**
  * Fades and lifts its content in as it scrolls into view, and back out as it
  * leaves, so it animates both scrolling down and scrolling back up. People
@@ -28,9 +34,25 @@ export function Reveal({
             return;
         }
 
+        // Show once a good piece is on screen, hide only once it's fully off.
+        // The gap between the two is wider than the slide, so sliding in or
+        // out can never flip the state back (which made content blink when
+        // it rested at the edge of the screen).
         const observer = new IntersectionObserver(
-            ([entry]) => setVisible(entry.isIntersecting),
-            { rootMargin: '0px 0px -12% 0px', threshold: 0.1 },
+            ([entry]) => {
+                const onScreen = entry.intersectionRect.height;
+                const enough = Math.min(
+                    SHOW_AFTER_PX,
+                    entry.boundingClientRect.height,
+                );
+
+                if (onScreen >= enough) {
+                    setVisible(true);
+                } else if (!entry.isIntersecting) {
+                    setVisible(false);
+                }
+            },
+            { threshold: THRESHOLDS },
         );
 
         observer.observe(node);
