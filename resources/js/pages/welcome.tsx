@@ -13,6 +13,7 @@ import { CodeSample } from '@/components/code-sample';
 import type { CodeTab } from '@/components/code-sample';
 import { PublicFooter } from '@/components/public-footer';
 import { GITHUB_URL, PublicHeader } from '@/components/public-header';
+import { RaisedFrame } from '@/components/raised-frame';
 import { Reveal } from '@/components/reveal';
 import { SectionGlow } from '@/components/section-glow';
 import { cn } from '@/lib/utils';
@@ -253,7 +254,7 @@ function SectionImage({ src, hint }: { src: string; hint: string }) {
                     }
                 }}
                 onError={() => setMissing(true)}
-                className="aspect-[4/3] w-full rounded-2xl border border-neutral-200 object-cover dark:border-neutral-800"
+                className="aspect-[4/3] w-full rounded-2xl object-cover"
             />
         );
     }
@@ -292,12 +293,15 @@ function AudienceSection({
             <Reveal
                 className={cn('min-w-0', reversed ? 'lg:order-2' : undefined)}
             >
-                {media ?? (
-                    <SectionImage
-                        src={audience.image ?? ''}
-                        hint={audience.imageHint ?? ''}
-                    />
-                )}
+                {/* The plate peeks out towards the text, away from the page edge */}
+                <RaisedFrame plate={reversed ? 'left' : 'right'}>
+                    {media ?? (
+                        <SectionImage
+                            src={audience.image ?? ''}
+                            hint={audience.imageHint ?? ''}
+                        />
+                    )}
+                </RaisedFrame>
             </Reveal>
             <Reveal delay={120} className="max-w-xl">
                 <p className="text-sm font-semibold text-primary">
