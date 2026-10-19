@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'default' => env('AI_PROVIDER', 'anthropic'),
+    'default' => env('AI_PROVIDER', 'gemini'),
     'default_for_images' => 'gemini',
     'default_for_audio' => 'openai',
     'default_for_transcription' => 'openai',

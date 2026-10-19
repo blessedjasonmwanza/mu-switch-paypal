@@ -5,7 +5,8 @@ date: 2026-10-15
 category: Configuration
 ---
 
-The switch's AI features call a language model of your choice, and use PayPal's
+The switch's AI features call a language model of your choice (it isn't tied to
+any one AI company), and use PayPal's
 tools over the [Model Context Protocol](https://modelcontextprotocol.io) (MCP).
 Both are **optional**: payments, routing and every provider driver work without
 any AI key. You only need this page if you want the AI features.
@@ -17,8 +18,9 @@ any AI key. You only need this page if you want the AI features.
 | **AI & Agents** in the dashboard sidebar | Each account, no server access needed | That account only |
 | **`.env`** on the server | Whoever runs the server | Every account, as the fallback |
 
-The rule is simple: **what an account sets in the dashboard wins, and anything
-it leaves blank falls back to `.env`.** An account can, for example, add OpenAI
+The dashboard is the main place: operators and users choose their provider,
+model and key there, with no server changes. **What an account sets in the
+dashboard wins, and anything it leaves blank falls back to `.env`.** An account can, for example, add OpenAI
 without a key, and the server's `OPENAI_API_KEY` is used.
 
 ## Option A: the dashboard
@@ -66,16 +68,16 @@ The same page shows how **PayPal MCP** is connected (see below).
 
 ## Option B: `.env`
 
-Claude (Anthropic) is the default. Create a key in the
-[Anthropic Console](https://console.anthropic.com/) and add it:
+The server-wide fallback is Google Gemini unless you choose another. Create a
+key in [Google AI Studio](https://aistudio.google.com/apikey) and add it:
 
 ```ini
-AI_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
+AI_PROVIDER=gemini
+GEMINI_API_KEY=...
 ```
 
-To use another provider, set `AI_PROVIDER` to its name and add that provider's
-key instead:
+Any other supported provider works the same way: set `AI_PROVIDER` to its name
+and add that provider's key instead:
 
 | `AI_PROVIDER` | Key variable |
 | --- | --- |
