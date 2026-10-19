@@ -204,21 +204,26 @@ test('a paused merchant takes no payments', function () {
 });
 
 test('merchant payments keep the per-payment cap but not the account\'s daily send limit', function () {
-    fakeMerchantPaypal();
     config(['moneyunify_paypal.limits.per_transaction_max_usd' => 100, 'moneyunify_paypal.limits.daily_max_usd' => 150]);
+    // Each payment gets its own PayPal order. This fake comes first, since the
+    // first matching fake wins and fakeMerchantPaypal() always returns ORDER-1.
     $count = 0;
     Http::fake(['*/v2/checkout/orders' => function () use (&$count) {
         return Http::response(paypalOrder('ORDER-'.(++$count)), 201);
     }]);
+    fakeMerchantPaypal();
 
     $this->post(route('pay.store', $this->merchant), ['amount' => 120, 'mode' => 'source'])
         ->assertSessionHasErrors(['amount' => 'This transfer is about USD 120.00, over the USD 100 limit per transfer.']);
 
     foreach ([90, 90, 90] as $amount) {
-        $this->post(route('pay.store', $this->merchant), ['amount' => $amount, 'mode' => 'source'])->assertRedirect();
+        $this->post(route('pay.store', $this->merchant), ['amount' => $amount, 'mode' => 'source'])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
     }
 
-    expect(CrossBorderTransfer::count())->toBe(3);
+    expect(CrossBorderTransfer::count())->toBe(3)
+        ->and(CrossBorderTransfer::where('status', CrossBorderStatus::AWAITING_PAYMENT)->count())->toBe(3);
 });
 
 test('receipts exist only for merchant payments', function () {

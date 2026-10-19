@@ -14,7 +14,9 @@ return new class extends Migration
     {
         Schema::create('treasury_transfers', function (Blueprint $table) {
             $table->id();
-            $table->uuid('reference')->unique();
+            // A string column, so looking up a malformed reference finds nothing
+            // instead of failing on Postgres.
+            $table->string('reference', 64)->unique();
             $table->foreignIdFor(User::class)->constrained()->cascadeOnDelete();
             $table->foreignId('from_provider_id')->constrained('payment_providers')->cascadeOnDelete();
             $table->foreignId('to_provider_id')->constrained('payment_providers')->cascadeOnDelete();

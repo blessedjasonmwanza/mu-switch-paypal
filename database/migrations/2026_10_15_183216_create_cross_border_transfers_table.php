@@ -15,7 +15,9 @@ return new class extends Migration
         // with the FX locked at quote time.
         Schema::create('cross_border_transfers', function (Blueprint $table) {
             $table->id();
-            $table->uuid('reference')->unique();
+            // A string column, so looking up a malformed reference finds nothing
+            // instead of failing on Postgres.
+            $table->string('reference', 64)->unique();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('idempotency_key')->nullable();
 
