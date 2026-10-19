@@ -33,6 +33,9 @@ Route::get('/', fn () => Inertia::render('welcome', [
     'docsOnly' => config('app.docs_only'),
 ]))->name('home');
 
+Route::inertia('privacy', 'legal/privacy', ['docsOnly' => config('app.docs_only')])->name('privacy');
+Route::inertia('terms', 'legal/terms', ['docsOnly' => config('app.docs_only')])->name('terms');
+
 if (! config('app.docs_only_routes')) {
     Route::get('/up', fn (Request $request) => $request->expectsJson()
         ? response()->json(['status' => 'up'])
