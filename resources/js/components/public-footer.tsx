@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { privacy, terms } from '@/routes';
+import { home, privacy, terms } from '@/routes';
 
 /**
  * The footer on public pages: the author's note and the legal links.
@@ -19,6 +19,9 @@ export function PublicFooter() {
             , made with so much love and passion for innovation and the
             community.
             <nav className="mt-3 flex items-center justify-center gap-5 text-xs">
+                <Link href={home()} className="hover:text-primary">
+                    Home
+                </Link>
                 <Link href={privacy()} className="hover:text-primary">
                     Privacy
                 </Link>

@@ -1,6 +1,8 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { ArrowLeft } from 'lucide-react';
 import { PublicFooter } from '@/components/public-footer';
 import { PublicHeader } from '@/components/public-header';
+import { home } from '@/routes';
 
 export interface LegalSection {
     title: string;
@@ -36,6 +38,13 @@ export function LegalPage({
                 <PublicHeader docsOnly={docsOnly} />
 
                 <main className="mx-auto w-full max-w-3xl px-6 pt-8 pb-20">
+                    <Link
+                        href={home()}
+                        className="mb-8 inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 transition-colors hover:text-primary dark:text-neutral-400"
+                    >
+                        <ArrowLeft className="h-4 w-4" aria-hidden />
+                        Back to home
+                    </Link>
                     <h1 className="text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-white">
                         {title}
                     </h1>
