@@ -68,11 +68,11 @@ const navGroups: NavGroup[] = [
                 href: sendIndex.url(),
                 icon: Send,
             },
-    {
-        title: 'Merchants',
-        href: merchantsRoute.index.url(),
-        icon: Store,
-    },
+            {
+                title: 'Merchants',
+                href: merchantsRoute.index.url(),
+                icon: Store,
+            },
         ],
     },
     {

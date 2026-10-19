@@ -566,7 +566,9 @@ export default function Treasury({
                                 <Button
                                     variant="soft"
                                     onClick={suggestRebalances}
-                                    disabled={isSuggesting || providers.length < 2}
+                                    disabled={
+                                        isSuggesting || providers.length < 2
+                                    }
                                     className="cursor-pointer gap-2"
                                 >
                                     {isSuggesting ? (
@@ -617,13 +619,20 @@ export default function Treasury({
                         icon={<Landmark className="h-4 w-4" />}
                         footer={
                             <span>
-                                Across {providers.length} payment {providers.length === 1 ? 'provider' : 'providers'}
+                                Across {providers.length} payment{' '}
+                                {providers.length === 1
+                                    ? 'provider'
+                                    : 'providers'}
                             </span>
                         }
                     />
                     <StatCard
                         title="Float Health"
-                        value={alerts.length === 0 ? 'Healthy' : `${alerts.length} Low Float`}
+                        value={
+                            alerts.length === 0
+                                ? 'Healthy'
+                                : `${alerts.length} Low Float`
+                        }
                         icon={
                             alerts.length === 0 ? (
                                 <ShieldCheck className="h-4 w-4 text-emerald-500" />
@@ -640,7 +649,11 @@ export default function Treasury({
                             ) : (
                                 <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                    {alerts.length} {alerts.length === 1 ? 'account requires' : 'accounts require'} top up
+                                    {alerts.length}{' '}
+                                    {alerts.length === 1
+                                        ? 'account requires'
+                                        : 'accounts require'}{' '}
+                                    top up
                                 </span>
                             )
                         }
@@ -651,7 +664,16 @@ export default function Treasury({
                         icon={<ArrowLeftRight className="h-4 w-4" />}
                         footer={
                             <span>
-                                {transfers.data.filter((t) => ['requested', 'approved', 'in_transit'].includes(t.status)).length} active in flight
+                                {
+                                    transfers.data.filter((t) =>
+                                        [
+                                            'requested',
+                                            'approved',
+                                            'in_transit',
+                                        ].includes(t.status),
+                                    ).length
+                                }{' '}
+                                active in flight
                             </span>
                         }
                     />
@@ -699,7 +721,12 @@ export default function Treasury({
                                                 {insight.rejected.map(
                                                     (item, index) => (
                                                         <li key={index}>
-                                                            <span className="font-medium">{item.suggestion}:</span>{' '}
+                                                            <span className="font-medium">
+                                                                {
+                                                                    item.suggestion
+                                                                }
+                                                                :
+                                                            </span>{' '}
                                                             {item.reason}
                                                         </li>
                                                     ),
@@ -709,7 +736,10 @@ export default function Treasury({
                                     )}
                                     {insight.suggested.length > 0 && (
                                         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                            Suggestions are requested transfers in the Transfers table below. Nothing moves until you approve and send them.
+                                            Suggestions are requested transfers
+                                            in the Transfers table below.
+                                            Nothing moves until you approve and
+                                            send them.
                                         </p>
                                     )}
                                 </div>
@@ -736,7 +766,10 @@ export default function Treasury({
                                 minimum > 0
                                     ? Math.min(
                                           100,
-                                          Math.max(0, (balance / minimum) * 100),
+                                          Math.max(
+                                              0,
+                                              (balance / minimum) * 100,
+                                          ),
                                       )
                                     : 0;
                             const country =
@@ -804,7 +837,9 @@ export default function Treasury({
                                                         tone="danger"
                                                     >
                                                         {formatMoney(
-                                                            shortfall.toFixed(2),
+                                                            shortfall.toFixed(
+                                                                2,
+                                                            ),
                                                             alert.currency,
                                                         )}
                                                     </AlertStat>
@@ -854,7 +889,9 @@ export default function Treasury({
                                             >
                                                 <Button
                                                     size="2"
-                                                    disabled={providers.length < 2}
+                                                    disabled={
+                                                        providers.length < 2
+                                                    }
                                                     onClick={() =>
                                                         openTransfer(
                                                             alert.providerId,
@@ -921,14 +958,20 @@ export default function Treasury({
                                             <td className="py-3 pr-4">
                                                 <div className="flex items-center gap-2.5">
                                                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-base dark:bg-neutral-800">
-                                                        {flagEmoji(account.currency)}
+                                                        {flagEmoji(
+                                                            account.currency,
+                                                        )}
                                                     </span>
                                                     <div>
                                                         <div className="font-medium text-neutral-900 dark:text-neutral-100">
                                                             {account.provider}
                                                         </div>
                                                         <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                                                            {account.currency} · {CURRENCY_COUNTRY_MAP[account.currency]?.name || 'Operating Account'}
+                                                            {account.currency} ·{' '}
+                                                            {CURRENCY_COUNTRY_MAP[
+                                                                account.currency
+                                                            ]?.name ||
+                                                                'Operating Account'}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1020,7 +1063,11 @@ export default function Treasury({
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                                                 <span className="flex items-center gap-1.5 truncate">
-                                                    <span className="text-sm">{flagEmoji(transfer.currency)}</span>
+                                                    <span className="text-sm">
+                                                        {flagEmoji(
+                                                            transfer.currency,
+                                                        )}
+                                                    </span>
                                                     <span>{transfer.from}</span>
                                                 </span>
                                                 <ArrowRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
@@ -1267,12 +1314,15 @@ export default function Treasury({
                                             <td className="py-3 pr-4">
                                                 <div className="flex items-center gap-2.5">
                                                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-sm dark:bg-neutral-800">
-                                                        {flagEmoji(entry.currency)}
+                                                        {flagEmoji(
+                                                            entry.currency,
+                                                        )}
                                                     </span>
                                                     <div>
                                                         <div className="font-medium text-neutral-900 dark:text-neutral-100">
-                                                            {entryLabels[entry.type] ??
-                                                                entry.type}
+                                                            {entryLabels[
+                                                                entry.type
+                                                            ] ?? entry.type}
                                                         </div>
                                                         <div className="max-w-[20rem] truncate text-xs text-neutral-500 dark:text-neutral-400">
                                                             {entry.provider}
@@ -1405,7 +1455,8 @@ export default function Treasury({
                                         transferForm.setData((data) => ({
                                             ...data,
                                             currency: val,
-                                            to_currency: data.to_currency || val,
+                                            to_currency:
+                                                data.to_currency || val,
                                         }));
                                     }}
                                     className={selectClassName}

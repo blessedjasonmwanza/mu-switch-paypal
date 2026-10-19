@@ -348,8 +348,8 @@ export default function Index({
 
     const saveExtraMarket = () => {
         if (!extraMarket) {
-return;
-}
+            return;
+        }
 
         setData('market_extra_values', {
             ...data.market_extra_values,
@@ -649,8 +649,8 @@ return;
         e.preventDefault();
 
         if (!editingProvider) {
-return;
-}
+            return;
+        }
 
         put(providersRoute.update.url(editingProvider.id), {
             onSuccess: () => {
@@ -1553,8 +1553,8 @@ return;
                 open={!!extraMarket}
                 onOpenChange={(open) => {
                     if (!open) {
-cancelExtraMarket();
-}
+                        cancelExtraMarket();
+                    }
                 }}
             >
                 <DialogContent className="sm:max-w-md">

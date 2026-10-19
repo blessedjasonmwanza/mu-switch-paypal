@@ -1,11 +1,24 @@
 import { Head, Link, router, usePoll } from '@inertiajs/react';
 import { Button, Select, TextField } from '@radix-ui/themes';
-import { ChevronLeft, ChevronRight, Coins, Globe, Search, Wallet } from 'lucide-react';
+import {
+    ChevronLeft,
+    ChevronRight,
+    Coins,
+    Globe,
+    Search,
+    Wallet,
+} from 'lucide-react';
 import { useState } from 'react';
 import { RefundPanel } from '@/components/refund-panel';
 import type { RefundSummary } from '@/components/refund-panel';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import payments from '@/routes/payments';
 
@@ -118,7 +131,10 @@ function formatMoney(amount: number, currency: string): string {
 /** An exact amount in the currency's own precision (no rounding to whole units). */
 function formatExact(amount: string, currency: string): string {
     try {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(amount));
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency,
+        }).format(Number(amount));
     } catch {
         return `${currency} ${amount}`;
     }
@@ -139,14 +155,24 @@ function Sparkline({ data }: { data: number[] }) {
     const min = Math.min(...data);
     const flat = max === min;
     const step = data.length > 1 ? w / (data.length - 1) : w;
-    const y = (v: number) => (flat ? h * 0.55 : h - 3 - ((v - min) / (max - min)) * (h - 6));
+    const y = (v: number) =>
+        flat ? h * 0.55 : h - 3 - ((v - min) / (max - min)) * (h - 6);
 
     const points = data.map((v, i) => [i * step, y(v)] as const);
-    const line = points.map(([x, py], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${py.toFixed(1)}`).join(' ');
+    const line = points
+        .map(
+            ([x, py], i) =>
+                `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${py.toFixed(1)}`,
+        )
+        .join(' ');
     const area = `${line} L${w},${h} L0,${h} Z`;
 
     return (
-        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-full w-full overflow-visible">
+        <svg
+            viewBox={`0 0 ${w} ${h}`}
+            preserveAspectRatio="none"
+            className="h-full w-full overflow-visible"
+        >
             <path d={area} fill="currentColor" className="opacity-10" />
             <path
                 d={line}
@@ -196,7 +222,9 @@ function KpiCard({
                     <span className={cn('h-2 w-2 rounded-full', dot)} />
                     {label}
                 </div>
-                <div className="mt-2 text-2xl leading-none font-bold tabular-nums">{value.toLocaleString()}</div>
+                <div className="mt-2 text-2xl leading-none font-bold tabular-nums">
+                    {value.toLocaleString()}
+                </div>
                 <div className={cn('mt-3 h-10', color)}>
                     <Sparkline data={trend} />
                 </div>
@@ -205,7 +233,15 @@ function KpiCard({
     );
 }
 
-function StatusBar({ success, pending, failed }: { success: number; pending: number; failed: number }) {
+function StatusBar({
+    success,
+    pending,
+    failed,
+}: {
+    success: number;
+    pending: number;
+    failed: number;
+}) {
     const total = success + pending + failed;
     const segments = [
         { label: 'Successful', value: success, cls: 'bg-emerald-500' },
@@ -220,7 +256,14 @@ function StatusBar({ success, pending, failed }: { success: number; pending: num
                     segments.map(
                         (s) =>
                             s.value > 0 && (
-                                <div key={s.label} className={s.cls} style={{ width: `${(s.value / total) * 100}%` }} title={`${s.label}: ${s.value}`} />
+                                <div
+                                    key={s.label}
+                                    className={s.cls}
+                                    style={{
+                                        width: `${(s.value / total) * 100}%`,
+                                    }}
+                                    title={`${s.label}: ${s.value}`}
+                                />
                             ),
                     )}
             </div>
@@ -230,7 +273,10 @@ function StatusBar({ success, pending, failed }: { success: number; pending: num
                         <span className={cn('h-2 w-2 rounded-full', s.cls)} />
                         {s.label}
                         <span className="font-semibold text-neutral-700 tabular-nums dark:text-neutral-200">
-                            {total > 0 ? Math.round((s.value / total) * 100) : 0}%
+                            {total > 0
+                                ? Math.round((s.value / total) * 100)
+                                : 0}
+                            %
                         </span>
                     </span>
                 ))}
@@ -260,23 +306,45 @@ function TopList({
                 <h2 className="text-sm font-semibold">{title}</h2>
             </div>
             {rows.length === 0 ? (
-                <p className="py-8 text-center text-xs text-neutral-400">{emptyText}</p>
+                <p className="py-8 text-center text-xs text-neutral-400">
+                    {emptyText}
+                </p>
             ) : (
                 <div className="space-y-3.5">
                     {rows.map((row) => (
                         <div key={row.key}>
                             <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
                                 <span className="flex min-w-0 items-baseline gap-1.5">
-                                    <span className="font-semibold text-neutral-700 dark:text-neutral-200">{row.label}</span>
-                                    {row.sub && <span className="truncate font-normal text-neutral-400">{row.sub}</span>}
+                                    <span className="font-semibold text-neutral-700 dark:text-neutral-200">
+                                        {row.label}
+                                    </span>
+                                    {row.sub && (
+                                        <span className="truncate font-normal text-neutral-400">
+                                            {row.sub}
+                                        </span>
+                                    )}
                                 </span>
                                 <span className="shrink-0 tabular-nums">
-                                    <span className="font-semibold text-neutral-700 dark:text-neutral-200">{row.count.toLocaleString()}</span>
-                                    {total > 0 && <span className="ml-1.5 text-[11px] text-neutral-400">{Math.round((row.count / total) * 100)}%</span>}
+                                    <span className="font-semibold text-neutral-700 dark:text-neutral-200">
+                                        {row.count.toLocaleString()}
+                                    </span>
+                                    {total > 0 && (
+                                        <span className="ml-1.5 text-[11px] text-neutral-400">
+                                            {Math.round(
+                                                (row.count / total) * 100,
+                                            )}
+                                            %
+                                        </span>
+                                    )}
                                 </span>
                             </div>
                             <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-                                <div className="h-full rounded-full bg-primary" style={{ width: `${(row.count / max) * 100}%` }} />
+                                <div
+                                    className="h-full rounded-full bg-primary"
+                                    style={{
+                                        width: `${(row.count / max) * 100}%`,
+                                    }}
+                                />
                             </div>
                         </div>
                     ))}
@@ -286,15 +354,29 @@ function TopList({
     );
 }
 
-function PrevNext({ prevUrl, nextUrl }: { prevUrl: string | null; nextUrl: string | null }) {
-    const base = 'inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors';
-    const enabled = 'border-sidebar-border/70 text-neutral-600 hover:bg-neutral-100 dark:border-sidebar-border dark:text-neutral-300 dark:hover:bg-neutral-800';
-    const disabled = 'cursor-not-allowed border-sidebar-border/40 text-neutral-300 dark:border-sidebar-border/60 dark:text-neutral-700';
+function PrevNext({
+    prevUrl,
+    nextUrl,
+}: {
+    prevUrl: string | null;
+    nextUrl: string | null;
+}) {
+    const base =
+        'inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors';
+    const enabled =
+        'border-sidebar-border/70 text-neutral-600 hover:bg-neutral-100 dark:border-sidebar-border dark:text-neutral-300 dark:hover:bg-neutral-800';
+    const disabled =
+        'cursor-not-allowed border-sidebar-border/40 text-neutral-300 dark:border-sidebar-border/60 dark:text-neutral-700';
 
     return (
         <div className="flex items-center gap-1.5">
             {prevUrl ? (
-                <Link href={prevUrl} preserveScroll preserveState className={cn(base, enabled)}>
+                <Link
+                    href={prevUrl}
+                    preserveScroll
+                    preserveState
+                    className={cn(base, enabled)}
+                >
                     <ChevronLeft className="h-3.5 w-3.5" /> Previous
                 </Link>
             ) : (
@@ -303,7 +385,12 @@ function PrevNext({ prevUrl, nextUrl }: { prevUrl: string | null; nextUrl: strin
                 </span>
             )}
             {nextUrl ? (
-                <Link href={nextUrl} preserveScroll preserveState className={cn(base, enabled)}>
+                <Link
+                    href={nextUrl}
+                    preserveScroll
+                    preserveState
+                    className={cn(base, enabled)}
+                >
                     Next <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
             ) : (
@@ -315,38 +402,64 @@ function PrevNext({ prevUrl, nextUrl }: { prevUrl: string | null; nextUrl: strin
     );
 }
 
-export default function Index({ metrics, metricTrend, topCurrencies, topCountries, transactions: page, filters, rangeOptions, perPageOptions }: PaymentsProps) {
+export default function Index({
+    metrics,
+    metricTrend,
+    topCurrencies,
+    topCountries,
+    transactions: page,
+    filters,
+    rangeOptions,
+    perPageOptions,
+}: PaymentsProps) {
     const [q, setQ] = useState(filters.q ?? '');
     const [selected, setSelected] = useState<Tx | null>(null);
     // The open payment, kept in step with the latest data (e.g. after a refund).
-    const shown = selected ? (page.data.find((tx) => tx.id === selected.id) ?? selected) : null;
+    const shown = selected
+        ? (page.data.find((tx) => tx.id === selected.id) ?? selected)
+        : null;
 
     // Volume is shown in the busiest currency (a mixed-currency total has no single unit).
     const displayCurrency = topCurrencies[0]?.currency ?? 'USD';
 
     // Keep the view live while monitoring.
-    usePoll(20000, { only: ['metrics', 'metricTrend', 'topCurrencies', 'topCountries', 'transactions'] });
+    usePoll(20000, {
+        only: [
+            'metrics',
+            'metricTrend',
+            'topCurrencies',
+            'topCountries',
+            'transactions',
+        ],
+    });
 
     const baseQuery: Record<string, string | undefined> = {
         range: filters.range !== '30d' ? filters.range : undefined,
         status: filters.status ?? undefined,
         q: filters.q ?? undefined,
-        perPage: filters.perPage !== perPageOptions[0] ? String(filters.perPage) : undefined,
+        perPage:
+            filters.perPage !== perPageOptions[0]
+                ? String(filters.perPage)
+                : undefined,
     };
 
     const urlWith = (overrides: Record<string, string | undefined>) => {
         const query = { ...baseQuery, ...overrides };
         Object.keys(query).forEach((k) => {
             if (query[k] === undefined || query[k] === '') {
-delete query[k];
-}
+                delete query[k];
+            }
         });
 
         return payments.index.url({ query });
     };
 
     const visit = (overrides: Record<string, string | undefined>) =>
-        router.visit(urlWith(overrides), { preserveScroll: true, preserveState: true, replace: true });
+        router.visit(urlWith(overrides), {
+            preserveScroll: true,
+            preserveState: true,
+            replace: true,
+        });
 
     const submitSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -359,12 +472,18 @@ delete query[k];
             <div className="flex h-full flex-1 flex-col gap-6 overflow-x-auto rounded-xl p-6">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                        <h1 className="text-lg font-semibold tracking-tight">Payments</h1>
+                        <h1 className="text-lg font-semibold tracking-tight">
+                            Payments
+                        </h1>
                         <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-                            A holistic view of every request-to-pay transaction processed through your switch.
+                            A holistic view of every request-to-pay transaction
+                            processed through your switch.
                         </p>
                     </div>
-                    <Select.Root value={filters.range} onValueChange={(range) => visit({ range })}>
+                    <Select.Root
+                        value={filters.range}
+                        onValueChange={(range) => visit({ range })}
+                    >
                         <Select.Trigger variant="surface" />
                         <Select.Content>
                             {rangeOptions.map((value) => (
@@ -392,7 +511,10 @@ delete query[k];
                                 {metrics.successRate !== null && (
                                     <>
                                         {' · '}
-                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">{metrics.successRate}%</span> success rate
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                                            {metrics.successRate}%
+                                        </span>{' '}
+                                        success rate
                                     </>
                                 )}
                             </div>
@@ -400,8 +522,14 @@ delete query[k];
 
                         {/* Status distribution */}
                         <div className="w-full lg:max-w-md">
-                            <div className="mb-2.5 text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">Status mix</div>
-                            <StatusBar success={metrics.success} pending={metrics.pending} failed={metrics.failed} />
+                            <div className="mb-2.5 text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
+                                Status mix
+                            </div>
+                            <StatusBar
+                                success={metrics.success}
+                                pending={metrics.pending}
+                                failed={metrics.failed}
+                            />
                         </div>
                     </div>
                 </Card>
@@ -455,7 +583,10 @@ delete query[k];
                         rows={topCurrencies.map((c) => ({
                             key: c.currency,
                             label: c.currency,
-                            sub: c.volume > 0 ? formatMoney(c.volume, c.currency) : undefined,
+                            sub:
+                                c.volume > 0
+                                    ? formatMoney(c.volume, c.currency)
+                                    : undefined,
                             count: c.count,
                         }))}
                     />
@@ -463,7 +594,12 @@ delete query[k];
                         title="Top Countries"
                         icon={<Globe className="h-4 w-4" />}
                         emptyText="No transactions in this window."
-                        rows={topCountries.map((c) => ({ key: c.code, label: c.name, sub: c.code, count: c.count }))}
+                        rows={topCountries.map((c) => ({
+                            key: c.code,
+                            label: c.name,
+                            sub: c.code,
+                            count: c.count,
+                        }))}
                     />
                 </div>
 
@@ -471,10 +607,23 @@ delete query[k];
                 <Card className="gap-0 border border-sidebar-border/70 p-0 dark:border-sidebar-border">
                     <div className="flex flex-col gap-3 border-b border-sidebar-border/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-sidebar-border/70">
                         <h2 className="text-sm font-semibold">
-                            Transactions {filters.status && <span className="font-normal text-neutral-400">· {filters.status}</span>}
+                            Transactions{' '}
+                            {filters.status && (
+                                <span className="font-normal text-neutral-400">
+                                    · {filters.status}
+                                </span>
+                            )}
                         </h2>
-                        <form onSubmit={submitSearch} className="flex items-center gap-2">
-                            <TextField.Root value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search transactions…" className="w-60">
+                        <form
+                            onSubmit={submitSearch}
+                            className="flex items-center gap-2"
+                        >
+                            <TextField.Root
+                                value={q}
+                                onChange={(e) => setQ(e.target.value)}
+                                placeholder="Search transactions…"
+                                className="w-60"
+                            >
                                 <TextField.Slot>
                                     <Search className="h-4 w-4" />
                                 </TextField.Slot>
@@ -493,14 +642,30 @@ delete query[k];
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="border-b border-sidebar-border/50 text-left text-xs text-neutral-500 dark:border-sidebar-border/70 dark:text-neutral-400">
-                                        <th className="px-5 py-3 font-medium">When</th>
-                                        <th className="px-5 py-3 font-medium">Reference</th>
-                                        <th className="px-5 py-3 font-medium">Provider</th>
-                                        <th className="px-5 py-3 font-medium">Account</th>
-                                        <th className="px-5 py-3 font-medium">Name</th>
-                                        <th className="px-5 py-3 font-medium">Country</th>
-                                        <th className="px-5 py-3 font-medium">Status</th>
-                                        <th className="px-5 py-3 text-right font-medium">Amount</th>
+                                        <th className="px-5 py-3 font-medium">
+                                            When
+                                        </th>
+                                        <th className="px-5 py-3 font-medium">
+                                            Reference
+                                        </th>
+                                        <th className="px-5 py-3 font-medium">
+                                            Provider
+                                        </th>
+                                        <th className="px-5 py-3 font-medium">
+                                            Account
+                                        </th>
+                                        <th className="px-5 py-3 font-medium">
+                                            Name
+                                        </th>
+                                        <th className="px-5 py-3 font-medium">
+                                            Country
+                                        </th>
+                                        <th className="px-5 py-3 font-medium">
+                                            Status
+                                        </th>
+                                        <th className="px-5 py-3 text-right font-medium">
+                                            Amount
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-sidebar-border/40 dark:divide-sidebar-border/60">
@@ -510,30 +675,73 @@ delete query[k];
                                             onClick={() => setSelected(tx)}
                                             className="cursor-pointer hover:bg-neutral-50/60 dark:hover:bg-neutral-900/40"
                                         >
-                                            <td className="px-5 py-3 whitespace-nowrap" title={tx.createdAt ?? undefined}>
-                                                <div className="text-neutral-700 dark:text-neutral-300">{tx.createdAtHuman}</div>
+                                            <td
+                                                className="px-5 py-3 whitespace-nowrap"
+                                                title={
+                                                    tx.createdAt ?? undefined
+                                                }
+                                            >
+                                                <div className="text-neutral-700 dark:text-neutral-300">
+                                                    {tx.createdAtHuman}
+                                                </div>
                                             </td>
                                             <td className="px-5 py-3 font-mono text-xs">
-                                                <span className="block max-w-[160px] truncate" title={tx.reference}>
+                                                <span
+                                                    className="block max-w-[160px] truncate"
+                                                    title={tx.reference}
+                                                >
                                                     {tx.reference}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-3 text-neutral-700 dark:text-neutral-300">{tx.provider ?? '—'}</td>
-                                            <td className="px-5 py-3 font-mono text-xs text-neutral-600 dark:text-neutral-400">{tx.account ?? '—'}</td>
+                                            <td className="px-5 py-3 text-neutral-700 dark:text-neutral-300">
+                                                {tx.provider ?? '—'}
+                                            </td>
+                                            <td className="px-5 py-3 font-mono text-xs text-neutral-600 dark:text-neutral-400">
+                                                {tx.account ?? '—'}
+                                            </td>
                                             <td className="px-5 py-3 text-neutral-600 dark:text-neutral-400">
-                                                <span className="block max-w-[160px] truncate" title={tx.customerName ?? undefined}>
+                                                <span
+                                                    className="block max-w-[160px] truncate"
+                                                    title={
+                                                        tx.customerName ??
+                                                        undefined
+                                                    }
+                                                >
                                                     {tx.customerName ?? '—'}
                                                 </span>
                                             </td>
                                             <td className="px-5 py-3 text-neutral-600 dark:text-neutral-400">
-                                                {tx.country ? <span title={tx.countryName ?? undefined}>{tx.country}</span> : '—'}
+                                                {tx.country ? (
+                                                    <span
+                                                        title={
+                                                            tx.countryName ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {tx.country}
+                                                    </span>
+                                                ) : (
+                                                    '—'
+                                                )}
                                             </td>
                                             <td className="px-5 py-3">
-                                                <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(tx.status))}>
+                                                <span
+                                                    className={cn(
+                                                        'inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize',
+                                                        statusClasses(
+                                                            tx.status,
+                                                        ),
+                                                    )}
+                                                >
                                                     {tx.status}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-3 text-right font-semibold tabular-nums">{formatMoney(tx.amount, tx.currency)}</td>
+                                            <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                                                {formatMoney(
+                                                    tx.amount,
+                                                    tx.currency,
+                                                )}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -546,17 +754,34 @@ delete query[k];
                         <div className="flex flex-col gap-3 border-t border-sidebar-border/50 px-5 py-3 text-sm sm:flex-row sm:items-center sm:justify-between dark:border-sidebar-border/70">
                             <div className="flex items-center gap-3 text-neutral-500 dark:text-neutral-400">
                                 <span>
-                                    Showing <span className="font-medium text-neutral-700 tabular-nums dark:text-neutral-300">{page.from ?? 0}</span>–
-                                    <span className="font-medium text-neutral-700 tabular-nums dark:text-neutral-300">{page.to ?? 0}</span> of{' '}
-                                    <span className="font-medium text-neutral-700 tabular-nums dark:text-neutral-300">{page.total.toLocaleString()}</span>
+                                    Showing{' '}
+                                    <span className="font-medium text-neutral-700 tabular-nums dark:text-neutral-300">
+                                        {page.from ?? 0}
+                                    </span>
+                                    –
+                                    <span className="font-medium text-neutral-700 tabular-nums dark:text-neutral-300">
+                                        {page.to ?? 0}
+                                    </span>{' '}
+                                    of{' '}
+                                    <span className="font-medium text-neutral-700 tabular-nums dark:text-neutral-300">
+                                        {page.total.toLocaleString()}
+                                    </span>
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <span className="text-xs">Per page</span>
-                                    <Select.Root value={String(filters.perPage)} onValueChange={(value) => visit({ perPage: value })}>
+                                    <Select.Root
+                                        value={String(filters.perPage)}
+                                        onValueChange={(value) =>
+                                            visit({ perPage: value })
+                                        }
+                                    >
                                         <Select.Trigger variant="surface" />
                                         <Select.Content>
                                             {perPageOptions.map((option) => (
-                                                <Select.Item key={option} value={String(option)}>
+                                                <Select.Item
+                                                    key={option}
+                                                    value={String(option)}
+                                                >
                                                     {option}
                                                 </Select.Item>
                                             ))}
@@ -564,38 +789,86 @@ delete query[k];
                                     </Select.Root>
                                 </span>
                             </div>
-                            <PrevNext prevUrl={page.prev_page_url} nextUrl={page.next_page_url} />
+                            <PrevNext
+                                prevUrl={page.prev_page_url}
+                                nextUrl={page.next_page_url}
+                            />
                         </div>
                     )}
                 </Card>
             </div>
 
             {/* Detail dialog */}
-            <Dialog open={!!shown} onOpenChange={(open) => !open && setSelected(null)}>
+            <Dialog
+                open={!!shown}
+                onOpenChange={(open) => !open && setSelected(null)}
+            >
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader className="border-b pb-4">
                         <DialogTitle className="flex items-center gap-2">
-                            <span className="font-mono text-sm">{shown?.reference}</span>
+                            <span className="font-mono text-sm">
+                                {shown?.reference}
+                            </span>
                             {shown && (
-                                <span className={cn('inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize', statusClasses(shown.status))}>
+                                <span
+                                    className={cn(
+                                        'inline-flex rounded-md px-2 py-0.5 text-xs font-medium capitalize',
+                                        statusClasses(shown.status),
+                                    )}
+                                >
                                     {shown.status}
                                 </span>
                             )}
                         </DialogTitle>
-                        <DialogDescription>{shown?.createdAt}</DialogDescription>
+                        <DialogDescription>
+                            {shown?.createdAt}
+                        </DialogDescription>
                     </DialogHeader>
 
                     {shown && (
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                            <Detail label="Amount" value={formatMoney(shown.amount, shown.currency)} />
+                            <Detail
+                                label="Amount"
+                                value={formatMoney(
+                                    shown.amount,
+                                    shown.currency,
+                                )}
+                            />
                             <Detail label="Currency" value={shown.currency} />
-                            <Detail label="Provider" value={shown.provider ?? '—'} />
-                            <Detail label="Provider Ref" value={shown.providerReference ?? '—'} mono />
-                            <Detail label="Account" value={shown.account ?? '—'} mono />
-                            <Detail label="Name" value={shown.customerName ?? '—'} />
-                            <Detail label="Country" value={shown.countryName ? `${shown.countryName} (${shown.country})` : '—'} />
-                            <Detail label="FX" value={shown.isFx ? 'Yes' : 'No'} />
-                            <Detail label="Created" value={shown.createdAtHuman ?? '—'} />
+                            <Detail
+                                label="Provider"
+                                value={shown.provider ?? '—'}
+                            />
+                            <Detail
+                                label="Provider Ref"
+                                value={shown.providerReference ?? '—'}
+                                mono
+                            />
+                            <Detail
+                                label="Account"
+                                value={shown.account ?? '—'}
+                                mono
+                            />
+                            <Detail
+                                label="Name"
+                                value={shown.customerName ?? '—'}
+                            />
+                            <Detail
+                                label="Country"
+                                value={
+                                    shown.countryName
+                                        ? `${shown.countryName} (${shown.country})`
+                                        : '—'
+                                }
+                            />
+                            <Detail
+                                label="FX"
+                                value={shown.isFx ? 'Yes' : 'No'}
+                            />
+                            <Detail
+                                label="Created"
+                                value={shown.createdAtHuman ?? '—'}
+                            />
                         </dl>
                     )}
 
@@ -619,7 +892,8 @@ function FeeBreakdown({ tx }: { tx: Tx }) {
     if (!tx.fees) {
         return (
             <p className="border-t pt-4 text-xs text-neutral-500 dark:text-neutral-400">
-                Fees: this provider publishes no fee schedule, so the amount less fees isn&apos;t known.
+                Fees: this provider publishes no fee schedule, so the amount
+                less fees isn&apos;t known.
             </p>
         );
     }
@@ -633,7 +907,9 @@ function FeeBreakdown({ tx }: { tx: Tx }) {
     return (
         <div className="border-t pt-4">
             <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">Fees</span>
+                <span className="text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
+                    Fees
+                </span>
                 <span
                     className={cn(
                         'rounded-md px-2 py-0.5 text-[11px] font-medium',
@@ -641,32 +917,60 @@ function FeeBreakdown({ tx }: { tx: Tx }) {
                             ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                             : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
                     )}
-                    title={tx.fees.estimated ? 'From the provider’s published fee schedule' : 'Reported by the provider for this payment'}
+                    title={
+                        tx.fees.estimated
+                            ? 'From the provider’s published fee schedule'
+                            : 'Reported by the provider for this payment'
+                    }
                 >
                     {tx.fees.estimated ? 'Estimated' : 'Actual'}
                 </span>
             </div>
             <dl className="space-y-1.5 text-sm">
                 {rows.map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between">
-                        <dt className="text-neutral-500 dark:text-neutral-400">{label}</dt>
+                    <div
+                        key={label}
+                        className="flex items-center justify-between"
+                    >
+                        <dt className="text-neutral-500 dark:text-neutral-400">
+                            {label}
+                        </dt>
                         <dd className="tabular-nums">{value}</dd>
                     </div>
                 ))}
                 <div className="flex items-center justify-between border-t pt-1.5 font-semibold">
                     <dt>You receive</dt>
-                    <dd className="tabular-nums">{formatExact(tx.fees.net, tx.currency)}</dd>
+                    <dd className="tabular-nums">
+                        {formatExact(tx.fees.net, tx.currency)}
+                    </dd>
                 </div>
             </dl>
         </div>
     );
 }
 
-function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Detail({
+    label,
+    value,
+    mono,
+}: {
+    label: string;
+    value: string;
+    mono?: boolean;
+}) {
     return (
         <div>
-            <dt className="text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">{label}</dt>
-            <dd className={cn('mt-0.5 break-words text-neutral-800 dark:text-neutral-200', mono && 'font-mono text-xs')}>{value}</dd>
+            <dt className="text-xs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
+                {label}
+            </dt>
+            <dd
+                className={cn(
+                    'mt-0.5 break-words text-neutral-800 dark:text-neutral-200',
+                    mono && 'font-mono text-xs',
+                )}
+            >
+                {value}
+            </dd>
         </div>
     );
 }

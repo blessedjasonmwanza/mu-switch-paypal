@@ -18,7 +18,8 @@ export function NavMain({
 }) {
     const { isCurrentUrl } = useCurrentUrl();
 
-    const navGroups: NavGroup[] = groups ?? (items.length > 0 ? [{ title: 'Platform', items }] : []);
+    const navGroups: NavGroup[] =
+        groups ?? (items.length > 0 ? [{ title: 'Platform', items }] : []);
 
     return (
         <div className="flex flex-col gap-2">
