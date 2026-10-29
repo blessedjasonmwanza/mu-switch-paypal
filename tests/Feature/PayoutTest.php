@@ -204,6 +204,21 @@ test('pawapay payouts use v2 on the sandbox host, with the payout id and the rec
         && ! isset($request['correspondent'], $request['customerTimestamp'], $request['statementDescription']));
 });
 
+test('a pawapay payout with a rejected token fails without sending anything', function () {
+    $user = User::factory()->create(['api_token' => 'po-auth']);
+    pawapayPayouts($user);
+
+    Http::fake([
+        '*/v2/predict-provider' => Http::response(['failureReason' => ['failureCode' => 'AUTHENTICATION_ERROR', 'failureMessage' => 'The API token in the request is invalid.']], 401),
+    ]);
+
+    requestPayout('po-auth')
+        ->assertStatus(422)
+        ->assertJsonPath('message', fn (string $message) => str_starts_with($message, 'pawaPay rejected the API token'));
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v2/payouts'));
+});
+
 test('a pawapay rejection is a definite refusal', function () {
     $user = User::factory()->create(['api_token' => 'po-12']);
     pawapayPayouts($user);
