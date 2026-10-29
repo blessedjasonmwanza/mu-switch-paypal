@@ -107,7 +107,7 @@ class PawapayController extends Controller implements PaymentProviderInterface, 
     {
         $config = is_string($provider->config) ? json_decode($provider->config, true) : $provider->config;
 
-        $apiToken = $config['api_token'] ?? null;
+        $apiToken = self::cleanToken($config['api_token'] ?? null);
 
         if (! $apiToken) {
             return ApiResponse::error('API Token is required for the pawaPay provider', 400);
@@ -131,7 +131,10 @@ class PawapayController extends Controller implements PaymentProviderInterface, 
 
         // Which mobile-money provider the payer's number belongs to: supplied
         // by the caller, else predicted by pawaPay from the number.
-        [$provider, $msisdn] = $this->provider(trim((string) ($request->input('provider') ?: $request->input('correspondent'))), $msisdn);
+        [$provider, $msisdn, $rejected] = $this->provider(trim((string) ($request->input('provider') ?: $request->input('correspondent'))), $msisdn);
+        if ($rejected) {
+            return ApiResponse::error($rejected, 502);
+        }
         if (! $provider) {
             return ApiResponse::error("Could not determine the mobile-money provider for {$msisdn}", 422);
         }
@@ -235,7 +238,12 @@ class PawapayController extends Controller implements PaymentProviderInterface, 
     public function requestPayout(Transaction $transaction, array $recipient): JsonResponse
     {
         $msisdn = $this->normaliseMsisdn($recipient['account_number'], $transaction->country);
-        [$provider, $msisdn] = $this->provider(trim((string) ($recipient['network'] ?? '')), $msisdn);
+        [$provider, $msisdn, $rejected] = $this->provider(trim((string) ($recipient['network'] ?? '')), $msisdn);
+
+        // Nothing was sent to pawaPay, so the payout can safely fail here.
+        if ($rejected) {
+            return $this->failPayout($transaction, $rejected, ['phoneNumber' => $msisdn]);
+        }
 
         if (! $provider) {
             return $this->failPayout($transaction, "Could not determine the mobile-money provider for {$msisdn}", ['phoneNumber' => $msisdn]);
@@ -354,21 +362,46 @@ class PawapayController extends Controller implements PaymentProviderInterface, 
      *
      * @return array{0: ?string, 1: string}
      */
+    /**
+     * The mobile-money provider for a number: the caller's, else pawaPay's
+     * prediction. The third value explains a refusal that isn't about the
+     * number, such as pawaPay rejecting the API token.
+     *
+     * @return array{0: ?string, 1: string, 2: ?string}
+     */
     private function provider(string $given, string $msisdn): array
     {
         if ($given !== '') {
-            return [strtoupper($given), $msisdn];
+            return [strtoupper($given), $msisdn, null];
         }
 
         $response = Http::withToken($this->apiToken)
             ->acceptJson()
             ->post($this->baseUrl.'/v2/predict-provider', ['phoneNumber' => $msisdn]);
 
-        if (! $response->successful() || ! filled($response->json('provider'))) {
-            return [null, $msisdn];
+        if (in_array($response->status(), [401, 403], true)) {
+            $environment = str_contains($this->baseUrl, 'sandbox') ? 'sandbox' : 'live';
+            $reason = self::failureMessage($response->json()) ?? 'The API token was refused';
+
+            return [null, $msisdn, "pawaPay rejected the API token ({$reason}). Check the token on the Providers page: it must be a {$environment} token for the {$environment} environment."];
         }
 
-        return [(string) $response->json('provider'), (string) ($response->json('phoneNumber') ?: $msisdn)];
+        if (! $response->successful() || ! filled($response->json('provider'))) {
+            return [null, $msisdn, null];
+        }
+
+        return [(string) $response->json('provider'), (string) ($response->json('phoneNumber') ?: $msisdn), null];
+    }
+
+    /**
+     * The token as pawaPay expects it: no surrounding spaces, line breaks or
+     * quotes, which easily come along when it's pasted.
+     */
+    private static function cleanToken(mixed $token): ?string
+    {
+        $token = trim(trim((string) $token), "\"'");
+
+        return $token === '' ? null : $token;
     }
 
     /**

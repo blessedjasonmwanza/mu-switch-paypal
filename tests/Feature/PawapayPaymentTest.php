@@ -109,6 +109,38 @@ test('the pawapay driver errors when the operator cannot be determined', functio
         ->assertJsonPath('status', 'error');
 });
 
+test('a rejected pawapay token is reported as such, not as an unknown number', function () {
+    $user = User::factory()->create(['api_token' => 'pp-user-auth']);
+    pawapayProvider($user)->update(['config' => ['api_token' => 'expired-token', 'environment' => 'sandbox', 'supported_countries' => ['ZM']]]);
+
+    Http::fake([
+        '*/v2/predict-provider' => Http::response(['failureReason' => ['failureCode' => 'AUTHENTICATION_ERROR', 'failureMessage' => 'The API token in the request is invalid.']], 401),
+    ]);
+
+    $this->withToken('pp-user-auth')
+        ->postJson('/api/v1/payment/request', ['amount' => 12, 'account_number' => '0971943638', 'country' => 'ZM'])
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'pawaPay rejected the API token (The API token in the request is invalid.). Check the token on the Providers page: it must be a sandbox token for the sandbox environment.');
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/v2/deposits'));
+});
+
+test('a pasted pawapay token is sent without surrounding spaces, line breaks or quotes', function () {
+    $user = User::factory()->create(['api_token' => 'pp-user-paste']);
+    pawapayProvider($user)->update(['config' => ['api_token' => " \"pp-token\"\n", 'supported_countries' => ['ZM']]]);
+
+    Http::fake([
+        ...fakePawapayPredict(),
+        '*/v2/deposits' => Http::response(['depositId' => 'x', 'status' => 'ACCEPTED']),
+    ]);
+
+    $this->withToken('pp-user-paste')
+        ->postJson('/api/v1/payment/request', ['amount' => 100, 'account_number' => '0763456789', 'country' => 'ZM'])
+        ->assertOk();
+
+    Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer pp-token'));
+});
+
 test('the pawapay driver surfaces a rejected deposit as an error', function () {
     $user = User::factory()->create(['api_token' => 'pp-user-4']);
     pawapayProvider($user);
