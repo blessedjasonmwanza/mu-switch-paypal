@@ -46,6 +46,13 @@ jobs:
           composer install --no-interaction --no-scripts --no-progress --prefer-dist
           npm ci
 
+      # ESLint and TypeScript read the generated @/actions and @/routes files.
+      - name: Generate route types (Wayfinder)
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan wayfinder:generate --with-form
+
       # Checks only: these fail the build instead of fixing files.
       - name: PHP code style (Pint)
         run: composer lint:check
@@ -55,12 +62,6 @@ jobs:
 
       - name: Front-end lint (ESLint)
         run: npm run lint:check
-
-      - name: Generate route types (Wayfinder)
-        run: |
-          cp .env.example .env
-          php artisan key:generate
-          php artisan wayfinder:generate --with-form
 
       - name: TypeScript types
         run: npm run types:check
