@@ -1,20 +1,23 @@
 name: lint
 
+# Pushes to main run this through deploy.yml, which deploys once it passes.
 on:
   push:
     branches:
       - develop
-      - main
   pull_request:
     branches:
       - develop
       - main
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: lint-${{ github.ref }}
+  # Called from deploy.yml, it shares that run's group instead.
+  group: lint-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

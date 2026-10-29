@@ -50,11 +50,10 @@ You need:
 2. Connect your repository.
 3. Render reads `render.yaml` and shows the web service and the database.
 
-The Blueprint deploys the `main` branch, and only after its GitHub checks pass
-(`autoDeployTrigger: checksPass`): code style, TypeScript types, the test suite
-on SQLite and Postgres, and a build of the Docker image. A commit that fails
-any of them is never deployed. To deploy another branch, change `branch` in
-`render.yaml` or on the service's **Settings** page.
+The Blueprint creates the service with Render's own auto-deploy turned off
+(`autoDeployTrigger: off`). After the first deploy, GitHub Actions deploys
+every push to `main` once its checks pass (see
+[Deploy from GitHub](#deploy-from-github)).
 
 ## 2. Fill in the secrets
 
@@ -131,6 +130,47 @@ minute.
 | The queue and scheduler run | The logs show `queue` and `scheduler` running, and transfers move forward without refreshing. |
 | Docs and API reference | `https://YOUR-URL/docs` and `https://YOUR-URL/openapi.yaml`. |
 | MCP | Connect an MCP client to `https://YOUR-URL/mcp/operator` with the API token from **API Token** (see [MCP Servers](/docs/mcp)). |
+
+## Deploy from GitHub
+
+`.github/workflows/deploy.yml` runs on every push to `main`:
+
+1. **Checks:** code style (Pint, Prettier, ESLint), TypeScript types, the test
+   suite on SQLite and on Postgres, and a build of the Docker image.
+2. **Deploy:** if every check passes, it asks Render to deploy that exact
+   commit, through Render's API.
+3. **Wait and verify:** it follows the deploy until Render reports it live,
+   then checks `/up` on the live site.
+4. **Record:** each run appears under **Deployments** on the repository's
+   GitHub page, as the `production` environment with the live URL, so you can
+   see what's deployed and when.
+
+A commit that fails a check is never deployed. You can also run it by hand from
+the **Actions** tab (**deploy → Run workflow**).
+
+Set it up once:
+
+1. **Create a Render API key:** Render dashboard → **Account Settings → API
+   Keys → Create API Key**.
+2. **Find the service ID:** open the web service. Its ID starts with `srv-`
+   and is in the page's URL.
+3. **Add both as GitHub secrets:** in the repository, **Settings → Secrets and
+   variables → Actions → New repository secret**:
+
+   | Name | Value |
+   | --- | --- |
+   | `RENDER_API_KEY` | The API key from step 1. |
+   | `RENDER_SERVICE_ID` | The `srv-…` ID from step 2. |
+
+4. **Optional:** if your URL isn't `https://mu-switch-paypal.onrender.com`,
+   add a repository **variable** (same page, **Variables** tab) named
+   `APP_URL` with your URL.
+5. **Turn off Render's own auto-deploy,** so each commit deploys once: the
+   service's **Settings → Build & Deploy → Auto-Deploy → Off**. (A Blueprint
+   already sets this.)
+
+Until the secrets are added, the deploy step stops with a message saying which
+secret is missing. Checks still run.
 
 ## Settings in `render.yaml`
 

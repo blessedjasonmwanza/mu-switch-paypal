@@ -5,10 +5,11 @@ services:
   - type: web
     name: moneyunify
     runtime: docker
-    # Deploy main, and only once its GitHub checks (lint, tests on SQLite and
-    # Postgres, Docker build) have passed.
+    # GitHub Actions deploys main once lint, the tests (SQLite and Postgres)
+    # and the Docker build pass, and records each deploy on GitHub (see
+    # .github/workflows/deploy.yml), so Render doesn't deploy on its own.
     branch: main
-    autoDeployTrigger: checksPass
+    autoDeployTrigger: "off"
     # No plan here: new services start on Render's smallest paid instance
     # (0.5 CPU, 512 MB), which stays awake so the scheduler keeps running.
     # Pick a plan in the dashboard if you need more.
