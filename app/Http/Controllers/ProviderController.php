@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Providers\PaypalController;
 use App\Models\PaymentProvider;
 use App\Models\ProviderLog;
 use App\Support\Currency;
@@ -394,6 +395,10 @@ class ProviderController extends Controller
 
             $provider->setAttribute('config', $safe);
             $provider->setAttribute('accounts', $accounts[$provider->id] ?? []);
+            // Where PayPal should send this provider's webhooks, to paste into the PayPal app.
+            $provider->setAttribute('webhook_url', $provider->class === PaypalController::class
+                ? route('webhooks.paypal', $provider)
+                : null);
 
             return $provider;
         });

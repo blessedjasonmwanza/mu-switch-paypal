@@ -139,10 +139,9 @@ Everything else is set up in the app, not in files:
 1. **Providers:** add **PayPal** with your **live** app's client ID and secret
    (environment `live`), then your payout providers (pawaPay, Lenco, MTN,
    Airtel and the others you have contracts with).
-2. **PayPal webhook:** in your live PayPal app, add
-   `https://your-domain/api/webhooks/paypal/{provider_id}` with the events
-   `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED` and
-   `PAYMENT.CAPTURE.DENIED`, and paste its ID into the provider. See
+2. **PayPal webhook:** edit the PayPal provider and copy its **Webhook URL**.
+   In your live PayPal app, add a webhook with that URL and the events listed
+   in the dialog, then paste its ID into the provider. See
    [Providers](/docs/providers).
 3. **AI & Agents** (optional): add your AI provider, model and key.
 4. **Fee policy** and **Treasury** (optional): set your fees and float rules.
