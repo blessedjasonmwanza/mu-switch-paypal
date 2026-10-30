@@ -225,8 +225,11 @@ class TransferController extends Controller
      */
     private function metrics(Builder $cbQuery, Builder $payoutQuery): array
     {
-        // Cross-border counts and volume
         $cbSuccessStatuses = [CrossBorderStatus::DELIVERED->value];
+        // Before the counts below add their selects to the queries.
+        $volumes = $this->volumes(clone $cbQuery, clone $payoutQuery, $cbSuccessStatuses);
+
+        // Cross-border counts
         $cbPendingStatuses = [
             CrossBorderStatus::AWAITING_PAYMENT->value,
             CrossBorderStatus::FUNDED->value,
@@ -245,16 +248,14 @@ class TransferController extends Controller
             ->selectRaw("coalesce(sum(case when status in ('".implode("','", $cbSuccessStatuses)."') then 1 else 0 end), 0) as success")
             ->selectRaw("coalesce(sum(case when status in ('".implode("','", $cbPendingStatuses)."') then 1 else 0 end), 0) as pending")
             ->selectRaw("coalesce(sum(case when status in ('".implode("','", $cbFailedStatuses)."') then 1 else 0 end), 0) as failed")
-            ->selectRaw("coalesce(sum(case when status in ('".implode("','", $cbSuccessStatuses)."') then source_amount_minor / 100.0 else 0 end), 0) as volume")
             ->first();
 
-        // Payout counts and volume
+        // Payout counts
         $payoutRow = $payoutQuery
             ->selectRaw('count(*) as total')
             ->selectRaw("coalesce(sum(case when status = 'success' then 1 else 0 end), 0) as success")
             ->selectRaw("coalesce(sum(case when status = 'pending' then 1 else 0 end), 0) as pending")
             ->selectRaw("coalesce(sum(case when status = 'failed' then 1 else 0 end), 0) as failed")
-            ->selectRaw("coalesce(sum(case when status = 'success' then amount else 0 end), 0) as volume")
             ->first();
 
         $cbTotal = (int) ($cbRow->total ?? 0);
@@ -273,18 +274,67 @@ class TransferController extends Controller
         $payoutFailed = (int) ($payoutRow->failed ?? 0);
         $failed = $cbFailed + $payoutFailed;
 
-        $volume = round((float) ($cbRow->volume ?? 0) + (float) ($payoutRow->volume ?? 0), 2);
-
         return [
             'total' => $total,
             'success' => $success,
             'pending' => $pending,
             'failed' => $failed,
-            'volume' => $volume,
+            'volumes' => $volumes,
             'successRate' => $total > 0 ? round(($success / $total) * 100, 1) : null,
             'crossBorderCount' => $cbTotal,
             'payoutCount' => $payoutTotal,
         ];
+    }
+
+    /**
+     * Delivered volume in each currency, busiest first: what reached wallets,
+     * in the recipient's currency, for transfers and payouts alike. Currencies
+     * are never added together.
+     *
+     * @param  list<string>  $cbSuccessStatuses
+     * @return list<array{currency: string, amount: float, count: int}>
+     */
+    private function volumes(Builder $cbQuery, Builder $payoutQuery, array $cbSuccessStatuses): array
+    {
+        $totals = [];
+
+        $delivered = (clone $cbQuery)
+            ->whereIn('status', $cbSuccessStatuses)
+            ->whereNotNull('target_currency')
+            ->selectRaw('target_currency as currency')
+            ->selectRaw('count(*) as count')
+            ->selectRaw('coalesce(sum(target_amount_minor), 0) as minor')
+            ->groupBy('target_currency')
+            ->get();
+
+        foreach ($delivered as $row) {
+            $currency = strtoupper((string) $row->currency);
+            $totals[$currency] ??= ['currency' => $currency, 'amount' => 0.0, 'count' => 0];
+            $totals[$currency]['amount'] += (int) $row->minor / 10 ** Currency::decimals($currency);
+            $totals[$currency]['count'] += (int) $row->count;
+        }
+
+        $paidOut = (clone $payoutQuery)
+            ->where('status', 'success')
+            ->whereNotNull('currency')
+            ->selectRaw('currency')
+            ->selectRaw('count(*) as count')
+            ->selectRaw('coalesce(sum(amount), 0) as amount')
+            ->groupBy('currency')
+            ->get();
+
+        foreach ($paidOut as $row) {
+            $currency = strtoupper((string) $row->currency);
+            $totals[$currency] ??= ['currency' => $currency, 'amount' => 0.0, 'count' => 0];
+            $totals[$currency]['amount'] += (float) $row->amount;
+            $totals[$currency]['count'] += (int) $row->count;
+        }
+
+        return collect($totals)
+            ->map(fn (array $total): array => [...$total, 'amount' => round($total['amount'], Currency::decimals($total['currency']))])
+            ->sortByDesc('count')
+            ->values()
+            ->all();
     }
 
     /**

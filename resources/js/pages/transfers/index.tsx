@@ -19,6 +19,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { VolumeSummary } from '@/components/volume-summary';
+import type { CurrencyVolume } from '@/components/volume-summary';
 import { cn } from '@/lib/utils';
 import { index as transfersIndex } from '@/routes/transfers';
 
@@ -101,7 +103,8 @@ interface Metrics {
     success: number;
     failed: number;
     pending: number;
-    volume: number;
+    /** Successful volume per currency, busiest first (never added together). */
+    volumes: CurrencyVolume[];
     successRate: number | null;
     crossBorderCount: number;
     payoutCount: number;
@@ -532,9 +535,10 @@ export default function TransfersIndex({
                                 <Wallet className="h-3.5 w-3.5" /> Total
                                 Outbound Volume
                             </div>
-                            <div className="mt-1.5 text-3xl font-bold tracking-tight tabular-nums">
-                                {formatMoney(metrics.volume, displayCurrency)}
-                            </div>
+                            <VolumeSummary
+                                volumes={metrics.volumes}
+                                fallbackCurrency={displayCurrency}
+                            />
                             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                                 {metrics.total.toLocaleString()} transactions
                                 {metrics.successRate !== null && (
