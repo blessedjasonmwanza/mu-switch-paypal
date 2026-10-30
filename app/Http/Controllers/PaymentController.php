@@ -133,12 +133,14 @@ class PaymentController extends Controller
      */
     private function metrics(Builder $query): array
     {
+        // Before the counts below add their selects to the query.
+        $volumes = $this->volumes(clone $query);
+
         $row = $query
             ->selectRaw('count(*) as total')
             ->selectRaw("coalesce(sum(case when status = 'success' then 1 else 0 end), 0) as success")
             ->selectRaw("coalesce(sum(case when status = 'failed' then 1 else 0 end), 0) as failed")
             ->selectRaw("coalesce(sum(case when status = 'pending' then 1 else 0 end), 0) as pending")
-            ->selectRaw("coalesce(sum(case when status = 'success' then amount else 0 end), 0) as volume")
             ->first();
 
         $total = (int) ($row->total ?? 0);
@@ -149,9 +151,35 @@ class PaymentController extends Controller
             'success' => $success,
             'failed' => (int) ($row->failed ?? 0),
             'pending' => (int) ($row->pending ?? 0),
-            'volume' => round((float) ($row->volume ?? 0), 2),
+            'volumes' => $volumes,
             'successRate' => $total > 0 ? round(($success / $total) * 100, 1) : null,
         ];
+    }
+
+    /**
+     * Successful volume in each currency, busiest first. Currencies are never
+     * added together: a mixed total has no single unit.
+     *
+     * @return list<array{currency: string, amount: float, count: int}>
+     */
+    private function volumes(Builder $query): array
+    {
+        return $query
+            ->where('status', 'success')
+            ->whereNotNull('currency')
+            ->selectRaw('currency')
+            ->selectRaw('count(*) as count')
+            ->selectRaw('coalesce(sum(amount), 0) as amount')
+            ->groupBy('currency')
+            ->get()
+            ->map(fn ($row): array => [
+                'currency' => strtoupper((string) $row->currency),
+                'amount' => round((float) $row->amount, Currency::decimals((string) $row->currency)),
+                'count' => (int) $row->count,
+            ])
+            ->sortByDesc('count')
+            ->values()
+            ->all();
     }
 
     /**

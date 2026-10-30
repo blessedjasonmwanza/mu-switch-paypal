@@ -19,6 +19,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { VolumeSummary } from '@/components/volume-summary';
+import type { CurrencyVolume } from '@/components/volume-summary';
 import { cn } from '@/lib/utils';
 import payments from '@/routes/payments';
 
@@ -67,7 +69,8 @@ interface Metrics {
     success: number;
     failed: number;
     pending: number;
-    volume: number;
+    /** Successful volume per currency, busiest first (never added together). */
+    volumes: CurrencyVolume[];
     successRate: number | null;
 }
 
@@ -419,7 +422,7 @@ export default function Index({
         ? (page.data.find((tx) => tx.id === selected.id) ?? selected)
         : null;
 
-    // Volume is shown in the busiest currency (a mixed-currency total has no single unit).
+    // An empty total is shown in the busiest currency.
     const displayCurrency = topCurrencies[0]?.currency ?? 'USD';
 
     // Keep the view live while monitoring.
@@ -503,9 +506,10 @@ export default function Index({
                             <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
                                 <Wallet className="h-3.5 w-3.5" /> Total Volume
                             </div>
-                            <div className="mt-1.5 text-3xl font-bold tracking-tight tabular-nums">
-                                {formatMoney(metrics.volume, displayCurrency)}
-                            </div>
+                            <VolumeSummary
+                                volumes={metrics.volumes}
+                                fallbackCurrency={displayCurrency}
+                            />
                             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                                 {metrics.total.toLocaleString()} transactions
                                 {metrics.successRate !== null && (
