@@ -108,13 +108,12 @@ use it, and the docs and OpenAPI spec point at it.
 
 Webhooks move payments forward even when the payer never returns to your site.
 
-1. In the PayPal developer dashboard, open your sandbox app and choose
-   **Add Webhook**.
-2. URL: `https://YOUR-URL/api/webhooks/paypal/{provider_id}`, where
-   `{provider_id}` is the PayPal provider's ID (it's in the provider's logs URL,
-   `/providers/{provider_id}/logs`).
-3. Events: `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED` and
-   `PAYMENT.CAPTURE.DENIED`.
+1. On **Providers**, edit the PayPal provider and **Copy** its **Webhook URL**.
+2. In the PayPal developer dashboard, open your sandbox app, choose
+   **Add Webhook** and paste the URL.
+3. Events: `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`,
+   `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED` and
+   `PAYMENT.CAPTURE.REVERSED` (the edit dialog lists them too).
 4. Paste the new webhook's ID into the PayPal provider's **Webhook ID** field.
 
 Without a webhook, the scheduler still checks every in-flight transfer every

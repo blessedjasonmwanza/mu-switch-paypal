@@ -49,6 +49,9 @@ use Throwable;
  */
 class CrossBorderTransferService
 {
+    /** How a reversal note on a transfer's timeline starts. */
+    private const REVERSAL_NOTE = 'PayPal reversed the sender\'s payment';
+
     public function __construct(
         private readonly FxQuoter $fx,
         private readonly PayoutDispatcher $payouts,
@@ -210,6 +213,32 @@ class CrossBorderTransferService
         if ($transfer) {
             $this->advance($transfer, $transaction);
         }
+    }
+
+    /**
+     * PayPal reversed the sender's captured payment (for example a chargeback
+     * or bank reversal). The payout may already be made, so the transfer keeps
+     * its status and gets a note on its timeline for someone to follow up.
+     * Noted once, however often PayPal reports it.
+     */
+    public function paymentReversed(Transaction $payment, string $reversalId = ''): void
+    {
+        $transfer = CrossBorderTransfer::query()->where('funding_transaction_id', $payment->id)->first();
+
+        if (! $transfer || $transfer->events()->where('note', 'like', self::REVERSAL_NOTE.'%')->exists()) {
+            return;
+        }
+
+        $note = self::REVERSAL_NOTE.' (chargeback or bank reversal)'
+            .($reversalId !== '' ? ", PayPal reference {$reversalId}" : '')
+            .'. Follow up with the sender: the recipient may already have been paid.';
+
+        $transfer->events()->create([
+            'from_status' => $transfer->status,
+            'to_status' => $transfer->status,
+            'note' => $note,
+            'created_at' => now(),
+        ]);
     }
 
     /**

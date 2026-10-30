@@ -21,6 +21,7 @@ use App\Http\Controllers\TreasuryController;
 use App\Http\Controllers\TreasuryTransferController;
 use App\Http\Middleware\LogApiRequests;
 use App\Support\Coverage;
+use App\Support\PostmanCollection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
@@ -34,6 +35,13 @@ Route::get('/', fn () => Inertia::render('welcome', [
 ]))->name('home');
 
 Route::inertia('privacy', 'legal/privacy', ['docsOnly' => config('app.docs_only')])->name('privacy');
+
+// Every API endpoint as a Postman collection, built from the OpenAPI spec and
+// pointed at this deployment.
+Route::get('postman-collection.json', fn () => response()->json(
+    PostmanCollection::fromOpenApiFile()->toArray(url('/api/v1')),
+    options: JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
+)->header('Content-Disposition', 'attachment; filename="'.PostmanCollection::FILENAME.'"'))->name('postman-collection');
 Route::inertia('terms', 'legal/terms', ['docsOnly' => config('app.docs_only')])->name('terms');
 
 if (! config('app.docs_only_routes')) {

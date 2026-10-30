@@ -3,6 +3,7 @@ import { Button } from '@radix-ui/themes';
 import {
     ArrowLeftRight,
     CreditCard,
+    Download,
     Github,
     ImageIcon,
     Smartphone,
@@ -11,6 +12,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodeSample } from '@/components/code-sample';
 import type { CodeTab } from '@/components/code-sample';
+import { EngineStack } from '@/components/engine-stack';
 import { McpSession } from '@/components/mcp-session';
 import { PublicFooter } from '@/components/public-footer';
 import { GITHUB_URL, PublicHeader } from '@/components/public-header';
@@ -98,6 +100,21 @@ const AUDIENCES: Audience[] = [
         ],
         image: '/images/landing/merchants.jpg',
         imageHint: 'A market trader holding a basic mobile phone',
+    },
+];
+
+const INSTITUTIONS: { title: string; body: string }[] = [
+    {
+        title: 'Digital financial service providers',
+        body: 'Launch wallets, remittances and merchant payments on one integration, then offer them to other businesses and their customers as a payment provider.',
+    },
+    {
+        title: 'Banks and mobile-money operators',
+        body: 'Reach mobile money and PayPal from your own platform, collect and pay out across markets, and reconcile it all in a double-entry ledger.',
+    },
+    {
+        title: 'Governments and public programmes',
+        body: "Pay grants, wages and refunds straight to people's mobile wallets, even where there's no bank or internet, and collect fees, with every payment traceable.",
     },
 ];
 
@@ -289,7 +306,7 @@ function AudienceSection({
     return (
         <div
             id={audience.id}
-            className="grid scroll-mt-8 grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16"
+            className="grid scroll-mt-28 grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16"
         >
             <Reveal
                 className={cn('min-w-0', reversed ? 'lg:order-2' : undefined)}
@@ -658,9 +675,75 @@ export default function Welcome({
                     </div>
                 </section>
 
-                {/* Mobile money, natively */}
+                {/* The engine behind the apps */}
                 <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
                     <SectionGlow side="left" offset={1} />
+                    <div className="mx-auto w-full max-w-7xl px-6 py-20">
+                        <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
+                            <Reveal className="max-w-xl">
+                                <p className="text-sm font-semibold text-primary">
+                                    Infrastructure
+                                </p>
+                                <h2 className="mt-2 text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
+                                    The engine behind payment apps, open to
+                                    anyone
+                                </h2>
+                                <p className="mt-4 leading-relaxed text-neutral-600 dark:text-neutral-400">
+                                    Remittance apps like Wise, Remitly and
+                                    Chipper Cash each run a payment engine
+                                    behind the scenes: it takes the money in,
+                                    converts it, routes it and pays it out. Each
+                                    of them built theirs privately.
+                                </p>
+                                <p className="mt-4 leading-relaxed text-neutral-600 dark:text-neutral-400">
+                                    MoneyUnify is that engine, as open
+                                    infrastructure. Run your own payments on it,
+                                    or become a payment provider for other
+                                    businesses, under your own brand, licences
+                                    and data.
+                                </p>
+                                <ul className="mt-6 flex flex-wrap gap-2">
+                                    {[
+                                        'Self-hosted',
+                                        'Open source (Apache-2.0)',
+                                        'Your brand and licences',
+                                    ].map((tag) => (
+                                        <li
+                                            key={tag}
+                                            className="rounded-full border border-primary/25 bg-primary/5 px-3 py-1 text-xs font-medium text-primary"
+                                        >
+                                            {tag}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </Reveal>
+                            <Reveal delay={120}>
+                                <EngineStack providers={stats.providers} />
+                            </Reveal>
+                        </div>
+
+                        <div className="mt-16 grid grid-cols-1 gap-4 md:grid-cols-3">
+                            {INSTITUTIONS.map((institution, index) => (
+                                <Reveal
+                                    key={institution.title}
+                                    delay={index * 120}
+                                    className="rounded-xl border border-neutral-200 bg-white/60 p-6 dark:border-neutral-800 dark:bg-white/[0.03]"
+                                >
+                                    <h3 className="font-semibold text-neutral-900 dark:text-white">
+                                        {institution.title}
+                                    </h3>
+                                    <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+                                        {institution.body}
+                                    </p>
+                                </Reveal>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                {/* Mobile money, natively */}
+                <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
+                    <SectionGlow side="right" offset={2} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <AudienceSection
                             audience={{
@@ -685,7 +768,7 @@ export default function Welcome({
 
                 {/* For developers */}
                 <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
-                    <SectionGlow side="right" offset={2} />
+                    <SectionGlow side="left" offset={3} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <Reveal className="max-w-2xl">
                             <p className="text-sm font-semibold text-primary">
@@ -700,6 +783,32 @@ export default function Welcome({
                                 the switch picks the provider, tracks the
                                 payment and tells you when it settles.
                             </p>
+                            <div className="mt-6 flex flex-wrap items-center gap-3">
+                                <Button
+                                    asChild
+                                    size="2"
+                                    className="cursor-pointer"
+                                >
+                                    <a href="/postman-collection.json" download>
+                                        <Download
+                                            className="h-4 w-4"
+                                            aria-hidden
+                                        />
+                                        Download the Postman collection
+                                    </a>
+                                </Button>
+                                <Button
+                                    asChild
+                                    size="2"
+                                    variant="outline"
+                                    color="gray"
+                                    className="cursor-pointer"
+                                >
+                                    <a href="/docs/api/overview">
+                                        Read the API docs
+                                    </a>
+                                </Button>
+                            </div>
                         </Reveal>
                         <div className="mt-14 flex flex-col gap-20">
                             <AudienceSection
@@ -748,7 +857,7 @@ export default function Welcome({
 
                 {/* Built for AI agents */}
                 <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
-                    <SectionGlow side="left" offset={3} />
+                    <SectionGlow side="right" offset={4} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <AudienceSection
                             audience={{
@@ -771,7 +880,7 @@ export default function Welcome({
 
                 {/* Who it's for */}
                 <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
-                    <SectionGlow side="right" offset={4} />
+                    <SectionGlow side="left" offset={5} />
                     <div className="mx-auto w-full max-w-7xl px-6 py-20">
                         <Reveal className="max-w-2xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">
@@ -797,7 +906,7 @@ export default function Welcome({
 
                 {/* Closing call to action */}
                 <section className="relative isolate z-10 overflow-hidden border-t border-neutral-200 dark:border-neutral-800">
-                    <SectionGlow side="left" offset={5} />
+                    <SectionGlow side="right" offset={6} />
                     <Reveal className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-6 py-20 md:flex-row md:items-center md:justify-between">
                         <div className="max-w-xl">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl dark:text-white">

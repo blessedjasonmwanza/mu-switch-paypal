@@ -545,19 +545,22 @@ cancelled order is never captured later.
 
 **Webhooks (recommended)**
 
-Register this URL in your PayPal app and paste the webhook's ID into the
-provider:
+1. On **Providers**, edit the PayPal provider. The dialog shows its
+   **Webhook URL** (`https://your-domain.com/api/webhooks/paypal/{provider_id}`)
+   with a **Copy** button.
+2. In your PayPal app, choose **Add Webhook**, paste the URL and subscribe to:
+   `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`,
+   `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED` and
+   `PAYMENT.CAPTURE.REVERSED`.
+3. Paste the new webhook's ID into the provider's **Webhook ID** and save.
 
-```http
-POST https://your-domain.com/api/webhooks/paypal/{provider_id}
-```
-
-`{provider_id}` is the provider's ID, shown in its logs URL
-(`/providers/{provider_id}/logs`). Subscribe to `CHECKOUT.ORDER.APPROVED`,
-`PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.DENIED`. Each delivery's
-signature is checked with PayPal before anything happens, and duplicate
-deliveries are ignored. The switch then re-reads the order from PayPal, so the
-transaction settles even if neither the payer nor your app comes back.
+Each delivery's signature is checked with PayPal before anything happens, and
+duplicate deliveries are ignored. The switch answers straight away and handles
+the event in the background (retrying if PayPal can't be reached): it re-reads
+the order from PayPal, so the transaction settles even if neither the payer nor
+your app comes back, and refunds made in PayPal's dashboard are recorded. If
+PayPal reverses a payment that funded a transfer (a chargeback or bank
+reversal), the transfer's timeline gets a note to follow up with the sender.
 
 PayPal can charge AUD, BRL, CAD, CNY, CZK, DKK, EUR, GBP, HKD, HUF, ILS, JPY,
 MXN, MYR, NOK, NZD, PHP, PLN, SEK, SGD, CHF, THB, TWD and USD. HUF, JPY and TWD

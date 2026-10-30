@@ -84,7 +84,7 @@ class PaypalController extends Controller implements PaymentProviderInterface, R
             'label' => 'Webhook ID (optional)',
             'type' => 'text',
             'required' => false,
-            'help' => 'From the webhook you registered in your PayPal app. Lets PayPal confirm payments even if the payer never returns.',
+            'help' => 'Add a webhook in your PayPal app with the Webhook URL shown above, then paste its ID here. Lets PayPal confirm payments, refunds and reversals even if the payer never returns.',
         ],
         [
             'key' => 'mcp',

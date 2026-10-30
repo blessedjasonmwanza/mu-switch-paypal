@@ -15,6 +15,7 @@ import {
     ArrowDownLeft,
     ArrowUpRight,
     Search,
+    Copy,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -38,6 +39,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { copyText } from '@/lib/clipboard';
 import { cn } from '@/lib/utils';
 import providersRoute from '@/routes/providers';
 
@@ -61,7 +63,18 @@ interface PaymentProvider {
     logo_url: string | null;
     is_active: boolean;
     accounts: AccountSummary[];
+    /** PayPal providers only: where PayPal should send this provider's webhooks. */
+    webhook_url?: string | null;
 }
+
+/** The PayPal events MoneyUnify handles, to tick when adding the webhook in PayPal. */
+const PAYPAL_WEBHOOK_EVENTS = [
+    'CHECKOUT.ORDER.APPROVED',
+    'PAYMENT.CAPTURE.COMPLETED',
+    'PAYMENT.CAPTURE.DENIED',
+    'PAYMENT.CAPTURE.REFUNDED',
+    'PAYMENT.CAPTURE.REVERSED',
+];
 
 function formatMoney(amount: number, currency: string): string {
     try {
@@ -1321,6 +1334,58 @@ export default function Index({
                                     </p>
                                 )}
                             </div>
+
+                            {editingProvider?.webhook_url && (
+                                <div className="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                                    <Label htmlFor="edit-webhook-url">
+                                        Webhook URL
+                                    </Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            id="edit-webhook-url"
+                                            value={editingProvider.webhook_url}
+                                            readOnly
+                                            onFocus={(e) => e.target.select()}
+                                            className="font-mono text-xs"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="soft"
+                                            onClick={() =>
+                                                copyText(
+                                                    editingProvider.webhook_url ??
+                                                        '',
+                                                    'Webhook URL',
+                                                )
+                                            }
+                                            className="shrink-0 cursor-pointer"
+                                        >
+                                            <Copy
+                                                className="h-3.5 w-3.5"
+                                                aria-hidden
+                                            />
+                                            Copy
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                                        In your PayPal app, choose{' '}
+                                        <strong>Add Webhook</strong>, paste this
+                                        URL and tick these events, then paste
+                                        the new webhook&apos;s ID into{' '}
+                                        <strong>Webhook ID</strong> below:
+                                    </p>
+                                    <ul className="flex flex-wrap gap-1.5">
+                                        {PAYPAL_WEBHOOK_EVENTS.map((event) => (
+                                            <li
+                                                key={event}
+                                                className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-neutral-700 dark:bg-white/10 dark:text-neutral-200"
+                                            >
+                                                {event}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
 
                             {(editDriver?.config_fields?.length
                                 ? editDriver.config_fields

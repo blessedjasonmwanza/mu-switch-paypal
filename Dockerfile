@@ -150,6 +150,7 @@ RUN printf '%s\n' \
         'php artisan migrate --force' \
         'if [ "$SEED_DEMO_DATA" = "true" ]; then php artisan demo:seed; fi' \
         'php artisan storage:link 2>/dev/null || true' \
+        'php artisan docs:postman || true' \
         'php artisan optimize' \
         'chown -R www-data:www-data storage bootstrap/cache' \
         'exec supervisord -c /etc/supervisor/conf.d/moneyunify.conf' \
