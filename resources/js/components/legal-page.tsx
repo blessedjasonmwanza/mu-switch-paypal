@@ -60,7 +60,7 @@ export function LegalPage({
                             <li
                                 key={section.title}
                                 id={`section-${index + 1}`}
-                                className="scroll-mt-8"
+                                className="scroll-mt-28"
                             >
                                 <h2 className="text-xl font-semibold tracking-tight text-neutral-900 dark:text-white">
                                     <span className="mr-2 text-neutral-400 tabular-nums dark:text-neutral-500">
