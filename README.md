@@ -642,6 +642,11 @@ merchants, pay links and FX) is described in an OpenAPI 3.1 spec at
 typed client from it. A test checks it against the API's routes, enums and real
 responses, so it doesn't drift from the code.
 
+**Postman collection.** Every deployment also serves all the endpoints as a
+ready-to-import Postman collection at `/postman-collection.json`, pointed at
+that deployment, with example bodies, Bearer auth and idempotency keys. See
+[Postman Collection](prezet/content/api/postman.md).
+
 ## Authors
 
 - 👤 **Blessed Jason Mwanza**
