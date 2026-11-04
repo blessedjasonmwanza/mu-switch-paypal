@@ -8,6 +8,7 @@ use App\Models\CrossBorderTransfer;
 use App\Models\CrossBorderTransferEvent;
 use App\Models\Transaction;
 use App\Support\Currency;
+use App\Support\CurrencyVolumes;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Market;
 use App\Support\SqlDate;
@@ -109,6 +110,11 @@ class TransferController extends Controller
         $payoutInWindow = fn (): Builder => $payoutBase()->when($from, fn (Builder $q) => $q->where('created_at', '>=', $from));
 
         $metrics = $this->metrics($cbInWindow(), $payoutInWindow());
+        $metrics['volumes'] = CurrencyVolumes::padded(
+            $metrics['volumes'],
+            $this->recentCurrencies($cbBase(), $payoutBase()),
+            CurrencyVolumes::supportedBy($user->paymentProviders()->get()),
+        );
         $metricTrend = $this->metricTrend($cbBase(), $payoutBase());
         $topCurrencies = $this->topCurrencies($cbInWindow(), $payoutInWindow());
         $topCountries = $this->topCountries($cbInWindow(), $payoutInWindow());
@@ -284,6 +290,34 @@ class TransferController extends Controller
             'crossBorderCount' => $cbTotal,
             'payoutCount' => $payoutTotal,
         ];
+    }
+
+    /**
+     * Currencies this account has sent in (transfer recipients and payouts),
+     * most recently used first.
+     *
+     * @return list<string>
+     */
+    private function recentCurrencies(Builder $cbQuery, Builder $payoutQuery): array
+    {
+        $transfers = $cbQuery
+            ->whereNotNull('target_currency')
+            ->selectRaw('target_currency as currency, max(created_at) as last_used')
+            ->groupBy('target_currency')
+            ->get();
+
+        $payouts = $payoutQuery
+            ->whereNotNull('currency')
+            ->selectRaw('currency, max(created_at) as last_used')
+            ->groupBy('currency')
+            ->get();
+
+        return $transfers->concat($payouts)
+            ->sortByDesc(fn ($row): string => (string) $row->last_used)
+            ->pluck('currency')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

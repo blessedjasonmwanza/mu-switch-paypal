@@ -461,8 +461,6 @@ export default function TransfersIndex({
         ],
     });
 
-    const displayCurrency = topCurrencies[0]?.currency ?? 'USD';
-
     const baseQuery: Record<string, string | undefined> = {
         range: filters.range !== '30d' ? filters.range : undefined,
         type: filters.type !== 'all' ? filters.type : undefined,
@@ -535,10 +533,10 @@ export default function TransfersIndex({
                                 <Wallet className="h-3.5 w-3.5" /> Total
                                 Outbound Volume
                             </div>
-                            <VolumeSummary
-                                volumes={metrics.volumes}
-                                fallbackCurrency={displayCurrency}
-                            />
+                            <VolumeSummary volumes={metrics.volumes} />
+                            <div className="mt-2 text-[11px] text-neutral-400 dark:text-neutral-500">
+                                Successful volume, per currency
+                            </div>
                             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                                 {metrics.total.toLocaleString()} transactions
                                 {metrics.successRate !== null && (

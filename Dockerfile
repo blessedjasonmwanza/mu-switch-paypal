@@ -16,7 +16,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
-RUN install-php-extensions intl bcmath gd zip pdo_pgsql pdo_mysql pcntl opcache
+RUN install-php-extensions intl bcmath gd zip pdo_pgsql pdo_mysql pcntl opcache redis
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -33,7 +33,7 @@ COPY . .
 
 # Autoloader, route types for the front end, the front-end build and the docs
 # index. Dev-only npm packages are dropped afterwards; @paypal/mcp stays.
-RUN composer dump-autoload --optimize --no-dev \
+RUN composer dump-autoload --optimize --no-dev --classmap-authoritative \
     && php artisan package:discover --ansi \
     && php artisan wayfinder:generate --with-form \
     && npm run build \
@@ -41,7 +41,7 @@ RUN composer dump-autoload --optimize --no-dev \
     && php artisan docs:index --fresh \
     && chown -R www-data:www-data storage bootstrap/cache database
 
-# PHP: production settings, and keep the host's environment variables visible
+# PHP: production settings, native OPcache with JIT, and keep the host's environment variables visible
 # to PHP-FPM workers (they're cleared by default).
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
     && printf '%s\n' \
@@ -49,7 +49,18 @@ RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
         'upload_max_filesize=20M' \
         'post_max_size=20M' \
         'opcache.enable=1' \
+        'opcache.enable_cli=1' \
+        'opcache.memory_consumption=256' \
+        'opcache.interned_strings_buffer=16' \
+        'opcache.max_accelerated_files=30000' \
         'opcache.validate_timestamps=0' \
+        'opcache.revalidate_freq=0' \
+        'opcache.save_comments=1' \
+        'opcache.fast_shutdown=1' \
+        'opcache.jit=tracing' \
+        'opcache.jit_buffer_size=64M' \
+        'redis.pconnect.pooling_enabled=1' \
+        'redis.pconnect.connection_limit=0' \
         > "$PHP_INI_DIR/conf.d/zz-moneyunify.ini" \
     && printf '%s\n' \
         '[www]' \
@@ -63,7 +74,7 @@ RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
 
 # nginx: serves public/ and hands PHP to PHP-FPM. PORT is filled in at start.
 # Larger FastCGI buffers fit the asset preload (Link) headers on app pages,
-# and the logs go to the container's output so the host shows them.
+# gzip compression and immutable asset caching accelerate page loads.
 RUN rm -f /etc/nginx/sites-enabled/default \
     && mkdir -p /etc/nginx/templates \
     && printf '%s\n' \
@@ -75,6 +86,26 @@ RUN rm -f /etc/nginx/sites-enabled/default \
         '    access_log /dev/stdout;' \
         '    error_log /dev/stderr warn;' \
         '    add_header X-Content-Type-Options nosniff;' \
+        '' \
+        '    gzip on;' \
+        '    gzip_vary on;' \
+        '    gzip_proxied any;' \
+        '    gzip_comp_level 6;' \
+        '    gzip_types text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;' \
+        '' \
+        '    location /build/ {' \
+        '        expires max;' \
+        '        access_log off;' \
+        '        add_header Cache-Control "public, max-age=31536000, immutable";' \
+        '        try_files $uri =404;' \
+        '    }' \
+        '' \
+        '    location ~* \.(?:ico|css|js|gif|jpe?g|png|woff2?|eot|otf|ttf|svg|webp)$ {' \
+        '        expires 30d;' \
+        '        access_log off;' \
+        '        add_header Cache-Control "public, no-transform";' \
+        '        try_files $uri =404;' \
+        '    }' \
         '' \
         '    location / {' \
         '        try_files $uri $uri/ /index.php?$query_string;' \
@@ -136,7 +167,7 @@ RUN printf '%s\n' \
 
 # Start: make sure there's an app key (local Docker gets one generated and
 # kept in its storage volume), fill in the port, migrate, optionally add the
-# demo account, cache the configuration, then hand over to supervisord.
+# demo account, optimize caches and native OPcache, then hand over to supervisord.
 RUN printf '%s\n' \
         '#!/bin/sh' \
         'set -e' \
@@ -147,11 +178,20 @@ RUN printf '%s\n' \
         '  export APP_KEY="$(cat storage/app/.app-key)"' \
         'fi' \
         'envsubst '"'"'${PORT}'"'"' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf' \
+        'if [ "$PHP_OPCACHE_VALIDATE_TIMESTAMPS" = "1" ] || [ "$APP_ENV" = "local" ] || [ "$APP_DEBUG" = "true" ]; then' \
+        '  sed -i "s/opcache.validate_timestamps=0/opcache.validate_timestamps=1/" "$PHP_INI_DIR/conf.d/zz-moneyunify.ini" 2>/dev/null || true' \
+        'fi' \
+        'if [ "$PHP_OPCACHE_ENABLE" = "0" ] || [ "$PHP_OPCACHE_ENABLE" = "false" ]; then' \
+        '  sed -i "s/opcache.enable=1/opcache.enable=0/" "$PHP_INI_DIR/conf.d/zz-moneyunify.ini" 2>/dev/null || true' \
+        '  sed -i "s/opcache.enable_cli=1/opcache.enable_cli=0/" "$PHP_INI_DIR/conf.d/zz-moneyunify.ini" 2>/dev/null || true' \
+        'fi' \
         'php artisan migrate --force' \
         'if [ "$SEED_DEMO_DATA" = "true" ]; then php artisan demo:seed; fi' \
         'php artisan storage:link 2>/dev/null || true' \
         'php artisan docs:postman || true' \
+        'php artisan optimize:clear 2>/dev/null || true' \
         'php artisan optimize' \
+        'php artisan view:cache' \
         'chown -R www-data:www-data storage bootstrap/cache' \
         'exec supervisord -c /etc/supervisor/conf.d/moneyunify.conf' \
         > /usr/local/bin/start-container \

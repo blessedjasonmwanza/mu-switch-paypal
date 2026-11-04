@@ -422,9 +422,6 @@ export default function Index({
         ? (page.data.find((tx) => tx.id === selected.id) ?? selected)
         : null;
 
-    // An empty total is shown in the busiest currency.
-    const displayCurrency = topCurrencies[0]?.currency ?? 'USD';
-
     // Keep the view live while monitoring.
     usePoll(20000, {
         only: [
@@ -506,10 +503,10 @@ export default function Index({
                             <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
                                 <Wallet className="h-3.5 w-3.5" /> Total Volume
                             </div>
-                            <VolumeSummary
-                                volumes={metrics.volumes}
-                                fallbackCurrency={displayCurrency}
-                            />
+                            <VolumeSummary volumes={metrics.volumes} />
+                            <div className="mt-2 text-[11px] text-neutral-400 dark:text-neutral-500">
+                                Successful volume, per currency
+                            </div>
                             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                                 {metrics.total.toLocaleString()} transactions
                                 {metrics.successRate !== null && (

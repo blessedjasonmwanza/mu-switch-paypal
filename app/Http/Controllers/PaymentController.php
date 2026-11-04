@@ -8,6 +8,7 @@ use App\Exceptions\RefundException;
 use App\Models\CrossBorderTransfer;
 use App\Models\Transaction;
 use App\Support\Currency;
+use App\Support\CurrencyVolumes;
 use App\Support\Fees\FeeCalculator;
 use App\Support\Market;
 use App\Support\Refunds\PaymentRefunder;
@@ -68,8 +69,15 @@ class PaymentController extends Controller
         // this (but NOT the status filter, so they reflect the whole window).
         $inWindow = fn (): Builder => $base()->when($from, fn (Builder $q) => $q->where('created_at', '>=', $from));
 
+        $metrics = $this->metrics($inWindow());
+        $metrics['volumes'] = CurrencyVolumes::padded(
+            $metrics['volumes'],
+            $this->recentCurrencies($base()),
+            CurrencyVolumes::supportedBy($request->user()->paymentProviders()->get()),
+        );
+
         return Inertia::render('payments/index', [
-            'metrics' => $this->metrics($inWindow()),
+            'metrics' => $metrics,
             'metricTrend' => $this->metricTrend($base()),
             'topCurrencies' => $this->topCurrencies($inWindow()),
             'topCountries' => $this->topCountries($inWindow()),
@@ -154,6 +162,22 @@ class PaymentController extends Controller
             'volumes' => $volumes,
             'successRate' => $total > 0 ? round(($success / $total) * 100, 1) : null,
         ];
+    }
+
+    /**
+     * Currencies this account has transacted in, most recently used first.
+     *
+     * @return list<string>
+     */
+    private function recentCurrencies(Builder $query): array
+    {
+        return $query
+            ->whereNotNull('currency')
+            ->selectRaw('currency, max(created_at) as last_used')
+            ->groupBy('currency')
+            ->orderByDesc('last_used')
+            ->pluck('currency')
+            ->all();
     }
 
     /**

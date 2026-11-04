@@ -150,6 +150,20 @@ test('a refused payout refunds the sender through paypal', function () {
         && $request['amount'] === ['value' => '92.30', 'currency_code' => 'USD']);
 });
 
+test('a transfer to a pawapay failure test number triggers a paypal refund', function (string $number) {
+    fakeCrossBorderPaypal();
+
+    $reference = startTransfer(['account_number' => $number])->json('data.reference');
+
+    verifyTransfer($reference)
+        ->assertOk()
+        ->assertJsonPath('status', 'refunded')
+        ->assertJsonPath('data.refund.status', 'success');
+
+    $transfer = CrossBorderTransfer::sole();
+    expect($transfer->failure_reason)->toContain('refused');
+})->with(['0763456079', '260763456079', '0973456089', '260973456089']);
+
 test('a refused refund is flagged and can be retried with the same paypal request id', function () {
     fakeCrossBorderPaypal(['*/v2/payments/captures/CAPTURE-1/refund' => Http::sequence()
         ->push(['name' => 'UNPROCESSABLE_ENTITY', 'details' => [['issue' => 'REFUND_NOT_ALLOWED']]], 422)

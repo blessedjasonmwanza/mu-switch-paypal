@@ -375,3 +375,32 @@ test('a payout pawapay accepted is never taken as lost, however long it is not f
     $this->withToken('po-18')->postJson('/api/v1/payout/verify', ['transaction_id' => $id])->assertJsonPath('status', 'pending');
     expect(Transaction::sole()->status)->toBe(TransactionStatus::PENDING);
 });
+
+test('simulated payouts recognizes pawapay sandbox failure and pending test numbers', function (string $number, int $expectedStatus) {
+    $user = User::factory()->create(['api_token' => 'po-pawapay-sim']);
+    simulatedPayouts($user);
+
+    $response = requestPayout('po-pawapay-sim', ['account_number' => $number]);
+
+    $response->assertStatus($expectedStatus);
+    if ($expectedStatus === 422) {
+        $response->assertJsonPath('message', 'Simulated refusal: the recipient cannot receive payouts');
+        expect(Transaction::sole()->status)->toBe(TransactionStatus::FAILED);
+    } elseif ($expectedStatus === 202) {
+        $response->assertJsonPath('status', 'pending')
+            ->assertJsonPath('message', 'The payout outcome is unknown. Verify it before retrying; no other provider was tried.');
+        expect(Transaction::sole()->status)->toBe(TransactionStatus::PENDING);
+    } else {
+        $response->assertOk();
+        expect(Transaction::sole()->status)->toBe(TransactionStatus::PENDING);
+    }
+})->with([
+    'mtn failure local' => ['0763456079', 422],
+    'mtn failure intl' => ['260763456079', 422],
+    'airtel failure local' => ['0973456089', 422],
+    'airtel failure intl' => ['260973456089', 422],
+    'mtn pending local' => ['0763456129', 202],
+    'mtn pending intl' => ['260763456129', 202],
+    'mtn success local' => ['0763456789', 200],
+    'mtn success intl' => ['260763456789', 200],
+]);

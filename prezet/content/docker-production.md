@@ -38,8 +38,9 @@ and add your providers on **Providers**.
 | Container | What it does |
 | --- | --- |
 | `caddy` | Receives all traffic on ports 80 and 443, gets and renews the HTTPS certificate for your domain from Let's Encrypt, and forwards requests to the app. |
-| `app` | The app (nginx and PHP-FPM), the queue worker (payouts, emails, refunds) and the scheduler (moves transfers forward every minute). Not reachable from outside except through Caddy. |
+| `app` | The app (nginx and PHP-FPM with phpredis and OPcache), the queue worker (payouts, emails, refunds) and the scheduler (moves transfers forward every minute). Not reachable from outside except through Caddy. |
 | `db` | Postgres 17. Its data is kept in the `db-data` volume. |
+| `redis` | Redis 7 on port 6379, configured with native TCP keepalive (`--tcp-keepalive 60`, `--timeout 0`) and persistent connections for cache, sessions and queues. Its data is kept in the `redis-data` volume. |
 
 ## Before you start
 
@@ -149,6 +150,17 @@ Everything else is set up in the app, not in files:
 
 > These are live accounts. Every payment and payout moves real money. Test
 > with small amounts first.
+
+## Production performance & OPcache
+
+The production Docker container is optimized for low latency and high throughput out of the box:
+
+- **Native OPcache with JIT:** PHP's native OPcache is enabled with a 256 MB memory pool, 16 MB interned strings, and 30,000 max accelerated files. PHP 8 tracing JIT compilation is enabled (`opcache.jit=tracing`, 64 MB buffer) for both web requests and CLI workers (`opcache.enable_cli=1`).
+- **Redis with Native Keepalive:** Redis 7 runs on port 6379 with `--tcp-keepalive 60` and `--timeout 0`. In PHP, `phpredis` is compiled natively with persistent connection pooling (`redis.pconnect.pooling_enabled=1`, `REDIS_PERSISTENT=true`, and `REDIS_TCP_KEEPALIVE=60`) to keep sockets alive and eliminate connection renegotiation on cache and session reads.
+- **Zero timestamp I/O overhead:** In production (`APP_ENV=production`), `opcache.validate_timestamps=0` disables filesystem checks on every request, eliminating stat system calls.
+- **Framework & View Optimization:** The container automatically runs `php artisan optimize` (caching configuration, routes, and events) and `php artisan view:cache` on start-up.
+- **Authoritative Autoloader:** Composer generates an authoritative classmap (`--classmap-authoritative --optimize --no-dev`) so class lookups never hit the filesystem.
+- **Nginx Gzip & Asset Caching:** Built frontend bundles in `/build/` are served with immutable cache headers (`Cache-Control: public, max-age=31536000, immutable`), and JSON, SVG, CSS, and JS responses are gzip-compressed.
 
 ## Everyday operations
 
