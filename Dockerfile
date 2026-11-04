@@ -7,10 +7,10 @@ FROM php:8.4-fpm-bookworm
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     PORT=10000
 
-# System packages: nginx, supervisord, envsubst (gettext-base) and Node.js 22,
+# System packages: nginx, supervisord, envsubst (gettext-base), redis-server and Node.js 22,
 # which builds the front end and runs PayPal's MCP server for the AI agents.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx supervisor gettext-base git unzip curl ca-certificates \
+    && apt-get install -y --no-install-recommends nginx supervisor gettext-base git unzip curl ca-certificates redis-server \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -185,11 +185,15 @@ RUN printf '%s\n' \
         '  sed -i "s/opcache.enable=1/opcache.enable=0/" "$PHP_INI_DIR/conf.d/zz-moneyunify.ini" 2>/dev/null || true' \
         '  sed -i "s/opcache.enable_cli=1/opcache.enable_cli=0/" "$PHP_INI_DIR/conf.d/zz-moneyunify.ini" 2>/dev/null || true' \
         'fi' \
+        'if [ -z "$REDIS_HOST" ] || [ "$REDIS_HOST" = "127.0.0.1" ] || [ "$REDIS_HOST" = "localhost" ]; then' \
+        '  echo "Starting local Redis server on port 6379..."' \
+        '  redis-server --daemonize yes --appendonly yes --tcp-keepalive 60 --timeout 0 --protected-mode no 2>/dev/null || true' \
+        'fi' \
         'php artisan migrate --force' \
         'if [ "$SEED_DEMO_DATA" = "true" ]; then php artisan demo:seed; fi' \
         'php artisan storage:link 2>/dev/null || true' \
         'php artisan docs:postman || true' \
-        'php artisan optimize:clear 2>/dev/null || true' \
+        'php artisan optimize:clear --except=cache 2>/dev/null || true' \
         'php artisan optimize' \
         'php artisan view:cache' \
         'chown -R www-data:www-data storage bootstrap/cache' \
