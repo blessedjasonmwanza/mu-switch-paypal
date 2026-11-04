@@ -187,7 +187,7 @@ RUN printf '%s\n' \
         'fi' \
         'if [ -z "$REDIS_HOST" ] || [ "$REDIS_HOST" = "127.0.0.1" ] || [ "$REDIS_HOST" = "localhost" ]; then' \
         '  echo "Starting local Redis server on port 6379..."' \
-        '  redis-server --daemonize yes --appendonly yes --tcp-keepalive 60 --timeout 0 --protected-mode no 2>/dev/null || true' \
+        '  redis-server --daemonize yes --dir /tmp --appendonly no --tcp-keepalive 60 --timeout 0 --protected-mode no 2>/dev/null || true' \
         'fi' \
         'php artisan migrate --force' \
         'if [ "$SEED_DEMO_DATA" = "true" ]; then php artisan demo:seed; fi' \

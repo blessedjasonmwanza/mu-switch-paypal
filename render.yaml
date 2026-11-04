@@ -21,13 +21,14 @@ services:
       # e.g. https://moneyunify.onrender.com (your service's URL).
       - key: APP_URL
         sync: false
-      # Not "production": the sandbox demo uses Simulated Payouts and demo data.
       - key: APP_ENV
-        value: staging
+        value: production
       - key: APP_DEBUG
         value: "false"
       - key: LOG_CHANNEL
         value: stderr
+      - key: LOG_LEVEL
+        value: info
       - key: DB_CONNECTION
         value: pgsql
       - key: DB_URL
@@ -35,16 +36,22 @@ services:
           name: moneyunify-db
           property: connectionString
       - key: SESSION_DRIVER
-        value: database
+        value: cookie
       - key: CACHE_STORE
-        value: database
+        value: redis
+      - key: REDIS_CLIENT
+        value: phpredis
+      - key: REDIS_HOST
+        value: 127.0.0.1
+      - key: REDIS_PORT
+        value: "6379"
       - key: QUEUE_CONNECTION
         value: database
       - key: MAIL_MAILER
         value: log
-      # Adds the demo account (demo@moneyunify.test / password) on deploy.
+      # Disabled for production deployments. Set to "true" only if you want demo accounts seeded.
       - key: SEED_DEMO_DATA
-        value: "true"
+        value: "false"
       - key: PAYPAL_SANDBOX_CLIENT_ID
         sync: false
       - key: PAYPAL_SANDBOX_CLIENT_SECRET
