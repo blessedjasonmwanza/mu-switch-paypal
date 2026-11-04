@@ -203,7 +203,7 @@ October 18, 2026, with nothing simulated:
 | --- | --- | --- |
 | Quote | ZMW 20.00 for USD 1.02, at PayPal's FX rate | Same |
 | PayPal | Payment captured (`4MD65230XU506884F`) | Payment captured (`40U28415C5158020C`) |
-| pawaPay | Paid out to `260763456789`: completed | Refused: "The payment would exceed customers maximum allowed balance." |
+| pawaPay | Paid out to `260763456789`: completed | Paid out to `260763456079`: refused ("The payment would exceed customers maximum allowed balance.") |
 | Outcome | **Delivered** six seconds after capture | **Refunded** through PayPal (`5MY87816BM615422U`) nine seconds after capture |
 | Ledger | Collection, PayPal fee and payout recorded | Collection, PayPal fee and refund recorded |
 
@@ -286,7 +286,8 @@ Render in one step. See [Deploy on Render](prezet/content/deploy-render.md).
 2. **Add a payout provider:** pawaPay with a sandbox API token for real
    sandbox payouts, or Simulated Payouts.
 3. **Send money** on **Send Money**, with the form or by asking the assistant
-   (for example *"Send K50 to 0977123456"*). Pay with a PayPal sandbox buyer
+   (for example *"Send K50 to 0763456789"* to deliver, or *"Send K50 to 0763456079"*
+   to test an automatic PayPal refund). Pay with a PayPal sandbox buyer
    account, or choose **Debit or credit card** to pay as a guest.
 4. **Or collect for a merchant:** add one on **Merchants**, create a pay link
    and pay it as a customer.
@@ -296,25 +297,24 @@ the server's `.env` as the fallback. PayPal's Agent Toolkit connects
 automatically through the account's PayPal provider (it needs Node.js 18+). See
 [AI & MCP Setup](prezet/content/ai-and-mcp.md).
 
-**Choosing the outcome.** The recipient's number decides what a sandbox payout
-does, so every path can be shown on demand.
+**Test cases & choosing the outcome.** All test cases use **pawaPay's sandbox numbers** so that testing produces the exact same, correct results everywhere—on the hosted deployment (connected to pawaPay's real sandbox API) as well as locally (Simulated Payouts supports these exact same numbers).
 
-With **pawaPay's sandbox** (Zambia):
+> **Number formats and digit counts (Zambia):**
+> Zambian phone numbers can be entered in **local format (10 digits)** starting with `0` (e.g. `0763456789`) or in **international format (12 digits)** starting with `260` (e.g. `260763456789`). The switch normalises both formats automatically.
 
-| Recipient number | Outcome |
-| --- | --- |
-| `260763456789` (MTN), `260973456789` (Airtel), `260953456700` (Zamtel) | Completed |
-| `260763456079` (MTN), `260973456089` (Airtel) | Failed, so the sender is refunded through PayPal |
-| `260763456129` (MTN), `260973456129` (Airtel) | Stays submitted, so the switch keeps checking it |
+| Test Case | Network | Full local (10 digits) | Full international (12 digits) | What happens |
+| --- | --- | --- | --- | --- |
+| **Delivered** (Success) | MTN | `0763456789` | `260763456789` | Payout completes, transfer marked delivered |
+| | Airtel | `0973456789` | `260973456789` | Payout completes, transfer marked delivered |
+| | Zamtel | `0953456700` | `260953456700` | Payout completes, transfer marked delivered |
+| **Failed & Refunded** | MTN | `0763456079` | `260763456079` | Refused ("exceeds max balance"); **PayPal automatically refunds** |
+| | Airtel | `0973456089` | `260973456089` | Refused ("exceeds max balance"); **PayPal automatically refunds** |
+| **Pending / Submitted** | MTN | `0763456129` | `260763456129` | Stays submitted; switch polls verification |
+| | Airtel | `0973456129` | `260973456129` | Stays submitted; switch polls verification |
 
-With **Simulated Payouts**:
-
-| Recipient number ends in | Outcome |
-| --- | --- |
-| anything else, e.g. `0977123456` | Delivered |
-| `0000` | Refused, so the switch falls back to the next payout provider, or refunds the sender |
-| `9999` | No definite answer, so the switch verifies before deciding |
-| `1111` | Accepted, then fails, so the sender is refunded through PayPal |
+> **Why pawaPay numbers?**
+> On the hosted version, payouts run through pawaPay's real sandbox API. In pawaPay sandbox, arbitrary numbers or numbers ending in `1111` or `11111` do **not** fail—they will pass! Only the official pawaPay failure numbers above (`0763456079` / `0973456089`) trigger a refusal and subsequent PayPal refund. Simulated Payouts also supports these exact same numbers, ensuring consistent results in all environments.
+> *(For local testing without pawaPay credentials, Simulated Payouts also retains legacy suffix rules: ending in `0000` to refuse, `1111` to fail later, and `9999` for timeout).*
 
 Each run shows across the platform: the transfer's timeline on **Send Money**,
 the PayPal-verified receipt, the ledger and fees, balances and float alerts on

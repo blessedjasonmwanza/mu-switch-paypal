@@ -365,18 +365,32 @@ pawaPay also sends **payouts** to mobile wallets. See
 (the default) or `sandbox`. Use sandbox with a sandbox API token to test both
 collections and payouts.
 
+### pawaPay Sandbox Test Numbers (Zambia)
+
+In pawaPay's sandbox, payouts behave based on specific test numbers. Note that arbitrary numbers (including those ending in `1111` or `11111`) do not fail on pawaPay—they will complete. Always use these exact numbers to test outcomes:
+
+| Outcome | Network | Local (10 digits) | International (12 digits) | Notes |
+| --- | --- | --- | --- | --- |
+| **Completed** | MTN | `0763456789` | `260763456789` | Payout completes |
+| | Airtel | `0973456789` | `260973456789` | Payout completes |
+| | Zamtel | `0953456700` | `260953456700` | Payout completes |
+| **Failed** (Refunded) | MTN | `0763456079` | `260763456079` | Refused ("exceeds max balance"); triggers PayPal refund |
+| | Airtel | `0973456089` | `260973456089` | Refused ("exceeds max balance"); triggers PayPal refund |
+| **Pending** | MTN | `0763456129` | `260763456129` | Stays submitted for status polling |
+| | Airtel | `0973456129` | `260973456129` | Stays submitted for status polling |
+
 ## Built-in driver: Simulated Payouts (sandbox only)
 
-A payout driver for demos and testing. It is never available in production and
+A payout driver for local demos and testing when no external payout provider is configured. It is never available in production and
 isn't counted in coverage. It needs no credentials. The recipient number decides
-the outcome:
+the outcome (supports 10-digit local or 12-digit international format):
 
-| Number ends in | Outcome |
-| --- | --- |
-| `0000` (or your **Refuse numbers ending in** setting) | Refused, so the switch tries the next payout provider |
-| `9999` | No definite answer, so the payout must be verified |
-| `1111` | Accepted, then fails on verification |
-| anything else | Accepted, then completed on verification |
+| Outcome | Full Local (10 digits) | Full International (12 digits) | Suffix Rule | Result |
+| --- | --- | --- | --- | --- |
+| **Completed** | `0977123456` | `260977123456` | Any normal number | Accepted and completed on verification |
+| **Refused** | `0977120000` | `260977120000` | Ends in `0000` (or custom setting) | Refused; switch tries fallback or refunds |
+| **Fails Later** | `0966551111` | `260966551111` | Ends in `1111` | Accepted initially, fails on verification; refunds |
+| **Timeout / Unknown** | `0977129999` | `260977129999` | Ends in `9999` | No definite answer; requires verification |
 
 It charges an illustrative 1% payout fee, so fees and the ledger show up in demos.
 

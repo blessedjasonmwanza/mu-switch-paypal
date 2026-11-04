@@ -147,7 +147,8 @@ test('the transfers page aggregates cross-border transfers and direct payouts sc
             ->where('metrics.failed', 1)  // 1 payout failed
             ->where('metrics.successRate', 50)
             // Delivered in each recipient currency: 2,700 from the transfer + 200 paid out.
-            ->where('metrics.volumes', [['currency' => 'ZMW', 'amount' => 2900, 'count' => 2]])
+            ->where('metrics.volumes.0', ['currency' => 'ZMW', 'amount' => 2900, 'count' => 2])
+            ->has('metrics.volumes', 6)
             ->has('transfers.data', 4)
             ->where('topCountries.0.code', 'ZM')
             ->where('topCountries.0.count', 3)
@@ -370,9 +371,11 @@ test('transfer volume is shown per delivered currency, never added across curren
         ->get(route('transfers.index', ['range' => 'all']))
         ->assertInertia(fn (Assert $page) => $page
             // What reached wallets, in the recipient's currency; refunds add nothing.
-            ->where('metrics.volumes', [
-                ['currency' => 'ZMW', 'amount' => 2, 'count' => 2],
-                ['currency' => 'KES', 'amount' => 500, 'count' => 1],
-            ])
+            ->where('metrics.volumes.0', ['currency' => 'ZMW', 'amount' => 2, 'count' => 2])
+            ->where('metrics.volumes.1', ['currency' => 'KES', 'amount' => 500, 'count' => 1])
+            // UGX was only refunded: shown, but with no volume.
+            ->where('metrics.volumes.2', ['currency' => 'UGX', 'amount' => 0, 'count' => 0])
+            ->has('metrics.volumes', 6)
+            ->where('metrics.volumes', fn ($volumes) => collect($volumes)->contains('currency', 'USD'))
             ->missing('metrics.volume'));
 });

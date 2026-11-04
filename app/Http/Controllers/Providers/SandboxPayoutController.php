@@ -56,6 +56,17 @@ class SandboxPayoutController extends Controller implements PayoutProviderInterf
 
     private const FAILS_LATER_SUFFIX = '1111';
 
+    /**
+     * Suffixes matching pawaPay's sandbox failure test numbers (260763456079 / 260973456089)
+     * so test cases produce identical refund outcomes on both hosted and local environments.
+     */
+    private const PAWAPAY_FAIL_SUFFIXES = ['6079', '6089'];
+
+    /**
+     * Suffixes matching pawaPay's sandbox pending test numbers (260763456129 / 260973456129).
+     */
+    private const PAWAPAY_PENDING_SUFFIXES = ['6129'];
+
     private string $failSuffix = self::DEFAULT_FAIL_SUFFIX;
 
     public function setProvider(PaymentProvider $provider): ?JsonResponse
@@ -74,13 +85,13 @@ class SandboxPayoutController extends Controller implements PayoutProviderInterf
         $msisdn = preg_replace('/\D/', '', $recipient['account_number']) ?? '';
         $response = ['simulated' => true, 'msisdn' => $msisdn];
 
-        if (str_ends_with($msisdn, $this->failSuffix)) {
+        if (str_ends_with($msisdn, $this->failSuffix) || $this->matchesSuffix($msisdn, self::PAWAPAY_FAIL_SUFFIXES)) {
             $transaction->update(['status' => TransactionStatus::FAILED, 'provider_response' => [...$response, 'outcome' => 'refused']]);
 
             return ApiResponse::error('Simulated refusal: the recipient cannot receive payouts', 422);
         }
 
-        if (str_ends_with($msisdn, self::UNKNOWN_SUFFIX)) {
+        if (str_ends_with($msisdn, self::UNKNOWN_SUFFIX) || $this->matchesSuffix($msisdn, self::PAWAPAY_PENDING_SUFFIXES)) {
             $transaction->update(['provider_response' => [...$response, 'outcome' => 'unknown']]);
 
             return ApiResponse::error('Simulated timeout: the payout outcome is unknown', 502);
@@ -106,6 +117,7 @@ class SandboxPayoutController extends Controller implements PayoutProviderInterf
         $status = match (true) {
             $outcome === 'refused' => TransactionStatus::FAILED,
             str_ends_with($msisdn, self::FAILS_LATER_SUFFIX) => TransactionStatus::FAILED,
+            $this->matchesSuffix($msisdn, self::PAWAPAY_FAIL_SUFFIXES) => TransactionStatus::FAILED,
             default => TransactionStatus::SUCCESS,
         };
 
@@ -119,5 +131,19 @@ class SandboxPayoutController extends Controller implements PayoutProviderInterf
             'amount' => (float) $transaction->amount,
             'currency' => $transaction->currency,
         ]);
+    }
+
+    /**
+     * @param  list<string>  $suffixes
+     */
+    private function matchesSuffix(string $msisdn, array $suffixes): bool
+    {
+        foreach ($suffixes as $suffix) {
+            if (str_ends_with($msisdn, $suffix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

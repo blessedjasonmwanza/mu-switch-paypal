@@ -281,6 +281,6 @@ The **Send Money** page (in the sidebar) does the same without any code:
    queued jobs as soon as PayPal confirms a payment, and
    `cross-border:refresh` moves in-flight transfers forward every minute,
    since payout providers rarely call back.
-4. In sandbox, the **Simulated Payouts** driver lets you test every outcome:
-   numbers ending `0000` are refused (so the sender is refunded), and `1111`
-   fails after acceptance.
+4. In sandbox, test every outcome using full 10-digit (local) or 12-digit (international) numbers:
+   - With **pawaPay sandbox** (active in hosted staging/production): use `0763456789` / `260763456789` to complete; use `0763456079` / `260763456079` (MTN) or `0973456089` / `260973456089` (Airtel) to test failure and automatic PayPal refund. (Arbitrary numbers ending in `1111` do not fail on pawaPay.)
+   - With **Simulated Payouts** (local): `0977123456` completes, `0977120000` (ends in `0000`) is refused immediately, and `0966551111` (ends in `1111`) is accepted then fails on verification, refunding the sender via PayPal.

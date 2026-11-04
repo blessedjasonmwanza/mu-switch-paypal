@@ -98,9 +98,9 @@ The switch asks the provider for the latest status and returns `success`,
 
 | Driver | Notes |
 | --- | --- |
-| **pawaPay** | Mobile-money payouts in its markets. Set the provider's **Environment** to `sandbox` with a sandbox API token to test. |
+| **pawaPay** | Mobile-money payouts in its markets. Set **Environment** to `sandbox` with a sandbox API token to test. Use `0763456789` / `260763456789` (MTN) to complete, or `0763456079` / `260763456079` (MTN) or `0973456089` / `260973456089` (Airtel) to test failure/refund. (Arbitrary numbers do not fail on pawaPay.) |
 | **Lenco** | Mobile-money payouts in Zambia and Malawi, from the Lenco account set in the provider's **Account ID (for payouts)**. See [Payouts through Lenco](/docs/providers). |
-| **Simulated Payouts** | Sandbox only, never available in production. The recipient number decides the outcome: ending in `0000` is refused (so fallback runs), `9999` gives no answer (so you verify), `1111` fails on verification, and anything else completes. |
+| **Simulated Payouts** | Sandbox only, never available in production. Full 10-digit/12-digit numbers: `0977123456` completes, `0977120000` (ends in `0000`) is refused, `0977129999` (ends in `9999`) gives no answer, and `0966551111` (ends in `1111`) fails on verification (refund). |
 
 ## Errors
 
